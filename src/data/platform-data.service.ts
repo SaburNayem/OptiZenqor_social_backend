@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 
 export type RoleType =
   | 'User'
@@ -29,6 +34,7 @@ export interface UserRecord {
   health: string;
   reports: string;
   lastActive: string;
+  emailVerified: boolean;
 }
 
 export interface PostRecord {
@@ -177,6 +183,7 @@ export class PlatformDataService {
       health: 'No active flags. Reel engagement rising 18%.',
       reports: '2 resolved, 0 open',
       lastActive: '2m ago',
+      emailVerified: true,
     },
     {
       id: 'u2',
@@ -194,6 +201,7 @@ export class PlatformDataService {
       health: 'Campaign delivery normal. No sanctions.',
       reports: '1 open report on ad caption',
       lastActive: '10m ago',
+      emailVerified: true,
     },
     {
       id: 'u3',
@@ -211,6 +219,7 @@ export class PlatformDataService {
       health: 'Login from new device. Security note added.',
       reports: '0 open reports',
       lastActive: '36m ago',
+      emailVerified: true,
     },
     {
       id: 'u4',
@@ -228,6 +237,7 @@ export class PlatformDataService {
       health: 'Storefront healthy. One refund loop under review.',
       reports: '1 commerce-related ticket',
       lastActive: '5m ago',
+      emailVerified: true,
     },
     {
       id: 'u5',
@@ -245,8 +255,17 @@ export class PlatformDataService {
       health: 'Temporarily restricted pending verification document check.',
       reports: '3 impersonation-related reports',
       lastActive: '1h ago',
+      emailVerified: true,
     },
   ];
+
+  private readonly userPasswords = new Map<string, string>([
+    ['maya@optizenqor.app', '123456'],
+    ['studio@nexa.app', '123456'],
+    ['rafi@optizenqor.app', '123456'],
+    ['luna@crafts.shop', '123456'],
+    ['ops@talenthub.io', '123456'],
+  ]);
 
   private readonly posts: PostRecord[] = [
     {
@@ -531,11 +550,105 @@ export class PlatformDataService {
     return role ? this.users.filter((user) => user.role === role) : this.users;
   }
 
+  getDemoAuthAccounts() {
+    return this.users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      password: this.userPasswords.get(user.email) ?? '123456',
+      emailVerified: user.emailVerified,
+    }));
+  }
+
   getUser(id: string) {
     const user = this.users.find((item) => item.id === id);
     if (!user) {
       throw new NotFoundException(`User ${id} not found`);
     }
+    return user;
+  }
+
+  getUserByEmail(email: string) {
+    const user = this.users.find((item) => item.email === email);
+    if (!user) {
+      throw new UnauthorizedException(
+        'Invalid credentials. Use one of the demo emails shown in /auth/demo-accounts.',
+      );
+    }
+    return user;
+  }
+
+  authenticateUser(input: { email: string; password: string }) {
+    const user = this.getUserByEmail(input.email);
+    const expectedPassword = this.userPasswords.get(user.email) ?? '123456';
+    if (input.password !== expectedPassword) {
+      throw new UnauthorizedException('Invalid password. Demo password is 123456.');
+    }
+    if (!user.emailVerified) {
+      throw new UnauthorizedException(
+        'Email is not verified yet. Complete email verification before login.',
+      );
+    }
+    return {
+      token: `mock-token-${user.id}`,
+      refreshToken: `mock-refresh-${user.id}`,
+      user,
+    };
+  }
+
+  createUser(input: {
+    name: string;
+    username: string;
+    email: string;
+    password: string;
+    role: string;
+  }) {
+    const duplicateEmail = this.users.find((item) => item.email === input.email);
+    if (duplicateEmail) {
+      throw new ConflictException('Email already exists. Please use another email.');
+    }
+
+    const duplicateUsername = this.users.find(
+      (item) => item.username === input.username,
+    );
+    if (duplicateUsername) {
+      throw new ConflictException(
+        'Username already exists. Please choose another username.',
+      );
+    }
+
+    const user: UserRecord = {
+      id: `u${this.users.length + 1}`,
+      name: input.name,
+      username: input.username,
+      email: input.email,
+      avatar: 'https://placehold.co/120x120',
+      bio: 'Newly created account from signup flow.',
+      role: input.role as RoleType,
+      verification: 'Not Requested',
+      status: 'Active',
+      followers: 0,
+      following: 0,
+      walletSummary: '$0 balance',
+      health: 'New account',
+      reports: '0 open reports',
+      lastActive: 'just now',
+      emailVerified: false,
+    };
+
+    this.users.unshift(user);
+    this.userPasswords.set(user.email, input.password);
+    return user;
+  }
+
+  markEmailVerified(email: string) {
+    const user = this.users.find((item) => item.email === email);
+    if (!user) {
+      throw new NotFoundException(`User with email ${email} not found`);
+    }
+    user.emailVerified = true;
     return user;
   }
 

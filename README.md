@@ -42,6 +42,9 @@ POST   /auth/reset-password
 POST   /auth/send-otp
 POST   /auth/resend-otp
 POST   /auth/verify-otp
+GET    /auth/demo-accounts
+POST   /auth/verify-email/confirm
+GET    /auth/me
 
 GET    /users
 GET    /users/:id
@@ -149,6 +152,8 @@ POST   /security/logout-all
 
 GET    /admin/dashboard
 POST   /admin/auth/login
+GET    /admin/auth/demo-accounts
+GET    /admin/auth/me
 GET    /admin/auth/sessions
 PATCH  /admin/auth/sessions/:id/revoke
 GET    /admin/users

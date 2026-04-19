@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 
 @Injectable()
 export class AdminOpsDataService {
@@ -286,12 +286,42 @@ export class AdminOpsDataService {
     ],
   };
 
-  loginAdmin(email: string) {
+  private readonly adminPasswords = new Map<string, string>([
+    ['admin@optizenqor.app', 'admin123'],
+    ['moderator@optizenqor.app', 'admin123'],
+  ]);
+
+  getAdminDemoAccounts() {
+    return this.adminSessions.map((session) => ({
+      adminId: session.adminId,
+      name: session.name,
+      email: session.email,
+      role: session.role,
+      password: this.adminPasswords.get(session.email) ?? 'admin123',
+    }));
+  }
+
+  loginAdmin(email: string, password: string) {
+    const session = this.adminSessions.find((item) => item.email === email);
+    if (!session) {
+      throw new UnauthorizedException(
+        'Invalid admin credentials. Use one of the demo admin emails from /admin/auth/demo-accounts.',
+      );
+    }
+
+    const expectedPassword = this.adminPasswords.get(email) ?? 'admin123';
+    if (password !== expectedPassword) {
+      throw new UnauthorizedException('Invalid admin password. Demo admin password is admin123.');
+    }
+
     return {
       success: true,
-      token: `admin-token-${email}`,
-      refreshToken: `admin-refresh-${email}`,
-      session: this.adminSessions[0],
+      message: 'Admin login successful.',
+      data: {
+        token: `admin-token-${session.adminId}`,
+        refreshToken: `admin-refresh-${session.adminId}`,
+        session,
+      },
     };
   }
 

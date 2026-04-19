@@ -1,15 +1,65 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Headers, Param, Patch, Post } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOkResponse,
+  ApiOperation,
+  ApiUnauthorizedResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { AdminLoginDto } from '../dto/auth.dto';
 import { AdminOpsDataService } from '../data/admin-ops-data.service';
+import { extractMockEntityIdFromAuthHeader } from '../utils/token.util';
 
 @ApiTags('admin-ops')
 @Controller('admin')
 export class AdminOpsController {
   constructor(private readonly adminOpsData: AdminOpsDataService) {}
 
+  @Get('auth/demo-accounts')
+  @ApiOperation({
+    summary: 'List seeded demo admin accounts',
+    description:
+      'Use these original admin emails to log in from Swagger. Demo admin password is admin123.',
+  })
+  getDemoAccounts() {
+    return {
+      success: true,
+      message: 'Demo admin accounts fetched successfully.',
+      data: this.adminOpsData.getAdminDemoAccounts(),
+    };
+  }
+
   @Post('auth/login')
-  login(@Body() body: { email: string; password?: string }) {
-    return this.adminOpsData.loginAdmin(body.email);
+  @ApiOperation({
+    summary: 'Admin dashboard login',
+    description:
+      'Use one of the original seeded admin emails from GET /admin/auth/demo-accounts. Demo password is admin123.',
+  })
+  @ApiBody({ type: AdminLoginDto })
+  @ApiOkResponse({ description: 'Admin login successful.' })
+  @ApiUnauthorizedResponse({ description: 'Invalid admin credentials.' })
+  login(@Body() body: AdminLoginDto) {
+    return this.adminOpsData.loginAdmin(body.email, body.password);
+  }
+
+  @Get('auth/me')
+  @ApiBearerAuth('admin-bearer')
+  @ApiOperation({
+    summary: 'Get current admin session from bearer token',
+    description: 'Use the token returned from /admin/auth/login in Swagger Authorize.',
+  })
+  me(@Headers('authorization') authorization?: string) {
+    const adminId = extractMockEntityIdFromAuthHeader(authorization, 'admin-token-');
+    const admin = this.adminOpsData
+      .getAdminSessions()
+      .find((item) => item.adminId === adminId) ?? null;
+
+    return {
+      success: true,
+      message: 'Current admin fetched successfully.',
+      data: admin,
+    };
   }
 
   @Get('auth/sessions')
