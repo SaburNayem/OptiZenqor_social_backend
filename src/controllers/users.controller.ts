@@ -1,6 +1,8 @@
 import { Body, Controller, Get, Param, Patch, Query } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { PlatformDataService } from '../data/platform-data.service';
 
+@ApiTags('users')
 @Controller('users')
 export class UsersController {
   constructor(private readonly platformData: PlatformDataService) {}

@@ -19,15 +19,29 @@ npm run start:dev
 ```
 
 The server runs on `http://localhost:3000` by default.
+Swagger UI is available at `http://localhost:3000/docs`.
+Raw OpenAPI JSON is available at `http://localhost:3000/docs-json`.
 
 ## Main routes
 
 ```text
 GET    /health
+GET    /app/bootstrap
+GET    /app/config
+POST   /app/session-init
+
+GET    /onboarding/slides
+GET    /onboarding/state
+GET    /onboarding/interests
+POST   /onboarding/complete
+
 POST   /auth/login
 POST   /auth/signup
 POST   /auth/forgot-password
 POST   /auth/reset-password
+POST   /auth/send-otp
+POST   /auth/resend-otp
+POST   /auth/verify-otp
 
 GET    /users
 GET    /users/:id
@@ -39,14 +53,34 @@ GET    /posts
 GET    /posts/:id
 POST   /posts
 PATCH  /posts/:id/like
+GET    /posts/:id/detail
+PATCH  /posts/:id/detail
+DELETE /posts/:id/detail
+GET    /posts/:id/comments
+POST   /posts/:id/comments
 GET    /stories
 POST   /stories
 GET    /reels
 POST   /reels
 
+GET    /drafts
+POST   /drafts
+PATCH  /drafts/:id
+DELETE /drafts/:id
+GET    /scheduling
+GET    /upload-manager
+PATCH  /upload-manager/:id
+
 GET    /chat/threads
 GET    /chat/threads/:id
 POST   /chat/threads/:id/messages
+PATCH  /chat/threads/:id/archive
+PATCH  /chat/threads/:id/mute
+PATCH  /chat/threads/:id/pin
+PATCH  /chat/threads/:id/unread
+DELETE /chat/threads/:id/clear
+GET    /chat/presence
+GET    /chat/preferences
 
 GET    /events
 POST   /events
@@ -61,19 +95,90 @@ GET    /monetization/plans
 
 GET    /notifications/campaigns
 POST   /notifications/campaigns
+GET    /notifications/inbox
+
+GET    /hashtags
+GET    /trending
+GET    /search?q=
+GET    /bookmarks
+GET    /saved-collections
+POST   /saved-collections
+PATCH  /saved-collections
+PATCH  /saved-collections/:id
+DELETE /saved-collections/:id
+
+GET    /communities
+GET    /communities/:id
+GET    /pages
+GET    /pages/:id
+GET    /groups
+
+GET    /jobs
+GET    /jobs/:id
+POST   /jobs/:id/apply
+GET    /professional-profiles
+
+GET    /invite-referral
+GET    /premium-membership
+GET    /wallet-payments
+GET    /subscriptions
+GET    /wallet/ledger
+
+GET    /recommendations
+GET    /notification-preferences
+PATCH  /notification-preferences
+GET    /settings/sections
+GET    /safety/config
+GET    /support/faqs
+GET    /support/tickets
+POST   /support/tickets
+GET    /support/chat
+
+GET    /group-chat
+GET    /calls
+GET    /live-stream
+GET    /socket/contract
+
+GET    /master-data
+GET    /legal/consents
+PATCH  /legal/consents
+POST   /legal/account-deletion
+POST   /legal/data-export
+GET    /security/state
+POST   /security/logout-all
 
 GET    /admin/dashboard
+POST   /admin/auth/login
+GET    /admin/auth/sessions
+PATCH  /admin/auth/sessions/:id/revoke
 GET    /admin/users
+GET    /admin/verification-queue
+PATCH  /admin/verification-queue/:id
 GET    /admin/content
+GET    /admin/content-operations
 GET    /admin/reports
+GET    /admin/moderation-cases
+PATCH  /admin/moderation-cases/:id
 GET    /admin/chat-cases
+GET    /admin/chat-control
+PATCH  /admin/chat-control/:id
 GET    /admin/events
 GET    /admin/monetization
+GET    /admin/commerce-risk
 GET    /admin/notifications
+GET    /admin/broadcast-campaigns
+POST   /admin/broadcast-campaigns
+GET    /admin/audience-segments
 GET    /admin/analytics
+GET    /admin/analytics-pipeline
 GET    /admin/roles
+GET    /admin/rbac
 GET    /admin/settings
+GET    /admin/operational-settings
+PATCH  /admin/operational-settings
 GET    /admin/audit-logs
+GET    /admin/audit-log-system
+GET    /admin/support-operations
 ```
 
 ## Notes

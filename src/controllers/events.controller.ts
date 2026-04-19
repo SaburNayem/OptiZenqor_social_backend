@@ -1,6 +1,8 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { PlatformDataService } from '../data/platform-data.service';
 
+@ApiTags('events')
 @Controller('events')
 export class EventsController {
   constructor(private readonly platformData: PlatformDataService) {}
