@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { PlatformDataService } from '../data/platform-data.service';
 
@@ -45,6 +45,30 @@ export class ContentController {
     return this.platformData.toggleLike(id);
   }
 
+  @Patch('posts/:id/unlike')
+  unlikePost(@Param('id') id: string) {
+    return this.platformData.unlikePost(id);
+  }
+
+  @Patch('posts/:id')
+  updatePost(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      caption?: string;
+      media?: string[];
+      tags?: string[];
+      status?: 'Visible' | 'Featured' | 'Under review' | 'Muted reach';
+    },
+  ) {
+    return this.platformData.updatePost(id, body);
+  }
+
+  @Delete('posts/:id')
+  deletePost(@Param('id') id: string) {
+    return this.platformData.deletePost(id);
+  }
+
   @Get('stories')
   getStories() {
     return this.platformData.getStories();
@@ -53,6 +77,11 @@ export class ContentController {
   @Post('stories')
   createStory(@Body() body: { userId: string; text?: string; media?: string }) {
     return this.platformData.createStory(body);
+  }
+
+  @Delete('stories/:id')
+  deleteStory(@Param('id') id: string) {
+    return this.platformData.deleteStory(id);
   }
 
   @Get('reels')
@@ -72,5 +101,10 @@ export class ContentController {
     },
   ) {
     return this.platformData.createReel(body);
+  }
+
+  @Delete('reels/:id')
+  deleteReel(@Param('id') id: string) {
+    return this.platformData.deleteReel(id);
   }
 }

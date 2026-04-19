@@ -1,4 +1,12 @@
-import { BadRequestException, Body, Controller, Get, Headers, Post } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Post,
+  UnauthorizedException,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -9,19 +17,24 @@ import {
 } from '@nestjs/swagger';
 import {
   ForgotPasswordDto,
+  GoogleAuthDto,
   LoginDto,
+  RefreshTokenDto,
   ResetPasswordDto,
   SignupDto,
   VerifyEmailConfirmDto,
 } from '../dto/auth.dto';
 import { PlatformDataService } from '../data/platform-data.service';
 import { MailService } from '../services/mail.service';
-import { extractMockEntityIdFromAuthHeader } from '../utils/token.util';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   private readonly emailVerificationCodes = new Map<
+    string,
+    { code: string; expiresAt: number }
+  >();
+  private readonly passwordResetCodes = new Map<
     string,
     { code: string; expiresAt: number }
   >();
@@ -64,6 +77,40 @@ export class AuthController {
       message: 'Login successful.',
       data: session,
     };
+  }
+
+  @Post('google')
+  @ApiOperation({
+    summary: 'Login or signup with Google',
+    description:
+      'Creates or logs in a user using Google account data. This seeded backend does not validate the Google token externally yet.',
+  })
+  @ApiBody({ type: GoogleAuthDto })
+  googleAuth(@Body() body: GoogleAuthDto) {
+    return {
+      success: true,
+      message: 'Google authentication successful.',
+      data: this.platformData.loginWithGoogle(body),
+    };
+  }
+
+  @Post('refresh-token')
+  @ApiOperation({ summary: 'Refresh access token using refresh token' })
+  @ApiBody({ type: RefreshTokenDto })
+  refreshToken(@Body() body: RefreshTokenDto) {
+    return {
+      success: true,
+      message: 'Token refreshed successfully.',
+      data: this.platformData.refreshUserToken(body.refreshToken),
+    };
+  }
+
+  @Post('logout')
+  @ApiBearerAuth('user-bearer')
+  @ApiOperation({ summary: 'Logout current user session' })
+  logout(@Headers('authorization') authorization?: string) {
+    const token = authorization?.replace(/^Bearer\s+/i, '');
+    return this.platformData.revokeUserSession(token);
   }
 
   @Post('signup')
@@ -130,12 +177,22 @@ export class AuthController {
   @ApiOperation({ summary: 'Start forgot-password flow' })
   @ApiBody({ type: ForgotPasswordDto })
   forgotPassword(@Body() body: ForgotPasswordDto) {
+    this.platformData.getUserByEmail(body.email);
+    const code = this.generateVerificationCode();
+    this.passwordResetCodes.set(body.email, {
+      code,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+    });
     return {
       success: true,
-      message: 'Password reset OTP sent.',
+      message: 'Password reset OTP sent successfully.',
       data: {
         email: body.email,
-        otpHint: 'Use 123456 in the seeded mock backend.',
+        otp: {
+          required: true,
+          expiresInMinutes: 10,
+          code,
+        },
       },
     };
   }
@@ -144,6 +201,19 @@ export class AuthController {
   @ApiOperation({ summary: 'Complete password reset with OTP' })
   @ApiBody({ type: ResetPasswordDto })
   resetPassword(@Body() body: ResetPasswordDto) {
+    const request = this.passwordResetCodes.get(body.email);
+    if (!request) {
+      throw new BadRequestException('No password reset request found for this email.');
+    }
+    if (Date.now() > request.expiresAt) {
+      throw new BadRequestException('Password reset code has expired.');
+    }
+    if (request.code !== body.otp) {
+      throw new BadRequestException('Invalid password reset code.');
+    }
+    this.platformData.forceSetPassword(body.email, body.password);
+    this.passwordResetCodes.delete(body.email);
+
     return {
       success: true,
       message: 'Password reset completed.',
@@ -160,11 +230,15 @@ export class AuthController {
     description: 'Use the token returned from /auth/login in Swagger Authorize.',
   })
   me(@Headers('authorization') authorization?: string) {
-    const userId = extractMockEntityIdFromAuthHeader(authorization, 'mock-token-');
+    const token = authorization?.replace(/^Bearer\s+/i, '');
+    const user = this.platformData.resolveUserFromAccessToken(token);
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired access token.');
+    }
     return {
       success: true,
       message: 'Current user fetched successfully.',
-      data: userId ? this.platformData.getUser(userId) : null,
+      data: user,
     };
   }
 

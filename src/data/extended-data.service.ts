@@ -497,6 +497,36 @@ export class ExtendedDataService {
     return comment;
   }
 
+  reactToComment(postId: string, commentId: string, reaction: string) {
+    const comment = this.postComments.find(
+      (item) => item.postId === postId && item.id === commentId,
+    );
+    if (!comment) {
+      throw new NotFoundException(`Comment ${commentId} not found`);
+    }
+    comment.reactions[reaction] = (comment.reactions[reaction] ?? 0) + 1;
+    if (reaction === 'like') {
+      comment.likeCount += 1;
+      comment.isLikedByMe = true;
+    }
+    return comment;
+  }
+
+  deletePostComment(postId: string, commentId: string) {
+    const index = this.postComments.findIndex(
+      (item) => item.postId === postId && item.id === commentId,
+    );
+    if (index === -1) {
+      throw new NotFoundException(`Comment ${commentId} not found`);
+    }
+    const [removed] = this.postComments.splice(index, 1);
+    return {
+      success: true,
+      removed,
+      message: 'Comment deleted successfully.',
+    };
+  }
+
   updatePostDetail(id: string, patch: Record<string, unknown>) {
     const detail = this.postDetails.find((item) => item.id === id);
     if (!detail) throw new NotFoundException(`Post detail ${id} not found`);

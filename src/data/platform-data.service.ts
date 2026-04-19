@@ -4,6 +4,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { randomBytes, randomUUID } from 'crypto';
 
 export type RoleType =
   | 'User'
@@ -35,6 +36,7 @@ export interface UserRecord {
   reports: string;
   lastActive: string;
   emailVerified: boolean;
+  blocked?: boolean;
 }
 
 export interface PostRecord {
@@ -184,6 +186,7 @@ export class PlatformDataService {
       reports: '2 resolved, 0 open',
       lastActive: '2m ago',
       emailVerified: true,
+      blocked: false,
     },
     {
       id: 'u2',
@@ -202,6 +205,7 @@ export class PlatformDataService {
       reports: '1 open report on ad caption',
       lastActive: '10m ago',
       emailVerified: true,
+      blocked: false,
     },
     {
       id: 'u3',
@@ -220,6 +224,7 @@ export class PlatformDataService {
       reports: '0 open reports',
       lastActive: '36m ago',
       emailVerified: true,
+      blocked: false,
     },
     {
       id: 'u4',
@@ -238,6 +243,7 @@ export class PlatformDataService {
       reports: '1 commerce-related ticket',
       lastActive: '5m ago',
       emailVerified: true,
+      blocked: false,
     },
     {
       id: 'u5',
@@ -256,6 +262,7 @@ export class PlatformDataService {
       reports: '3 impersonation-related reports',
       lastActive: '1h ago',
       emailVerified: true,
+      blocked: false,
     },
   ];
 
@@ -266,6 +273,19 @@ export class PlatformDataService {
     ['luna@crafts.shop', '123456'],
     ['ops@talenthub.io', '123456'],
   ]);
+
+  private readonly userSessions = new Map<
+    string,
+    { userId: string; refreshToken: string; createdAt: string }
+  >();
+
+  private readonly refreshSessions = new Map<
+    string,
+    { userId: string; accessToken: string; createdAt: string }
+  >();
+
+  private readonly followRelations = new Set<string>(['u1:u4', 'u3:u1']);
+  private readonly blockRelations = new Set<string>();
 
   private readonly posts: PostRecord[] = [
     {
@@ -570,6 +590,34 @@ export class PlatformDataService {
     return user;
   }
 
+  resolveUserFromAccessToken(accessToken?: string) {
+    if (!accessToken) {
+      return null;
+    }
+    const session = this.userSessions.get(accessToken);
+    return session ? this.getUser(session.userId) : null;
+  }
+
+  private issueTokens(userId: string) {
+    const accessToken = `atk_${randomUUID().replace(/-/g, '')}${randomBytes(8).toString('hex')}`;
+    const refreshToken = `rtk_${randomUUID().replace(/-/g, '')}${randomBytes(8).toString('hex')}`;
+    const sessionId = `ses_${randomUUID().replace(/-/g, '')}`;
+    const createdAt = new Date().toISOString();
+
+    this.userSessions.set(accessToken, { userId, refreshToken, createdAt });
+    this.refreshSessions.set(refreshToken, { userId, accessToken, createdAt });
+
+    return {
+      sessionId,
+      accessToken,
+      refreshToken,
+      createdAt,
+      expiresInSeconds: 3600,
+      refreshExpiresInSeconds: 60 * 60 * 24 * 30,
+      tokenType: 'Bearer',
+    };
+  }
+
   getUserByEmail(email: string) {
     const user = this.users.find((item) => item.email === email);
     if (!user) {
@@ -591,11 +639,102 @@ export class PlatformDataService {
         'Email is not verified yet. Complete email verification before login.',
       );
     }
+    if (user.blocked) {
+      throw new UnauthorizedException('This account is currently blocked.');
+    }
+    const tokens = this.issueTokens(user.id);
     return {
-      token: `mock-token-${user.id}`,
-      refreshToken: `mock-refresh-${user.id}`,
+      token: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      sessionId: tokens.sessionId,
+      tokenType: tokens.tokenType,
+      expiresInSeconds: tokens.expiresInSeconds,
+      refreshExpiresInSeconds: tokens.refreshExpiresInSeconds,
       user,
+      sessionCreatedAt: tokens.createdAt,
     };
+  }
+
+  loginWithGoogle(input: { email: string; name: string; googleIdToken?: string }) {
+    let user = this.users.find((item) => item.email === input.email);
+    if (!user) {
+      const baseUsername = input.email
+        .split('@')[0]
+        .toLowerCase()
+        .replace(/[^a-z0-9._]/g, '');
+      let username = baseUsername || `user${this.users.length + 1}`;
+      while (this.users.some((item) => item.username === username)) {
+        username = `${baseUsername}${Math.floor(Math.random() * 1000)}`;
+      }
+      user = {
+        id: `u${this.users.length + 1}`,
+        name: input.name,
+        username,
+        email: input.email,
+        avatar: 'https://placehold.co/120x120',
+        bio: 'Google sign-in user.',
+        role: 'User',
+        verification: 'Verified',
+        status: 'Active',
+        followers: 0,
+        following: 0,
+        walletSummary: '$0 balance',
+        health: 'Google sign-in',
+        reports: '0 open reports',
+        lastActive: 'just now',
+        emailVerified: true,
+        blocked: false,
+      };
+      this.users.unshift(user);
+      this.userPasswords.set(user.email, '');
+    }
+
+    const tokens = this.issueTokens(user.id);
+    return {
+      token: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      sessionId: tokens.sessionId,
+      tokenType: tokens.tokenType,
+      expiresInSeconds: tokens.expiresInSeconds,
+      refreshExpiresInSeconds: tokens.refreshExpiresInSeconds,
+      user,
+      provider: 'google',
+      sessionCreatedAt: tokens.createdAt,
+    };
+  }
+
+  refreshUserToken(refreshToken: string) {
+    const existing = this.refreshSessions.get(refreshToken);
+    if (!existing) {
+      throw new UnauthorizedException('Invalid refresh token.');
+    }
+
+    this.userSessions.delete(existing.accessToken);
+    this.refreshSessions.delete(refreshToken);
+    const tokens = this.issueTokens(existing.userId);
+    return {
+      token: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      sessionId: tokens.sessionId,
+      tokenType: tokens.tokenType,
+      expiresInSeconds: tokens.expiresInSeconds,
+      refreshExpiresInSeconds: tokens.refreshExpiresInSeconds,
+      user: this.getUser(existing.userId),
+      sessionCreatedAt: tokens.createdAt,
+    };
+  }
+
+  revokeUserSession(accessToken?: string) {
+    if (!accessToken) {
+      return { success: true, revoked: false };
+    }
+    const session = this.userSessions.get(accessToken);
+    if (!session) {
+      return { success: true, revoked: false };
+    }
+    this.userSessions.delete(accessToken);
+    this.refreshSessions.delete(session.refreshToken);
+    return { success: true, revoked: true };
   }
 
   createUser(input: {
@@ -636,11 +775,109 @@ export class PlatformDataService {
       reports: '0 open reports',
       lastActive: 'just now',
       emailVerified: false,
+      blocked: false,
     };
 
     this.users.unshift(user);
     this.userPasswords.set(user.email, input.password);
     return user;
+  }
+
+  updateUserProfile(
+    id: string,
+    patch: Partial<Pick<UserRecord, 'name' | 'username' | 'bio' | 'avatar'>>,
+  ) {
+    const user = this.getUser(id);
+    if (
+      patch.username &&
+      this.users.some((item) => item.id !== id && item.username === patch.username)
+    ) {
+      throw new ConflictException('Username already exists. Please choose another username.');
+    }
+    Object.assign(user, patch);
+    return user;
+  }
+
+  changePassword(input: { email: string; oldPassword: string; newPassword: string }) {
+    const user = this.getUserByEmail(input.email);
+    const currentPassword = this.userPasswords.get(user.email) ?? '';
+    if (currentPassword !== input.oldPassword) {
+      throw new UnauthorizedException('Old password is incorrect.');
+    }
+    this.userPasswords.set(user.email, input.newPassword);
+    return {
+      success: true,
+      userId: user.id,
+      email: user.email,
+      message: 'Password changed successfully.',
+    };
+  }
+
+  forceSetPassword(email: string, newPassword: string) {
+    const user = this.getUserByEmail(email);
+    this.userPasswords.set(user.email, newPassword);
+    return {
+      success: true,
+      userId: user.id,
+      email: user.email,
+      message: 'Password reset successfully.',
+    };
+  }
+
+  deleteUserAccount(id: string) {
+    const index = this.users.findIndex((item) => item.id === id);
+    if (index === -1) {
+      throw new NotFoundException(`User ${id} not found`);
+    }
+    const [removed] = this.users.splice(index, 1);
+    this.userPasswords.delete(removed.email);
+    for (const [accessToken, session] of [...this.userSessions.entries()]) {
+      if (session.userId === removed.id) {
+        this.userSessions.delete(accessToken);
+        this.refreshSessions.delete(session.refreshToken);
+      }
+    }
+    return {
+      success: true,
+      removedUserId: removed.id,
+      email: removed.email,
+      message: 'User account deleted successfully.',
+    };
+  }
+
+  followUser(targetId: string, followerId: string) {
+    this.getUser(targetId);
+    this.getUser(followerId);
+    const key = `${followerId}:${targetId}`;
+    if (this.followRelations.has(key)) {
+      throw new ConflictException('Already following this user.');
+    }
+    this.followRelations.add(key);
+    return { success: true, followerId, targetId, action: 'followed' };
+  }
+
+  unfollowUser(targetId: string, followerId: string) {
+    this.getUser(targetId);
+    this.getUser(followerId);
+    const key = `${followerId}:${targetId}`;
+    this.followRelations.delete(key);
+    return { success: true, followerId, targetId, action: 'unfollowed' };
+  }
+
+  blockUser(targetId: string, actorId: string, reason?: string) {
+    this.getUser(targetId);
+    this.getUser(actorId);
+    const key = `${actorId}:${targetId}`;
+    this.blockRelations.add(key);
+    return { success: true, actorId, targetId, action: 'blocked', reason: reason ?? null };
+  }
+
+  unblockUser(targetId: string, actorId: string) {
+    this.getUser(targetId);
+    this.getUser(actorId);
+    const key = `${actorId}:${targetId}`;
+    this.blockRelations.delete(key);
+    return { success: true, actorId, targetId, action: 'unblocked' };
   }
 
   markEmailVerified(email: string) {
@@ -696,6 +933,34 @@ export class PlatformDataService {
     return post;
   }
 
+  unlikePost(postId: string) {
+    const post = this.getPost(postId);
+    post.likes = Math.max(0, post.likes - 1);
+    return post;
+  }
+
+  updatePost(
+    id: string,
+    patch: Partial<Pick<PostRecord, 'caption' | 'media' | 'tags' | 'status'>>,
+  ) {
+    const post = this.getPost(id);
+    Object.assign(post, patch);
+    return post;
+  }
+
+  deletePost(id: string) {
+    const index = this.posts.findIndex((item) => item.id === id);
+    if (index === -1) {
+      throw new NotFoundException(`Post ${id} not found`);
+    }
+    const [removed] = this.posts.splice(index, 1);
+    return {
+      success: true,
+      removed,
+      message: 'Post deleted successfully.',
+    };
+  }
+
   getStories() {
     return this.stories.map((story) => ({
       ...story,
@@ -714,6 +979,19 @@ export class PlatformDataService {
     };
     this.stories.unshift(story);
     return story;
+  }
+
+  deleteStory(id: string) {
+    const index = this.stories.findIndex((item) => item.id === id);
+    if (index === -1) {
+      throw new NotFoundException(`Story ${id} not found`);
+    }
+    const [removed] = this.stories.splice(index, 1);
+    return {
+      success: true,
+      removed,
+      message: 'Story deleted successfully.',
+    };
   }
 
   getReels() {
@@ -739,6 +1017,19 @@ export class PlatformDataService {
     };
     this.reels.unshift(reel);
     return reel;
+  }
+
+  deleteReel(id: string) {
+    const index = this.reels.findIndex((item) => item.id === id);
+    if (index === -1) {
+      throw new NotFoundException(`Reel ${id} not found`);
+    }
+    const [removed] = this.reels.splice(index, 1);
+    return {
+      success: true,
+      removed,
+      message: 'Reel deleted successfully.',
+    };
   }
 
   getThreads() {

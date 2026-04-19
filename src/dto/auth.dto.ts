@@ -167,3 +167,27 @@ export class AdminLoginDto {
   @MinLength(6)
   password!: string;
 }
+
+export class RefreshTokenDto {
+  @ApiProperty({ example: 'rtk_xxxxxxxxx' })
+  @IsNotEmpty()
+  @IsString()
+  refreshToken!: string;
+}
+
+export class GoogleAuthDto {
+  @ApiProperty({ example: 'google.user@gmail.com' })
+  @IsNotEmpty()
+  @IsEmail()
+  email!: string;
+
+  @ApiProperty({ example: 'Google User' })
+  @IsNotEmpty()
+  @IsString()
+  name!: string;
+
+  @ApiProperty({ example: 'google-id-token-placeholder' })
+  @IsNotEmpty()
+  @IsString()
+  googleIdToken!: string;
+}

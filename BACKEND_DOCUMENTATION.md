@@ -64,6 +64,31 @@ Default URLs:
 - Swagger UI: `http://localhost:3000/docs`
 - OpenAPI JSON: `http://localhost:3000/docs-json`
 
+## SMTP Email Verification Setup
+
+This backend supports 6-digit email verification codes after signup.
+
+To send real emails, configure SMTP in `.env`:
+
+```env
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=hossennayem099@gmail.com
+SMTP_PASS=YOUR_GMAIL_APP_PASSWORD
+SMTP_FROM=hossennayem099@gmail.com
+SMTP_SECURE=false
+```
+
+Behavior:
+
+- If SMTP is configured, the backend sends a real email
+- If SMTP is missing, the backend uses development fallback mode and does not deliver to Gmail
+
+For Gmail:
+
+- use a Google App Password
+- normal Gmail account password is usually not accepted by SMTP clients
+
 If port `3000` is busy:
 
 ```powershell

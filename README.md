@@ -22,6 +22,24 @@ The server runs on `http://localhost:3000` by default.
 Swagger UI is available at `http://localhost:3000/docs`.
 Raw OpenAPI JSON is available at `http://localhost:3000/docs-json`.
 
+## Email OTP Setup
+
+To send real 6-digit verification codes by email, add SMTP settings to `.env`:
+
+```env
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=hossennayem099@gmail.com
+SMTP_PASS=YOUR_GMAIL_APP_PASSWORD
+SMTP_FROM=hossennayem099@gmail.com
+SMTP_SECURE=false
+```
+
+Notes:
+
+- For Gmail, use an App Password instead of your normal Gmail password.
+- Without SMTP settings, the backend falls back to development mode and does not send a real email.
+
 ## Main routes
 
 ```text
