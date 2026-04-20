@@ -17,6 +17,36 @@ export class CommunitiesController {
     return this.ecosystemData.getCommunity(id);
   }
 
+  @Get('communities/:id/posts')
+  getCommunityPosts(@Param('id') id: string) {
+    return this.ecosystemData.getCommunity(id).posts;
+  }
+
+  @Get('communities/:id/members')
+  getCommunityMembers(@Param('id') id: string) {
+    return this.ecosystemData.getCommunity(id).members;
+  }
+
+  @Get('communities/:id/events')
+  getCommunityEvents(@Param('id') id: string) {
+    return this.ecosystemData.getCommunity(id).events;
+  }
+
+  @Get('communities/:id/pinned-posts')
+  getCommunityPinnedPosts(@Param('id') id: string) {
+    return this.ecosystemData.getCommunity(id).pinnedPosts;
+  }
+
+  @Get('communities/:id/trending-posts')
+  getCommunityTrendingPosts(@Param('id') id: string) {
+    return this.ecosystemData.getCommunity(id).trendingPosts;
+  }
+
+  @Get('communities/:id/announcements')
+  getCommunityAnnouncements(@Param('id') id: string) {
+    return this.ecosystemData.getCommunity(id).announcements;
+  }
+
   @Get('pages')
   getPages() {
     return this.ecosystemData.getPages();

@@ -880,6 +880,17 @@ export class PlatformDataService {
     return { success: true, actorId, targetId, action: 'unblocked' };
   }
 
+  getBlockedUsers() {
+    return [...this.blockRelations].map((relation) => {
+      const [actorId, targetId] = relation.split(':');
+      return {
+        actorId,
+        targetId,
+        user: this.getUser(targetId),
+      };
+    });
+  }
+
   markEmailVerified(email: string) {
     const user = this.users.find((item) => item.email === email);
     if (!user) {

@@ -240,6 +240,26 @@ export class EcosystemDataService {
     { id: 'prd1', title: 'Studio Lamp Drop', type: 'product' },
   ];
 
+  private readonly hiddenItems: Array<{
+    id: string;
+    targetId: string;
+    targetType: 'post' | 'reel' | 'story' | 'comment';
+    hiddenAt: string;
+  }> = [
+    {
+      id: 'hid1',
+      targetId: 'p-hidden-1',
+      targetType: 'post',
+      hiddenAt: '2026-04-19T10:15:00.000Z',
+    },
+    {
+      id: 'hid2',
+      targetId: 'p-hidden-2',
+      targetType: 'post',
+      hiddenAt: '2026-04-19T11:45:00.000Z',
+    },
+  ];
+
   private readonly collections: SavedCollectionRecord[] = [
     { id: 'col1', name: 'Creator Ideas', itemIds: ['p1', 'r1'], privacy: 'private' },
     { id: 'col2', name: 'Shop Wishlist', itemIds: ['prd1'], privacy: 'private' },
@@ -677,6 +697,90 @@ export class EcosystemDataService {
 
   getBookmarks() {
     return this.bookmarks;
+  }
+
+  addBookmark(input: {
+    id: string;
+    title: string;
+    type: 'post' | 'reel' | 'product';
+  }) {
+    const existing = this.bookmarks.find((item) => item.id === input.id);
+    if (existing) {
+      return {
+        success: true,
+        action: 'already_bookmarked',
+        bookmark: existing,
+      };
+    }
+
+    const bookmark: BookmarkRecord = {
+      id: input.id,
+      title: input.title,
+      type: input.type,
+    };
+    this.bookmarks.unshift(bookmark);
+    return {
+      success: true,
+      action: 'bookmarked',
+      bookmark,
+    };
+  }
+
+  removeBookmark(id: string) {
+    const index = this.bookmarks.findIndex((item) => item.id === id);
+    if (index === -1) {
+      throw new NotFoundException(`Bookmark ${id} not found`);
+    }
+    const [removed] = this.bookmarks.splice(index, 1);
+    return {
+      success: true,
+      action: 'removed',
+      bookmark: removed,
+    };
+  }
+
+  getHiddenItems() {
+    return this.hiddenItems;
+  }
+
+  hideItem(input: {
+    targetId: string;
+    targetType: 'post' | 'reel' | 'story' | 'comment';
+  }) {
+    const existing = this.hiddenItems.find((item) => item.targetId === input.targetId);
+    if (existing) {
+      return {
+        success: true,
+        action: 'already_hidden',
+        item: existing,
+      };
+    }
+
+    const hidden = {
+      id: `hid${this.hiddenItems.length + 1}`,
+      targetId: input.targetId,
+      targetType: input.targetType,
+      hiddenAt: new Date().toISOString(),
+    };
+    this.hiddenItems.unshift(hidden);
+    return {
+      success: true,
+      action: 'hidden',
+      item: hidden,
+    };
+  }
+
+  unhideItem(targetId: string) {
+    const index = this.hiddenItems.findIndex((item) => item.targetId === targetId);
+    if (index === -1) {
+      throw new NotFoundException(`Hidden item ${targetId} not found`);
+    }
+    const [removed] = this.hiddenItems.splice(index, 1);
+    return {
+      success: true,
+      action: 'unhidden',
+      item: removed,
+    };
   }
 
   getCollections() {

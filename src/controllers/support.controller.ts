@@ -1,11 +1,15 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { EcosystemDataService } from '../data/ecosystem-data.service';
+import { SettingsDataService } from '../data/settings-data.service';
 
 @ApiTags('support')
 @Controller()
 export class SupportController {
-  constructor(private readonly ecosystemData: EcosystemDataService) {}
+  constructor(
+    private readonly ecosystemData: EcosystemDataService,
+    private readonly settingsData: SettingsDataService,
+  ) {}
 
   @Get('notifications/inbox')
   getNotificationInbox() {
@@ -14,7 +18,7 @@ export class SupportController {
 
   @Get('settings/sections')
   getSettingsSections() {
-    return this.ecosystemData.getSettingsSections();
+    return this.settingsData.getSections();
   }
 
   @Get('support/faqs')

@@ -35,16 +35,6 @@ export class UsersController {
     return this.platformData.unfollowUser(id, body.followerId);
   }
 
-  @Patch(':id/block')
-  blockUser(@Param('id') id: string, @Body() body: { actorId: string; reason?: string }) {
-    return this.platformData.blockUser(id, body.actorId, body.reason);
-  }
-
-  @Patch(':id/unblock')
-  unblockUser(@Param('id') id: string, @Body() body: { actorId: string }) {
-    return this.platformData.unblockUser(id, body.actorId);
-  }
-
   @Post('change-password')
   changePassword(
     @Body() body: { email: string; oldPassword: string; newPassword: string },
