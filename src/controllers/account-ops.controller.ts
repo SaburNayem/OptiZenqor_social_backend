@@ -2,11 +2,15 @@ import { Body, Controller, Get, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ExtendedDataService } from '../data/extended-data.service';
 import { ResendOtpDto, SendOtpDto, VerifyOtpDto } from '../dto/api.dto';
+import { RealtimeStateService } from '../services/realtime-state.service';
 
 @ApiTags('account-ops')
 @Controller()
 export class AccountOpsController {
-  constructor(private readonly extendedData: ExtendedDataService) {}
+  constructor(
+    private readonly extendedData: ExtendedDataService,
+    private readonly realtimeState: RealtimeStateService,
+  ) {}
 
   @Post('auth/send-otp')
   sendOtp(@Body() body: SendOtpDto) {
@@ -30,7 +34,7 @@ export class AccountOpsController {
 
   @Get('chat/presence')
   getPresence() {
-    return this.extendedData.getPresence();
+    return this.realtimeState.getPresenceSnapshot();
   }
 
   @Get('chat/preferences')

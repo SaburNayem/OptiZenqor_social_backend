@@ -23,6 +23,7 @@ export class PostsController {
     const post = this.platformData.getPost(id);
     const author = this.platformData.getUser(post.authorId);
     const comments = this.extendedData.getPostComments(id);
+    const reactions = this.platformData.getPostReactions(id);
 
     let detail: Record<string, unknown> | null = null;
     try {
@@ -36,6 +37,7 @@ export class PostsController {
       author,
       detail,
       comments,
+      reactions,
     };
   }
 

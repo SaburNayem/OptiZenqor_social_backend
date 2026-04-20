@@ -11,6 +11,8 @@ import { RealtimeController } from '../controllers/realtime.controller';
 import { ReelsController } from '../controllers/reels.controller';
 import { StoriesController } from '../controllers/stories.controller';
 import { UsersController } from '../controllers/users.controller';
+import { UploadsController } from '../controllers/uploads.controller';
+import { RealtimeGateway } from '../gateways/realtime.gateway';
 
 @Module({
   controllers: [
@@ -22,10 +24,12 @@ import { UsersController } from '../controllers/users.controller';
     MessagesController,
     StoriesController,
     ReelsController,
+    UploadsController,
     CommentsController,
     CreatorFlowController,
     ChatController,
     RealtimeController,
   ],
+  providers: [RealtimeGateway],
 })
 export class ContentApiModule {}

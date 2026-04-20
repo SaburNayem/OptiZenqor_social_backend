@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { randomBytes, randomUUID } from 'crypto';
+import { EcosystemDataService } from './ecosystem-data.service';
 
 export type RoleType =
   | 'User'
@@ -94,6 +95,11 @@ export interface MessageRecord {
   text: string;
   read: boolean;
   timestamp: string;
+  attachments?: string[];
+  replyToMessageId?: string | null;
+  deliveryState?: 'sent' | 'delivered' | 'read';
+  kind?: 'text' | 'image' | 'video' | 'audio' | 'file';
+  mediaPath?: string | null;
 }
 
 export interface ThreadRecord {
@@ -103,6 +109,13 @@ export interface ThreadRecord {
   participantsLabel: string;
   flag?: string;
   summary: string;
+}
+
+interface PostReactionRecord {
+  postId: string;
+  userId: string;
+  reaction: string;
+  createdAt: string;
 }
 
 export interface EventRecord {
@@ -188,6 +201,8 @@ interface BlockRelationRecord {
 
 @Injectable()
 export class PlatformDataService {
+  constructor(private readonly ecosystemData: EcosystemDataService) {}
+
   private readonly users: UserRecord[] = [
     {
       id: 'u1',
@@ -306,6 +321,20 @@ export class PlatformDataService {
 
   private readonly followRelations = new Set<string>(['u1:u4', 'u3:u1']);
   private readonly blockRelations: BlockRelationRecord[] = [];
+  private readonly postReactions: PostReactionRecord[] = [
+    {
+      postId: 'p1',
+      userId: 'u2',
+      reaction: 'like',
+      createdAt: '2026-04-19T14:50:00.000Z',
+    },
+    {
+      postId: 'p1',
+      userId: 'u4',
+      reaction: 'fire',
+      createdAt: '2026-04-19T15:12:00.000Z',
+    },
+  ];
 
   private readonly posts: PostRecord[] = [
     {
@@ -431,6 +460,11 @@ export class PlatformDataService {
       text: 'Please remove the clip before reposting it.',
       read: true,
       timestamp: '2026-04-19T15:00:00.000Z',
+      attachments: [],
+      replyToMessageId: null,
+      deliveryState: 'read',
+      kind: 'text',
+      mediaPath: null,
     },
     {
       id: 'm2',
@@ -439,6 +473,11 @@ export class PlatformDataService {
       text: 'I can use whatever I want.',
       read: false,
       timestamp: '2026-04-19T15:01:00.000Z',
+      attachments: [],
+      replyToMessageId: null,
+      deliveryState: 'delivered',
+      kind: 'text',
+      mediaPath: null,
     },
     {
       id: 'm3',
@@ -447,6 +486,11 @@ export class PlatformDataService {
       text: 'Tracking says delivered but I received nothing.',
       read: true,
       timestamp: '2026-04-19T14:00:00.000Z',
+      attachments: [],
+      replyToMessageId: null,
+      deliveryState: 'read',
+      kind: 'text',
+      mediaPath: null,
     },
   ];
 
@@ -1072,16 +1116,82 @@ export class PlatformDataService {
     return post;
   }
 
-  toggleLike(postId: string) {
+  getPostReactions(postId: string) {
+    this.getPost(postId);
+    return this.postReactions.filter((item) => item.postId === postId);
+  }
+
+  reactToPost(postId: string, userId: string, reaction: string) {
     const post = this.getPost(postId);
-    post.likes += 1;
-    return post;
+    this.getUser(userId);
+
+    const existing = this.postReactions.find(
+      (item) => item.postId === postId && item.userId === userId,
+    );
+
+    if (existing) {
+      if (existing.reaction === reaction) {
+        return {
+          postId,
+          userId,
+          reaction,
+          action: 'unchanged',
+          reactions: this.getPostReactions(postId),
+        };
+      }
+      existing.reaction = reaction;
+      existing.createdAt = new Date().toISOString();
+    } else {
+      this.postReactions.push({
+        postId,
+        userId,
+        reaction,
+        createdAt: new Date().toISOString(),
+      });
+      post.likes += 1;
+    }
+
+    if (userId !== post.authorId) {
+      const actor = this.getUser(userId);
+      this.ecosystemData.pushNotification({
+        recipientId: post.authorId,
+        title: `${actor.name} reacted to your post`,
+        body: `${actor.username} left a ${reaction} reaction on ${post.id}.`,
+        routeName: `/posts/${postId}`,
+        entityId: postId,
+        type: 'social',
+        metadata: { postId, reaction, actorId: userId },
+      });
+    }
+
+    return {
+      postId,
+      userId,
+      reaction,
+      action: existing ? 'updated' : 'created',
+      reactions: this.getPostReactions(postId),
+    };
+  }
+
+  toggleLike(postId: string) {
+    return this.reactToPost(postId, 'u1', 'like');
   }
 
   unlikePost(postId: string) {
     const post = this.getPost(postId);
-    post.likes = Math.max(0, post.likes - 1);
-    return post;
+    const index = this.postReactions.findIndex(
+      (item) => item.postId === postId && item.userId === 'u1',
+    );
+    if (index !== -1) {
+      this.postReactions.splice(index, 1);
+      post.likes = Math.max(0, post.likes - 1);
+    }
+    return {
+      postId,
+      userId: 'u1',
+      action: 'removed',
+      reactions: this.getPostReactions(postId),
+    };
   }
 
   updatePost(
@@ -1314,8 +1424,30 @@ export class PlatformDataService {
     };
   }
 
-  createMessage(threadId: string, senderId: string, text: string) {
-    this.getThread(threadId);
+  getThreadParticipantIds(threadId: string) {
+    return this.getThread(threadId).participantIds;
+  }
+
+  getMessage(messageId: string) {
+    const message = this.messages.find((item) => item.id === messageId);
+    if (!message) {
+      throw new NotFoundException(`Message ${messageId} not found`);
+    }
+    return message;
+  }
+
+  createMessage(
+    threadId: string,
+    senderId: string,
+    text: string,
+    options?: {
+      attachments?: string[];
+      replyToMessageId?: string;
+      kind?: 'text' | 'image' | 'video' | 'audio' | 'file';
+      mediaPath?: string;
+    },
+  ) {
+    const thread = this.getThread(threadId);
     this.getUser(senderId);
     const message: MessageRecord = {
       id: `m${this.messages.length + 1}`,
@@ -1324,9 +1456,59 @@ export class PlatformDataService {
       text,
       read: false,
       timestamp: new Date().toISOString(),
+      attachments: options?.attachments ?? [],
+      replyToMessageId: options?.replyToMessageId ?? null,
+      deliveryState: 'sent',
+      kind: options?.kind ?? 'text',
+      mediaPath: options?.mediaPath ?? null,
     };
     this.messages.push(message);
+
+    const sender = this.getUser(senderId);
+    for (const participantId of thread.participantIds.filter((id) => id !== senderId)) {
+      this.ecosystemData.pushNotification({
+        recipientId: participantId,
+        title: `New message from ${sender.name}`,
+        body: text || `${sender.username} sent an attachment.`,
+        routeName: `/chat/threads/${threadId}`,
+        entityId: message.id,
+        type: 'social',
+        metadata: { threadId, messageId: message.id, senderId },
+      });
+    }
     return message;
+  }
+
+  updateMessageDeliveryState(
+    threadId: string,
+    messageId: string,
+    deliveryState: 'sent' | 'delivered' | 'read',
+  ) {
+    const message = this.getMessage(messageId);
+    if (message.threadId !== threadId) {
+      throw new NotFoundException(`Message ${messageId} does not belong to thread ${threadId}`);
+    }
+    message.deliveryState = deliveryState;
+    message.read = deliveryState === 'read';
+    return message;
+  }
+
+  markThreadMessagesRead(threadId: string, userId: string) {
+    this.getThread(threadId);
+    this.getUser(userId);
+    const updated = this.messages
+      .filter((message) => message.threadId === threadId && message.senderId !== userId)
+      .map((message) => {
+        message.read = true;
+        message.deliveryState = 'read';
+        return message;
+      });
+    return {
+      threadId,
+      userId,
+      updatedCount: updated.length,
+      messages: updated,
+    };
   }
 
   getEvents(status?: EventRecord['status']) {

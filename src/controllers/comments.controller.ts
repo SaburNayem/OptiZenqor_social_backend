@@ -15,7 +15,29 @@ export class CommentsController {
 
   @Post()
   createPostComment(@Param('id') id: string, @Body() body: CreateCommentDto) {
-    return this.extendedData.createPostComment(id, body.author, body.message);
+    return this.extendedData.createPostComment(id, body.author, body.message, {
+      authorId: body.authorId,
+      replyTo: body.replyTo,
+      mentions: body.mentions,
+    });
+  }
+
+  @Get(':commentId/replies')
+  getReplies(@Param('id') id: string, @Param('commentId') commentId: string) {
+    return this.extendedData.getPostCommentReplies(id, commentId);
+  }
+
+  @Post(':commentId/replies')
+  createReply(
+    @Param('id') id: string,
+    @Param('commentId') commentId: string,
+    @Body() body: CreateCommentDto,
+  ) {
+    return this.extendedData.createPostComment(id, body.author, body.message, {
+      authorId: body.authorId,
+      replyTo: commentId,
+      mentions: body.mentions,
+    });
   }
 
   @Patch(':commentId/react')
@@ -24,7 +46,7 @@ export class CommentsController {
     @Param('commentId') commentId: string,
     @Body() body: ReactToCommentDto,
   ) {
-    return this.extendedData.reactToComment(id, commentId, body.reaction);
+    return this.extendedData.reactToComment(id, commentId, body.userId, body.reaction);
   }
 
   @Delete(':commentId')

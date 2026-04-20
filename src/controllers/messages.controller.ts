@@ -20,6 +20,11 @@ export class MessagesController {
 
   @Post(':id')
   createMessage(@Param('id') id: string, @Body() body: CreateMessageDto) {
-    return this.platformData.createMessage(id, body.senderId, body.text);
+    return this.platformData.createMessage(id, body.senderId, body.text, {
+      attachments: body.attachments,
+      replyToMessageId: body.replyToMessageId,
+      kind: body.kind,
+      mediaPath: body.mediaPath,
+    });
   }
 }

@@ -332,9 +332,35 @@ export class CreateMessageDto {
   @ApiProperty()
   @IsString()
   text!: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  attachments?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  replyToMessageId?: string;
+
+  @ApiPropertyOptional({ enum: ['text', 'image', 'video', 'audio', 'file'] })
+  @IsOptional()
+  @IsIn(['text', 'image', 'video', 'audio', 'file'])
+  kind?: 'text' | 'image' | 'video' | 'audio' | 'file';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  mediaPath?: string;
 }
 
 export class CreateCommentDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  authorId?: string;
+
   @ApiProperty()
   @IsString()
   author!: string;
@@ -342,6 +368,17 @@ export class CreateCommentDto {
   @ApiProperty()
   @IsString()
   message!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  replyTo?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mentions?: string[];
 }
 
 export class CompleteOnboardingDto {
@@ -382,6 +419,20 @@ export class VerifyOtpDto {
 }
 
 export class ReactToCommentDto {
+  @ApiProperty()
+  @IsString()
+  userId!: string;
+
+  @ApiProperty()
+  @IsString()
+  reaction!: string;
+}
+
+export class PostReactionDto {
+  @ApiProperty()
+  @IsString()
+  userId!: string;
+
   @ApiProperty()
   @IsString()
   reaction!: string;
@@ -551,6 +602,45 @@ export class ShareRepostTrackDto {
   @ApiProperty()
   @IsString()
   option!: string;
+}
+
+export class CreateCallSessionDto {
+  @ApiProperty()
+  @IsString()
+  initiatorId!: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  recipientIds?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  threadId?: string;
+
+  @ApiProperty({ enum: ['voice', 'video'] })
+  @IsIn(['voice', 'video'])
+  mode!: 'voice' | 'video';
+}
+
+export class EndCallSessionDto {
+  @ApiProperty()
+  @IsString()
+  endedBy!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
+export class MarkNotificationReadDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  userId?: string;
 }
 
 export class CreateProductDto {

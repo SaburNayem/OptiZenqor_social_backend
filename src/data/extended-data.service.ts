@@ -1,7 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { EcosystemDataService } from './ecosystem-data.service';
+import { PlatformDataService } from './platform-data.service';
 
 @Injectable()
 export class ExtendedDataService {
+  constructor(
+    private readonly platformData: PlatformDataService,
+    private readonly ecosystemData: EcosystemDataService,
+  ) {}
+
   private readonly onboardingSlides = [
     {
       id: 'onb1',
@@ -22,6 +29,47 @@ export class ExtendedDataService {
       iconKey: 'chat',
     },
   ];
+
+  private serializePostComment(comment: (typeof this.postComments)[number]): {
+    id: string;
+    postId: string;
+    authorId: string | null;
+    author: string;
+    message: string;
+    replyTo: string | null;
+    createdAt: string;
+    likeCount: number;
+    isLikedByMe: boolean;
+    isReported: boolean;
+    isEdited: boolean;
+    reactions: Record<string, number>;
+    mentions: string[];
+    replyCount: number;
+    replies: Array<ReturnType<ExtendedDataService['serializePostComment']>>;
+  } {
+    const replies = this.postComments
+      .filter((item) => item.postId === comment.postId && item.replyTo === comment.id)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((item) => this.serializePostComment(item));
+
+    return {
+      id: comment.id,
+      postId: comment.postId,
+      authorId: comment.authorId,
+      author: comment.author,
+      message: comment.message,
+      replyTo: comment.replyTo,
+      createdAt: comment.createdAt,
+      likeCount: comment.likeCount,
+      isLikedByMe: comment.isLikedByMe,
+      isReported: comment.isReported,
+      isEdited: comment.isEdited,
+      reactions: comment.reactions,
+      mentions: comment.mentions,
+      replyCount: replies.length,
+      replies,
+    };
+  }
 
   private readonly onboardingState = {
     completed: false,
@@ -109,18 +157,32 @@ export class ExtendedDataService {
     fileName: string;
     progress: number;
     status: string;
+    mimeType?: string;
+    size?: number;
+    url?: string | null;
+    secureUrl?: string | null;
+    publicId?: string | null;
+    provider?: string | null;
   }> = [
     {
       id: 'up1',
       fileName: 'reel-launch-cut.mp4',
       progress: 0.42,
       status: 'uploading',
+      mimeType: 'video/mp4',
+      size: 14820034,
     },
     {
       id: 'up2',
       fileName: 'creator-teaser.png',
       progress: 1,
       status: 'completed',
+      mimeType: 'image/png',
+      size: 842344,
+      url: 'https://placehold.co/1280x720',
+      secureUrl: 'https://placehold.co/1280x720',
+      publicId: 'optizenqor/uploads/creator-teaser',
+      provider: 'cloudinary',
     },
   ];
 
@@ -146,6 +208,7 @@ export class ExtendedDataService {
   private postComments: Array<{
     id: string;
     postId: string;
+    authorId: string | null;
     author: string;
     message: string;
     replyTo: string | null;
@@ -155,11 +218,13 @@ export class ExtendedDataService {
     isReported: boolean;
     isEdited: boolean;
     reactions: Record<string, number>;
+    reactedBy: Record<string, string>;
     mentions: string[];
   }> = [
     {
       id: 'pc1',
       postId: 'p1',
+      authorId: 'u4',
       author: 'Luna Crafts',
       message: 'This rollout feels very polished.',
       replyTo: null,
@@ -169,11 +234,13 @@ export class ExtendedDataService {
       isReported: false,
       isEdited: false,
       reactions: { like: 8, fire: 4 },
+      reactedBy: { u1: 'like', u2: 'fire' },
       mentions: [],
     },
     {
       id: 'pc2',
       postId: 'p1',
+      authorId: 'u3',
       author: 'Rafi Ahmed',
       message: 'Would love to see the admin side too.',
       replyTo: 'pc1',
@@ -183,6 +250,7 @@ export class ExtendedDataService {
       isReported: false,
       isEdited: false,
       reactions: { like: 3 },
+      reactedBy: { u1: 'like' },
       mentions: ['mayaquinn'],
     },
   ];
@@ -525,6 +593,33 @@ export class ExtendedDataService {
     return this.uploads;
   }
 
+  registerUpload(input: {
+    fileName: string;
+    progress: number;
+    status: string;
+    mimeType?: string;
+    size?: number;
+    url?: string | null;
+    secureUrl?: string | null;
+    publicId?: string | null;
+    provider?: string | null;
+  }) {
+    const upload = {
+      id: `up${this.uploads.length + 1}`,
+      fileName: input.fileName,
+      progress: input.progress,
+      status: input.status,
+      mimeType: input.mimeType,
+      size: input.size,
+      url: input.url ?? null,
+      secureUrl: input.secureUrl ?? null,
+      publicId: input.publicId ?? null,
+      provider: input.provider ?? null,
+    };
+    this.uploads.unshift(upload);
+    return upload;
+  }
+
   getUpload(id: string) {
     const upload = this.uploads.find((item) => item.id === id);
     if (!upload) throw new NotFoundException(`Upload ${id} not found`);
@@ -547,51 +642,155 @@ export class ExtendedDataService {
   }
 
   getPostComments(postId: string) {
-    return this.postComments.filter((item) => item.postId === postId);
+    return this.postComments
+      .filter((item) => item.postId === postId && item.replyTo === null)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((item) => this.serializePostComment(item));
   }
 
-  createPostComment(postId: string, author: string, message: string) {
+  createPostComment(
+    postId: string,
+    author: string,
+    message: string,
+    options?: {
+      authorId?: string;
+      replyTo?: string;
+      mentions?: string[];
+    },
+  ) {
+    const post = this.platformData.getPost(postId);
+    const authorId = options?.authorId ?? null;
+    const authorUser = authorId ? this.platformData.getUser(authorId) : null;
+    const parentComment = options?.replyTo
+      ? this.postComments.find((item) => item.postId === postId && item.id === options.replyTo)
+      : null;
+    if (options?.replyTo && !parentComment) {
+      throw new NotFoundException(`Parent comment ${options.replyTo} not found`);
+    }
+
     const comment = {
       id: `pc${this.postComments.length + 1}`,
       postId,
-      author,
+      authorId,
+      author: authorUser?.name ?? author,
       message,
-      replyTo: null,
+      replyTo: options?.replyTo ?? null,
       createdAt: new Date().toISOString(),
       likeCount: 0,
       isLikedByMe: false,
       isReported: false,
       isEdited: false,
       reactions: {},
-      mentions: [],
+      reactedBy: {},
+      mentions: options?.mentions ?? [],
     };
     this.postComments.push(comment);
-    return comment;
+
+    const recipientId =
+      parentComment?.authorId && parentComment.authorId !== authorId
+        ? parentComment.authorId
+        : post.authorId !== authorId
+          ? post.authorId
+          : null;
+
+    if (recipientId) {
+      this.ecosystemData.pushNotification({
+        recipientId,
+        title: parentComment
+          ? `${comment.author} replied to your comment`
+          : `${comment.author} commented on your post`,
+        body: comment.message,
+        routeName: `/posts/${postId}`,
+        entityId: comment.id,
+        type: 'social',
+        metadata: {
+          postId,
+          commentId: comment.id,
+          replyTo: options?.replyTo ?? null,
+          authorId,
+        },
+      });
+    }
+
+    return this.serializePostComment(comment);
   }
 
-  reactToComment(postId: string, commentId: string, reaction: string) {
+  getPostCommentReplies(postId: string, commentId: string) {
+    const parent = this.postComments.find((item) => item.postId === postId && item.id === commentId);
+    if (!parent) {
+      throw new NotFoundException(`Comment ${commentId} not found`);
+    }
+    return this.postComments
+      .filter((item) => item.postId === postId && item.replyTo === commentId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((item) => this.serializePostComment(item));
+  }
+
+  reactToComment(postId: string, commentId: string, userId: string, reaction: string) {
     const comment = this.postComments.find(
       (item) => item.postId === postId && item.id === commentId,
     );
     if (!comment) {
       throw new NotFoundException(`Comment ${commentId} not found`);
     }
-    comment.reactions[reaction] = (comment.reactions[reaction] ?? 0) + 1;
-    if (reaction === 'like') {
-      comment.likeCount += 1;
-      comment.isLikedByMe = true;
+
+    const previousReaction = comment.reactedBy[userId];
+    if (previousReaction) {
+      comment.reactions[previousReaction] = Math.max(
+        0,
+        (comment.reactions[previousReaction] ?? 0) - 1,
+      );
+      if (comment.reactions[previousReaction] === 0) {
+        delete comment.reactions[previousReaction];
+      }
     }
-    return comment;
+
+    comment.reactedBy[userId] = reaction;
+    comment.reactions[reaction] = (comment.reactions[reaction] ?? 0) + 1;
+    comment.likeCount = comment.reactions.like ?? 0;
+    comment.isLikedByMe = reaction === 'like';
+
+    if (comment.authorId && comment.authorId !== userId) {
+      const actor = this.platformData.getUser(userId);
+      this.ecosystemData.pushNotification({
+        recipientId: comment.authorId,
+        title: `${actor.name} reacted to your comment`,
+        body: `${actor.username} left a ${reaction} reaction.`,
+        routeName: `/posts/${postId}`,
+        entityId: commentId,
+        type: 'social',
+        metadata: { postId, commentId, reaction, actorId: userId },
+      });
+    }
+
+    return this.serializePostComment(comment);
   }
 
   deletePostComment(postId: string, commentId: string) {
-    const index = this.postComments.findIndex(
-      (item) => item.postId === postId && item.id === commentId,
-    );
-    if (index === -1) {
+    const target = this.postComments.find((item) => item.postId === postId && item.id === commentId);
+    if (!target) {
       throw new NotFoundException(`Comment ${commentId} not found`);
     }
-    const [removed] = this.postComments.splice(index, 1);
+    const removalIds = new Set<string>([commentId]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const comment of this.postComments) {
+        if (comment.postId === postId && comment.replyTo && removalIds.has(comment.replyTo)) {
+          if (!removalIds.has(comment.id)) {
+            removalIds.add(comment.id);
+            changed = true;
+          }
+        }
+      }
+    }
+
+    const removed = this.postComments.filter(
+      (item) => item.postId === postId && removalIds.has(item.id),
+    );
+    this.postComments = this.postComments.filter(
+      (item) => !(item.postId === postId && removalIds.has(item.id)),
+    );
     return {
       success: true,
       removed,

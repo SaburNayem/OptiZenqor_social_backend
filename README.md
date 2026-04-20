@@ -78,7 +78,11 @@ PATCH  /posts/:id
 DELETE /posts/:id
 GET    /posts/:id/comments
 POST   /posts/:id/comments
+GET    /posts/:id/comments/:commentId/replies
+POST   /posts/:id/comments/:commentId/replies
 PATCH  /posts/:id/comments/:commentId/react
+GET    /posts/:id/reactions
+POST   /posts/:id/reactions
 PATCH  /posts/:id/like
 PATCH  /posts/:id/unlike
 GET    /stories
@@ -109,7 +113,9 @@ DELETE /drafts/:id
 GET    /scheduling
 GET    /upload-manager
 GET    /upload-manager/:id
+POST   /upload-manager
 PATCH  /upload-manager/:id
+POST   /uploads
 
 Experience
 GET    /events
@@ -161,6 +167,11 @@ GET    /group-chat
 GET    /group-chat/:id
 GET    /calls
 GET    /calls/:id
+GET    /calls/rtc-config
+GET    /calls/sessions
+GET    /calls/sessions/:id
+POST   /calls/sessions
+PATCH  /calls/sessions/:id/end
 GET    /live-stream
 GET    /live-stream/:id
 GET    /socket/contract
@@ -184,4 +195,6 @@ For the full route contract with request examples, use Swagger and the curl refe
 ## Notes
 
 - This first backend pass uses in-memory seeded data, so it is frontend-ready for integration and demos but not yet persistent.
-- The next production step would be adding a database layer, JWT auth, file uploads, and socket gateways for chat/live updates.
+- Socket.IO realtime is available at namespace `/realtime` for presence, typing, chat message events, and call signaling.
+- WebRTC helper config is available through `/calls/rtc-config`, with active call session APIs under `/calls/sessions`.
+- The next production step would be moving these flows from seeded in-memory state to database-backed services and JWT-guarded sockets.

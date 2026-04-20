@@ -1,9 +1,12 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { AppExtensionsDataService } from '../data/app-extensions-data.service';
 import { EcosystemDataService } from '../data/ecosystem-data.service';
 import { PlatformDataService } from '../data/platform-data.service';
-import { CreateNotificationCampaignDto } from '../dto/api.dto';
+import {
+  CreateNotificationCampaignDto,
+  MarkNotificationReadDto,
+} from '../dto/api.dto';
 
 @ApiTags('notifications')
 @Controller('notifications')
@@ -15,17 +18,19 @@ export class NotificationsController {
   ) {}
 
   @Get()
-  getNotificationsOverview() {
+  @ApiQuery({ name: 'userId', required: false })
+  getNotificationsOverview(@Query('userId') userId?: string) {
     return {
-      inbox: this.ecosystemData.getNotificationInbox(),
+      inbox: this.ecosystemData.getNotificationInbox(userId),
       campaigns: this.platformData.getCampaigns(),
       preferences: this.appExtensionsData.getPushNotificationPreferences(),
     };
   }
 
   @Get('inbox')
-  getInbox() {
-    return this.ecosystemData.getNotificationInbox();
+  @ApiQuery({ name: 'userId', required: false })
+  getInbox(@Query('userId') userId?: string) {
+    return this.ecosystemData.getNotificationInbox(userId);
   }
 
   @Get('preferences')
@@ -41,5 +46,10 @@ export class NotificationsController {
   @Post('campaigns')
   createCampaign(@Body() body: CreateNotificationCampaignDto) {
     return this.platformData.createCampaign(body);
+  }
+
+  @Patch(':id/read')
+  markRead(@Param('id') id: string, @Body() body: MarkNotificationReadDto) {
+    return this.ecosystemData.markNotificationRead(id, body.userId);
   }
 }

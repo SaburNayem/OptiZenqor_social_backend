@@ -162,10 +162,24 @@ curl -X DELETE http://localhost:3000/reels/r1
 ```bash
 curl http://localhost:3000/posts/p1   # includes author + detail + comments
 curl http://localhost:3000/posts/p1/comments
+curl http://localhost:3000/posts/p1/comments/pc1/replies
+curl http://localhost:3000/posts/p1/reactions
 
 curl -X POST http://localhost:3000/posts/p1/comments ^
   -H "Content-Type: application/json" ^
-  -d "{\"author\":\"API Tester\",\"message\":\"Comment from curl\"}"
+  -d "{\"authorId\":\"u1\",\"author\":\"API Tester\",\"message\":\"Comment from curl\"}"
+
+curl -X POST http://localhost:3000/posts/p1/comments/pc1/replies ^
+  -H "Content-Type: application/json" ^
+  -d "{\"authorId\":\"u2\",\"author\":\"Nexa Studio\",\"message\":\"Reply from curl\"}"
+
+curl -X PATCH http://localhost:3000/posts/p1/comments/pc1/react ^
+  -H "Content-Type: application/json" ^
+  -d "{\"userId\":\"u1\",\"reaction\":\"fire\"}"
+
+curl -X POST http://localhost:3000/posts/p1/reactions ^
+  -H "Content-Type: application/json" ^
+  -d "{\"userId\":\"u4\",\"reaction\":\"love\"}"
 ```
 
 ## Drafts, Scheduling, Upload Manager
@@ -190,6 +204,16 @@ curl -X DELETE http://localhost:3000/drafts/draft1
 curl -X PATCH http://localhost:3000/upload-manager/up1 ^
   -H "Content-Type: application/json" ^
   -d "{\"action\":\"pause\"}"
+
+curl -X POST http://localhost:3000/uploads ^
+  -F "file=@C:/path/to/image.png" ^
+  -F "folder=optizenqor/posts" ^
+  -F "resourceType=auto"
+
+curl -X POST http://localhost:3000/upload-manager ^
+  -F "file=@C:/path/to/video.mp4" ^
+  -F "folder=optizenqor/reels" ^
+  -F "resourceType=video"
 ```
 
 ## Chat and Presence
@@ -199,15 +223,20 @@ curl http://localhost:3000/chat/threads
 curl http://localhost:3000/chat/threads/t1
 curl http://localhost:3000/chat/presence
 curl http://localhost:3000/chat/preferences
+curl http://localhost:3000/messages
+curl http://localhost:3000/messages/t1
 
 curl -X POST http://localhost:3000/chat/threads/t1/messages ^
   -H "Content-Type: application/json" ^
-  -d "{\"senderId\":\"u1\",\"text\":\"Hello from curl\"}"
+  -d "{\"senderId\":\"u1\",\"text\":\"Hello from curl\",\"attachments\":[\"https://res.cloudinary.com/demo/image/upload/sample.jpg\"],\"kind\":\"image\",\"mediaPath\":\"https://res.cloudinary.com/demo/image/upload/sample.jpg\"}"
 
 curl -X PATCH http://localhost:3000/chat/threads/t1/archive
 curl -X PATCH http://localhost:3000/chat/threads/t1/mute
 curl -X PATCH http://localhost:3000/chat/threads/t1/pin
 curl -X PATCH http://localhost:3000/chat/threads/t1/unread
+curl -X PATCH http://localhost:3000/chat/threads/t1/read ^
+  -H "Content-Type: application/json" ^
+  -d "{\"userId\":\"u2\"}"
 curl -X DELETE http://localhost:3000/chat/threads/t1/clear
 ```
 
@@ -400,9 +429,19 @@ curl http://localhost:3000/group-chat
 curl http://localhost:3000/group-chat/gc1
 curl http://localhost:3000/calls
 curl http://localhost:3000/calls/call1
+curl http://localhost:3000/calls/rtc-config
+curl http://localhost:3000/calls/sessions
 curl http://localhost:3000/live-stream
 curl http://localhost:3000/live-stream/live1
 curl http://localhost:3000/socket/contract
+
+curl -X POST http://localhost:3000/calls/sessions ^
+  -H "Content-Type: application/json" ^
+  -d "{\"initiatorId\":\"u1\",\"recipientIds\":[\"u2\"],\"mode\":\"video\",\"threadId\":\"t1\"}"
+
+curl -X PATCH http://localhost:3000/calls/sessions/call_session_example/end ^
+  -H "Content-Type: application/json" ^
+  -d "{\"endedBy\":\"u1\",\"reason\":\"completed\"}"
 ```
 
 ## Profiles, Media, and App Contract Aliases

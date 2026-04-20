@@ -158,6 +158,7 @@ export interface PremiumPlanRecord {
 
 export interface NotificationInboxRecord {
   id: string;
+  recipientId: string;
   title: string;
   body: string;
   createdAt: string;
@@ -535,9 +536,10 @@ export class EcosystemDataService {
     { id: 'sub2', name: 'Business Plus', price: 29.99 },
   ];
 
-  private readonly notificationInbox: NotificationInboxRecord[] = [
+  private notificationInbox: NotificationInboxRecord[] = [
     {
       id: 'n1',
+      recipientId: 'u1',
       title: 'Your reel is trending',
       body: 'Engagement is up 18% in the last hour.',
       createdAt: '2026-04-19T15:30:00.000Z',
@@ -551,6 +553,7 @@ export class EcosystemDataService {
     },
     {
       id: 'n2',
+      recipientId: 'u1',
       title: 'Payout pending review',
       body: 'Your latest withdrawal is awaiting approval.',
       createdAt: '2026-04-19T14:35:00.000Z',
@@ -928,8 +931,48 @@ export class EcosystemDataService {
     return this.subscriptionPlans;
   }
 
-  getNotificationInbox() {
-    return this.notificationInbox;
+  getNotificationInbox(recipientId?: string) {
+    return recipientId
+      ? this.notificationInbox.filter((item) => item.recipientId === recipientId)
+      : this.notificationInbox;
+  }
+
+  pushNotification(input: {
+    recipientId: string;
+    title: string;
+    body: string;
+    routeName: string;
+    entityId?: string;
+    type?: 'social' | 'commerce' | 'security' | 'system';
+    metadata?: Record<string, unknown>;
+  }) {
+    const notification: NotificationInboxRecord = {
+      id: `n${this.notificationInbox.length + 1}`,
+      recipientId: input.recipientId,
+      title: input.title,
+      body: input.body,
+      createdAt: new Date().toISOString(),
+      read: false,
+      payload: {
+        type: input.type ?? 'social',
+        routeName: input.routeName,
+        entityId: input.entityId,
+        metadata: input.metadata ?? {},
+      },
+    };
+    this.notificationInbox.unshift(notification);
+    return notification;
+  }
+
+  markNotificationRead(id: string, recipientId?: string) {
+    const notification = this.notificationInbox.find(
+      (item) => item.id === id && (!recipientId || item.recipientId === recipientId),
+    );
+    if (!notification) {
+      throw new NotFoundException(`Notification ${id} not found`);
+    }
+    notification.read = true;
+    return notification;
   }
 
   getSettingsSections() {

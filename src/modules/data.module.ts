@@ -5,7 +5,9 @@ import { EcosystemDataService } from '../data/ecosystem-data.service';
 import { ExtendedDataService } from '../data/extended-data.service';
 import { PlatformDataService } from '../data/platform-data.service';
 import { SettingsDataService } from '../data/settings-data.service';
+import { CloudinaryUploadService } from '../services/cloudinary-upload.service';
 import { MailService } from '../services/mail.service';
+import { RealtimeStateService } from '../services/realtime-state.service';
 
 @Global()
 @Module({
@@ -16,6 +18,8 @@ import { MailService } from '../services/mail.service';
     AdminOpsDataService,
     AppExtensionsDataService,
     SettingsDataService,
+    CloudinaryUploadService,
+    RealtimeStateService,
     MailService,
   ],
   exports: [
@@ -25,6 +29,8 @@ import { MailService } from '../services/mail.service';
     AdminOpsDataService,
     AppExtensionsDataService,
     SettingsDataService,
+    CloudinaryUploadService,
+    RealtimeStateService,
     MailService,
   ],
 })
