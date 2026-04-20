@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { PlatformDataService } from '../data/platform-data.service';
+import { CreateEventDto, EventActorDto } from '../dto/api.dto';
 
 @ApiTags('events')
 @Controller('events')
@@ -8,24 +9,18 @@ export class EventsController {
   constructor(private readonly platformData: PlatformDataService) {}
 
   @Get()
-  getEvents() {
-    return this.platformData.getEvents();
+  @ApiQuery({ name: 'status', required: false, enum: ['Featured', 'Approved', 'Review'] })
+  getEvents(@Query('status') status?: 'Featured' | 'Approved' | 'Review') {
+    return this.platformData.getEvents(status);
+  }
+
+  @Get(':id')
+  getEvent(@Param('id') id: string) {
+    return this.platformData.getEvent(id);
   }
 
   @Post()
-  createEvent(
-    @Body()
-    body: {
-      title: string;
-      organizer: string;
-      date: string;
-      time: string;
-      location: string;
-      participants?: number;
-      price?: number;
-      status?: 'Featured' | 'Approved' | 'Review';
-    },
-  ) {
+  createEvent(@Body() body: CreateEventDto) {
     return this.platformData.createEvent({
       title: body.title,
       organizer: body.organizer,
@@ -36,5 +31,15 @@ export class EventsController {
       price: body.price ?? 0,
       status: body.status,
     });
+  }
+
+  @Patch(':id/rsvp')
+  toggleEventRsvp(@Param('id') id: string, @Body() body: EventActorDto) {
+    return this.platformData.toggleEventRsvp(id, body.userId);
+  }
+
+  @Patch(':id/save')
+  toggleEventSave(@Param('id') id: string, @Body() body: EventActorDto) {
+    return this.platformData.toggleEventSave(id, body.userId);
   }
 }

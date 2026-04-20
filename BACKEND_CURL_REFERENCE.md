@@ -102,44 +102,80 @@ curl -X POST http://localhost:3000/posts ^
   -H "Content-Type: application/json" ^
   -d "{\"authorId\":\"u1\",\"caption\":\"New post from curl\",\"media\":[\"https://placehold.co/800x600\"],\"tags\":[\"curl\",\"api\"]}"
 
-curl -X PATCH http://localhost:3000/posts/p1/like
+curl -X PATCH http://localhost:3000/posts/p1 ^
+  -H "Content-Type: application/json" ^
+  -d "{\"caption\":\"Updated caption from curl\",\"tags\":[\"updated\",\"api\"]}"
+
+curl -X DELETE http://localhost:3000/posts/p1
 
 curl http://localhost:3000/stories
+curl http://localhost:3000/stories/s1
+curl "http://localhost:3000/stories?userId=u1"
+curl http://localhost:3000/stories/s1/comments
+curl http://localhost:3000/stories/s1/reactions
 
 curl -X POST http://localhost:3000/stories ^
   -H "Content-Type: application/json" ^
-  -d "{\"userId\":\"u1\",\"text\":\"Story from curl\",\"media\":\"https://placehold.co/600x900\"}"
+  -d "{\"userId\":\"u1\",\"text\":\"Story from curl\",\"media\":\"https://placehold.co/600x900\",\"music\":\"Ambient Rise\",\"backgroundColors\":[4280176815,4281053345],\"textColorValue\":4294967295}"
+
+curl -X PATCH http://localhost:3000/stories/s1 ^
+  -H "Content-Type: application/json" ^
+  -d "{\"seen\":true,\"text\":\"Updated story text\"}"
+
+curl -X POST http://localhost:3000/stories/s1/comments ^
+  -H "Content-Type: application/json" ^
+  -d "{\"userId\":\"u4\",\"comment\":\"Story comment from curl\"}"
+
+curl -X POST http://localhost:3000/stories/s1/reactions ^
+  -H "Content-Type: application/json" ^
+  -d "{\"userId\":\"u2\",\"reaction\":\"fire\"}"
+
+curl -X DELETE http://localhost:3000/stories/s1
 
 curl http://localhost:3000/reels
+curl http://localhost:3000/reels/r1
+curl "http://localhost:3000/reels?authorId=u1"
+curl http://localhost:3000/reels/r1/comments
+curl http://localhost:3000/reels/r1/reactions
 
 curl -X POST http://localhost:3000/reels ^
   -H "Content-Type: application/json" ^
-  -d "{\"authorId\":\"u1\",\"caption\":\"Reel from curl\",\"audioName\":\"Creator Motion Pack\",\"thumbnail\":\"https://placehold.co/600x900\",\"videoUrl\":\"https://example.com/reel.mp4\"}"
+  -d "{\"authorId\":\"u1\",\"caption\":\"Reel from curl\",\"audioName\":\"Creator Motion Pack\",\"thumbnail\":\"https://placehold.co/600x900\",\"videoUrl\":\"https://example.com/reel.mp4\",\"textOverlays\":[\"Hook in 2 sec\"],\"subtitleEnabled\":true,\"remixEnabled\":true}"
+
+curl -X PATCH http://localhost:3000/reels/r1 ^
+  -H "Content-Type: application/json" ^
+  -d "{\"caption\":\"Updated reel caption\",\"audioName\":\"Store Drop\"}"
+
+curl -X POST http://localhost:3000/reels/r1/comments ^
+  -H "Content-Type: application/json" ^
+  -d "{\"userId\":\"u3\",\"comment\":\"Reel comment from curl\"}"
+
+curl -X POST http://localhost:3000/reels/r1/reactions ^
+  -H "Content-Type: application/json" ^
+  -d "{\"userId\":\"u4\",\"reaction\":\"like\"}"
+
+curl -X DELETE http://localhost:3000/reels/r1
 ```
 
 ## Post Detail
 
 ```bash
-curl http://localhost:3000/posts/p1/detail
+curl http://localhost:3000/posts/p1   # includes author + detail + comments
 curl http://localhost:3000/posts/p1/comments
 
 curl -X POST http://localhost:3000/posts/p1/comments ^
   -H "Content-Type: application/json" ^
   -d "{\"author\":\"API Tester\",\"message\":\"Comment from curl\"}"
-
-curl -X PATCH http://localhost:3000/posts/p1/detail ^
-  -H "Content-Type: application/json" ^
-  -d "{\"audience\":\"Followers\",\"caption\":\"Updated caption from curl\"}"
-
-curl -X DELETE http://localhost:3000/posts/p1/detail
 ```
 
 ## Drafts, Scheduling, Upload Manager
 
 ```bash
 curl http://localhost:3000/drafts
+curl http://localhost:3000/drafts/draft1
 curl http://localhost:3000/scheduling
 curl http://localhost:3000/upload-manager
+curl http://localhost:3000/upload-manager/up1
 
 curl -X POST http://localhost:3000/drafts ^
   -H "Content-Type: application/json" ^
@@ -179,16 +215,28 @@ curl -X DELETE http://localhost:3000/chat/threads/t1/clear
 
 ```bash
 curl http://localhost:3000/events
+curl http://localhost:3000/events/e1
+curl "http://localhost:3000/events?status=Featured"
 
 curl -X POST http://localhost:3000/events ^
   -H "Content-Type: application/json" ^
   -d "{\"title\":\"Curl Event\",\"organizer\":\"API Tester\",\"date\":\"2026-05-01\",\"time\":\"18:00\",\"location\":\"Dhaka\",\"participants\":50,\"price\":0}"
+
+curl -X PATCH http://localhost:3000/events/e1/rsvp ^
+  -H "Content-Type: application/json" ^
+  -d "{\"userId\":\"u1\"}"
+
+curl -X PATCH http://localhost:3000/events/e1/save ^
+  -H "Content-Type: application/json" ^
+  -d "{\"userId\":\"u1\"}"
 ```
 
 ## Marketplace
 
 ```bash
+curl http://localhost:3000/marketplace
 curl http://localhost:3000/marketplace/products
+curl http://localhost:3000/marketplace/products/prd1
 
 curl -X POST http://localhost:3000/marketplace/products ^
   -H "Content-Type: application/json" ^
@@ -203,7 +251,17 @@ curl http://localhost:3000/trending
 curl "http://localhost:3000/search?q=creator"
 curl http://localhost:3000/recommendations
 curl http://localhost:3000/bookmarks
+curl http://localhost:3000/bookmarks/p1
 curl http://localhost:3000/saved-collections
+curl http://localhost:3000/saved-collections/col1
+
+curl -X POST http://localhost:3000/bookmarks ^
+  -H "Content-Type: application/json" ^
+  -d "{\"id\":\"p1\",\"type\":\"post\"}"
+
+curl -X POST http://localhost:3000/bookmarks/posts/p1
+
+curl -X DELETE http://localhost:3000/bookmarks/p1
 
 curl -X POST http://localhost:3000/saved-collections ^
   -H "Content-Type: application/json" ^
@@ -218,6 +276,33 @@ curl -X PATCH http://localhost:3000/saved-collections/col1 ^
   -d "{\"name\":\"Updated Curl Collection\",\"privacy\":\"private\",\"itemId\":\"r1\"}"
 
 curl -X DELETE http://localhost:3000/saved-collections/col1
+```
+
+## Block and Hide
+
+```bash
+curl http://localhost:3000/block
+curl "http://localhost:3000/block?actorId=u1"
+curl "http://localhost:3000/block/u4?actorId=u1"
+
+curl -X POST http://localhost:3000/block ^
+  -H "Content-Type: application/json" ^
+  -d "{\"actorId\":\"u1\",\"targetId\":\"u4\",\"reason\":\"spam\"}"
+
+curl -X DELETE "http://localhost:3000/block/u4?actorId=u1"
+
+curl http://localhost:3000/hide
+curl http://localhost:3000/hide/posts/all
+curl http://localhost:3000/hide/p-hidden-1
+
+curl -X POST http://localhost:3000/hide ^
+  -H "Content-Type: application/json" ^
+  -d "{\"targetId\":\"p1\",\"targetType\":\"post\"}"
+
+curl -X POST http://localhost:3000/hide/posts/p1
+
+curl -X DELETE http://localhost:3000/hide/p1
+curl -X DELETE http://localhost:3000/hide/posts/p1
 ```
 
 ## Communities, Pages, Groups
@@ -276,11 +361,24 @@ curl -X PATCH http://localhost:3000/notification-preferences ^
 ## Settings, Safety, Support
 
 ```bash
+curl http://localhost:3000/settings
+curl http://localhost:3000/settings/state
+curl http://localhost:3000/settings/account
+curl http://localhost:3000/settings/items
+curl http://localhost:3000/settings/items/account-settings
 curl http://localhost:3000/settings/sections
 curl http://localhost:3000/safety/config
 curl http://localhost:3000/support/faqs
 curl http://localhost:3000/support/tickets
 curl http://localhost:3000/support/chat
+
+curl -X PATCH http://localhost:3000/settings/items/privacy ^
+  -H "Content-Type: application/json" ^
+  -d "{\"hideLikes\":true}"
+
+curl -X PATCH http://localhost:3000/settings/state ^
+  -H "Content-Type: application/json" ^
+  -d "{\"privacy.hide_likes\":true,\"notifications.push_enabled\":false}"
 
 curl -X POST http://localhost:3000/support/tickets ^
   -H "Content-Type: application/json" ^

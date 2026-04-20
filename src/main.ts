@@ -2,7 +2,11 @@ import 'reflect-metadata';
 
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import {
+  DocumentBuilder,
+  SwaggerDocumentOptions,
+  SwaggerModule,
+} from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
 
@@ -49,12 +53,29 @@ async function bootstrap() {
     )
     .build();
 
-  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+  const swaggerDocumentOptions: SwaggerDocumentOptions = {
+    deepScanRoutes: true,
+    autoTagControllers: false,
+    operationIdFactory: (_controllerKey: string, methodKey: string) => methodKey,
+  };
+
+  const swaggerDocument = SwaggerModule.createDocument(
+    app,
+    swaggerConfig,
+    swaggerDocumentOptions,
+  );
   SwaggerModule.setup('docs', app, swaggerDocument, {
+    explorer: true,
     swaggerOptions: {
       persistAuthorization: true,
+      displayRequestDuration: true,
+      docExpansion: 'list',
+      tagsSorter: 'alpha',
+      operationsSorter: 'alpha',
     },
     jsonDocumentUrl: 'docs-json',
+    yamlDocumentUrl: 'docs-yaml',
+    customSiteTitle: 'OptiZenqor Social Backend Docs',
   });
 
   const port = Number(process.env.PORT ?? 3000);

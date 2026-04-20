@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ExtendedDataService } from '../data/extended-data.service';
+import { SessionInitDto } from '../dto/api.dto';
 
 @ApiTags('bootstrap')
 @Controller('app')
@@ -18,7 +19,7 @@ export class BootstrapController {
   }
 
   @Post('session-init')
-  sessionInit(@Body() body: { token?: string }) {
+  sessionInit(@Body() body: SessionInitDto) {
     return {
       tokenReceived: Boolean(body.token),
       bootstrap: this.extendedData.getBootstrap(),

@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ExtendedDataService } from '../data/extended-data.service';
 import { PlatformDataService } from '../data/platform-data.service';
+import { CreateProductDto } from '../dto/api.dto';
 
 @ApiTags('marketplace')
 @Controller('marketplace')
@@ -27,22 +28,13 @@ export class MarketplaceController {
     return this.platformData.getProducts();
   }
 
+  @Get('products/:id')
+  getProduct(@Param('id') id: string) {
+    return this.platformData.getProduct(id);
+  }
+
   @Post('products')
-  createProduct(
-    @Body()
-    body: {
-      title: string;
-      description: string;
-      price: number;
-      category: string;
-      subcategory: string;
-      sellerId: string;
-      sellerName: string;
-      location: string;
-      images?: string[];
-      condition: string;
-    },
-  ) {
+  createProduct(@Body() body: CreateProductDto) {
     return this.platformData.createProduct({
       title: body.title,
       description: body.description,

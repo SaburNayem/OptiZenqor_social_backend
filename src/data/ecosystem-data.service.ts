@@ -15,6 +15,7 @@ export interface BookmarkRecord {
   id: string;
   title: string;
   type: 'post' | 'reel' | 'product';
+  createdAt?: string;
 }
 
 export interface SavedCollectionRecord {
@@ -699,10 +700,18 @@ export class EcosystemDataService {
     return this.bookmarks;
   }
 
+  getBookmark(id: string) {
+    const bookmark = this.bookmarks.find((item) => item.id === id);
+    if (!bookmark) {
+      throw new NotFoundException(`Bookmark ${id} not found`);
+    }
+    return bookmark;
+  }
+
   addBookmark(input: {
     id: string;
-    title: string;
-    type: 'post' | 'reel' | 'product';
+    title?: string;
+    type?: 'post' | 'reel' | 'product';
   }) {
     const existing = this.bookmarks.find((item) => item.id === input.id);
     if (existing) {
@@ -715,8 +724,9 @@ export class EcosystemDataService {
 
     const bookmark: BookmarkRecord = {
       id: input.id,
-      title: input.title,
-      type: input.type,
+      title: input.title ?? `Saved item ${input.id}`,
+      type: input.type ?? 'post',
+      createdAt: new Date().toISOString(),
     };
     this.bookmarks.unshift(bookmark);
     return {
@@ -741,6 +751,14 @@ export class EcosystemDataService {
 
   getHiddenItems() {
     return this.hiddenItems;
+  }
+
+  getHiddenItem(targetId: string) {
+    const item = this.hiddenItems.find((value) => value.targetId === targetId);
+    if (!item) {
+      throw new NotFoundException(`Hidden item ${targetId} not found`);
+    }
+    return item;
   }
 
   hideItem(input: {
@@ -785,6 +803,14 @@ export class EcosystemDataService {
 
   getCollections() {
     return this.collections;
+  }
+
+  getCollection(id: string) {
+    const collection = this.collections.find((item) => item.id === id);
+    if (!collection) {
+      throw new NotFoundException(`Collection ${id} not found`);
+    }
+    return collection;
   }
 
   createCollection(name: string) {

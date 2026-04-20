@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/commo
 import { ApiTags } from '@nestjs/swagger';
 import { PlatformDataService } from '../data/platform-data.service';
 import { ExtendedDataService } from '../data/extended-data.service';
+import { CreateMessageDto } from '../dto/api.dto';
 
 @ApiTags('chat')
 @Controller('chat')
@@ -22,10 +23,7 @@ export class ChatController {
   }
 
   @Post('threads/:id/messages')
-  createMessage(
-    @Param('id') id: string,
-    @Body() body: { senderId: string; text: string },
-  ) {
+  createMessage(@Param('id') id: string, @Body() body: CreateMessageDto) {
     return this.platformData.createMessage(id, body.senderId, body.text);
   }
 

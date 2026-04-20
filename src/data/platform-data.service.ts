@@ -58,9 +58,12 @@ export interface StoryRecord {
   id: string;
   userId: string;
   text?: string;
-  media?: string;
+  media: string;
   seen: boolean;
+  isLocalFile: boolean;
   music?: string;
+  backgroundColors: number[];
+  textColorValue: number;
   createdAt: string;
 }
 
@@ -75,6 +78,12 @@ export interface ReelRecord {
   comments: number;
   shares: number;
   viewCount: number;
+  coverUrl?: string;
+  textOverlays: string[];
+  subtitleEnabled: boolean;
+  trimInfo?: string;
+  remixEnabled: boolean;
+  isDraft: boolean;
   createdAt: string;
 }
 
@@ -106,6 +115,10 @@ export interface EventRecord {
   status: 'Featured' | 'Approved' | 'Review';
   participants: number;
   price: number;
+  rsvped: boolean;
+  saved: boolean;
+  mediaGallery: string[];
+  hostToolsSummary: string;
 }
 
 export interface ProductRecord {
@@ -164,6 +177,13 @@ export interface NotificationCampaignRecord {
   status: 'Draft' | 'Scheduled' | 'Sent';
   delivered?: string;
   openRate?: string;
+}
+
+interface BlockRelationRecord {
+  actorId: string;
+  targetId: string;
+  reason: string | null;
+  blockedAt: string;
 }
 
 @Injectable()
@@ -285,7 +305,7 @@ export class PlatformDataService {
   >();
 
   private readonly followRelations = new Set<string>(['u1:u4', 'u3:u1']);
-  private readonly blockRelations = new Set<string>();
+  private readonly blockRelations: BlockRelationRecord[] = [];
 
   private readonly posts: PostRecord[] = [
     {
@@ -322,16 +342,24 @@ export class PlatformDataService {
     {
       id: 's1',
       userId: 'u1',
+      media: '',
       text: 'Behind the scenes from Dhaka creator hub.',
       seen: false,
+      isLocalFile: false,
       music: 'Ambient Rise',
+      backgroundColors: [0xff1e40af, 0xff2bb0a1],
+      textColorValue: 0xffffffff,
       createdAt: '2026-04-19T13:50:00.000Z',
     },
     {
       id: 's2',
       userId: 'u4',
+      media: '',
       text: 'Only 3 hours until storefront unlock.',
       seen: true,
+      isLocalFile: false,
+      backgroundColors: [0xff0f172a, 0xfff97316],
+      textColorValue: 0xffffffff,
       createdAt: '2026-04-19T11:00:00.000Z',
     },
   ];
@@ -348,6 +376,12 @@ export class PlatformDataService {
       comments: 415,
       shares: 182,
       viewCount: 230000,
+      coverUrl: 'https://placehold.co/600x900/orange',
+      textOverlays: ['Hook in 2 seconds', 'Transition in 5'],
+      subtitleEnabled: true,
+      trimInfo: '00:02-00:14',
+      remixEnabled: true,
+      isDraft: false,
       createdAt: '2026-04-19T15:10:00.000Z',
     },
     {
@@ -361,6 +395,11 @@ export class PlatformDataService {
       comments: 94,
       shares: 39,
       viewCount: 84000,
+      coverUrl: 'https://placehold.co/600x900/blue',
+      textOverlays: ['Weekend collection now live'],
+      subtitleEnabled: false,
+      remixEnabled: false,
+      isDraft: true,
       createdAt: '2026-04-19T10:30:00.000Z',
     },
   ];
@@ -422,6 +461,10 @@ export class PlatformDataService {
       status: 'Featured',
       participants: 120,
       price: 0,
+      rsvped: true,
+      saved: true,
+      mediaGallery: ['https://placehold.co/800x500', 'https://placehold.co/800x500?text=meetup'],
+      hostToolsSummary: 'Host tools enabled for guest approvals and stage slots.',
     },
     {
       id: 'e2',
@@ -433,6 +476,10 @@ export class PlatformDataService {
       status: 'Approved',
       participants: 340,
       price: 10,
+      rsvped: false,
+      saved: true,
+      mediaGallery: ['https://placehold.co/800x500?text=seller'],
+      hostToolsSummary: 'Host tools enabled for ticket check-in and promo scheduling.',
     },
     {
       id: 'e3',
@@ -444,6 +491,10 @@ export class PlatformDataService {
       status: 'Review',
       participants: 94,
       price: 0,
+      rsvped: false,
+      saved: false,
+      mediaGallery: ['https://placehold.co/800x500?text=hiring'],
+      hostToolsSummary: 'Host tools pending review approval.',
     },
   ];
 
@@ -867,28 +918,82 @@ export class PlatformDataService {
   blockUser(targetId: string, actorId: string, reason?: string) {
     this.getUser(targetId);
     this.getUser(actorId);
-    const key = `${actorId}:${targetId}`;
-    this.blockRelations.add(key);
-    return { success: true, actorId, targetId, action: 'blocked', reason: reason ?? null };
+    const existing = this.blockRelations.find(
+      (relation) => relation.actorId === actorId && relation.targetId === targetId,
+    );
+    if (existing) {
+      return {
+        success: true,
+        actorId,
+        targetId,
+        action: 'already_blocked',
+        reason: existing.reason,
+        blockedAt: existing.blockedAt,
+      };
+    }
+
+    const blockRecord: BlockRelationRecord = {
+      actorId,
+      targetId,
+      reason: reason ?? null,
+      blockedAt: new Date().toISOString(),
+    };
+    this.blockRelations.unshift(blockRecord);
+    return {
+      success: true,
+      actorId,
+      targetId,
+      action: 'blocked',
+      reason: blockRecord.reason,
+      blockedAt: blockRecord.blockedAt,
+    };
   }
 
   unblockUser(targetId: string, actorId: string) {
     this.getUser(targetId);
     this.getUser(actorId);
-    const key = `${actorId}:${targetId}`;
-    this.blockRelations.delete(key);
-    return { success: true, actorId, targetId, action: 'unblocked' };
+    const before = this.blockRelations.length;
+    const filtered = this.blockRelations.filter(
+      (relation) => !(relation.actorId === actorId && relation.targetId === targetId),
+    );
+    this.blockRelations.splice(0, this.blockRelations.length, ...filtered);
+    return {
+      success: true,
+      actorId,
+      targetId,
+      action: 'unblocked',
+      removed: before !== this.blockRelations.length,
+    };
   }
 
-  getBlockedUsers() {
-    return [...this.blockRelations].map((relation) => {
-      const [actorId, targetId] = relation.split(':');
+  getBlockedUsers(actorId?: string) {
+    const list = actorId
+      ? this.blockRelations.filter((relation) => relation.actorId === actorId)
+      : this.blockRelations;
+    return list.map((relation) => {
+      const user = this.getUser(relation.targetId);
       return {
-        actorId,
-        targetId,
-        user: this.getUser(targetId),
+        actorId: relation.actorId,
+        targetId: relation.targetId,
+        reason: relation.reason,
+        blockedAt: relation.blockedAt,
+        user: {
+          id: user.id,
+          name: user.name,
+          username: user.username,
+          avatar: user.avatar,
+        },
       };
     });
+  }
+
+  getBlockedUser(targetId: string, actorId?: string) {
+    const blockedUsers = this.getBlockedUsers(actorId);
+    const blockedUser = blockedUsers.find((item) => item.targetId === targetId);
+    if (!blockedUser) {
+      throw new NotFoundException(`Blocked user ${targetId} not found`);
+    }
+    return blockedUser;
   }
 
   markEmailVerified(email: string) {
@@ -907,8 +1012,10 @@ export class PlatformDataService {
     }));
   }
 
-  getPosts() {
-    return this.posts;
+  getPosts(authorId?: string) {
+    return authorId
+      ? this.posts.filter((item) => item.authorId === authorId)
+      : this.posts;
   }
 
   getPost(id: string) {
@@ -972,24 +1079,79 @@ export class PlatformDataService {
     };
   }
 
-  getStories() {
-    return this.stories.map((story) => ({
+  getStories(userId?: string) {
+    const stories = userId
+      ? this.stories.filter((story) => story.userId === userId)
+      : this.stories;
+    return stories.map((story) => ({
       ...story,
       author: this.getUser(story.userId),
     }));
   }
 
-  createStory(input: Pick<StoryRecord, 'userId' | 'text' | 'media'>) {
+  getStory(id: string) {
+    const story = this.stories.find((item) => item.id === id);
+    if (!story) {
+      throw new NotFoundException(`Story ${id} not found`);
+    }
+    return {
+      ...story,
+      author: this.getUser(story.userId),
+    };
+  }
+
+  createStory(
+    input: Pick<
+      StoryRecord,
+      | 'userId'
+      | 'text'
+      | 'media'
+      | 'music'
+      | 'isLocalFile'
+      | 'backgroundColors'
+      | 'textColorValue'
+    >,
+  ) {
     const story: StoryRecord = {
       id: `s${this.stories.length + 1}`,
       userId: input.userId,
       text: input.text,
       media: input.media,
       seen: false,
+      isLocalFile: input.isLocalFile,
+      music: input.music,
+      backgroundColors: input.backgroundColors,
+      textColorValue: input.textColorValue,
       createdAt: new Date().toISOString(),
     };
     this.stories.unshift(story);
     return story;
+  }
+
+  updateStory(
+    id: string,
+    patch: Partial<
+      Pick<
+        StoryRecord,
+        | 'text'
+        | 'media'
+        | 'seen'
+        | 'music'
+        | 'isLocalFile'
+        | 'backgroundColors'
+        | 'textColorValue'
+      >
+    >,
+  ) {
+    const story = this.stories.find((item) => item.id === id);
+    if (!story) {
+      throw new NotFoundException(`Story ${id} not found`);
+    }
+    Object.assign(story, patch);
+    return {
+      ...story,
+      author: this.getUser(story.userId),
+    };
   }
 
   deleteStory(id: string) {
@@ -1005,14 +1167,42 @@ export class PlatformDataService {
     };
   }
 
-  getReels() {
-    return this.reels.map((reel) => ({
+  getReels(authorId?: string) {
+    const reels = authorId
+      ? this.reels.filter((reel) => reel.authorId === authorId)
+      : this.reels;
+    return reels.map((reel) => ({
       ...reel,
       author: this.getUser(reel.authorId),
     }));
   }
 
-  createReel(input: Pick<ReelRecord, 'authorId' | 'caption' | 'audioName' | 'thumbnail' | 'videoUrl'>) {
+  getReel(id: string) {
+    const reel = this.reels.find((item) => item.id === id);
+    if (!reel) {
+      throw new NotFoundException(`Reel ${id} not found`);
+    }
+    return {
+      ...reel,
+      author: this.getUser(reel.authorId),
+    };
+  }
+
+  createReel(
+    input: Pick<
+      ReelRecord,
+      | 'authorId'
+      | 'caption'
+      | 'audioName'
+      | 'thumbnail'
+      | 'videoUrl'
+      | 'textOverlays'
+      | 'subtitleEnabled'
+      | 'trimInfo'
+      | 'remixEnabled'
+      | 'isDraft'
+    >,
+  ) {
     const reel: ReelRecord = {
       id: `r${this.reels.length + 1}`,
       authorId: input.authorId,
@@ -1024,10 +1214,44 @@ export class PlatformDataService {
       comments: 0,
       shares: 0,
       viewCount: 0,
+      coverUrl: input.thumbnail,
+      textOverlays: input.textOverlays,
+      subtitleEnabled: input.subtitleEnabled,
+      trimInfo: input.trimInfo,
+      remixEnabled: input.remixEnabled,
+      isDraft: input.isDraft,
       createdAt: new Date().toISOString(),
     };
     this.reels.unshift(reel);
     return reel;
+  }
+
+  updateReel(
+    id: string,
+    patch: Partial<
+      Pick<
+        ReelRecord,
+        | 'caption'
+        | 'audioName'
+        | 'thumbnail'
+        | 'videoUrl'
+        | 'textOverlays'
+        | 'subtitleEnabled'
+        | 'trimInfo'
+        | 'remixEnabled'
+        | 'isDraft'
+      >
+    >,
+  ) {
+    const reel = this.reels.find((item) => item.id === id);
+    if (!reel) {
+      throw new NotFoundException(`Reel ${id} not found`);
+    }
+    Object.assign(reel, patch);
+    return {
+      ...reel,
+      author: this.getUser(reel.authorId),
+    };
   }
 
   deleteReel(id: string) {
@@ -1078,22 +1302,74 @@ export class PlatformDataService {
     return message;
   }
 
-  getEvents() {
-    return this.events;
+  getEvents(status?: EventRecord['status']) {
+    return status
+      ? this.events.filter((event) => event.status === status)
+      : this.events;
   }
 
-  createEvent(input: Omit<EventRecord, 'id' | 'status'> & { status?: EventRecord['status'] }) {
+  getEvent(id: string) {
+    const event = this.events.find((item) => item.id === id);
+    if (!event) {
+      throw new NotFoundException(`Event ${id} not found`);
+    }
+    return event;
+  }
+
+  createEvent(
+    input: Omit<EventRecord, 'id' | 'status' | 'rsvped' | 'saved' | 'mediaGallery' | 'hostToolsSummary'> & {
+      status?: EventRecord['status'];
+      rsvped?: boolean;
+      saved?: boolean;
+      mediaGallery?: string[];
+      hostToolsSummary?: string;
+    },
+  ) {
     const event: EventRecord = {
       id: `e${this.events.length + 1}`,
       ...input,
       status: input.status ?? 'Review',
+      rsvped: input.rsvped ?? false,
+      saved: input.saved ?? false,
+      mediaGallery: input.mediaGallery ?? [],
+      hostToolsSummary: input.hostToolsSummary ?? 'Host tools placeholder',
     };
     this.events.unshift(event);
     return event;
   }
 
+  toggleEventRsvp(id: string, userId: string) {
+    const event = this.getEvent(id);
+    this.getUser(userId);
+    event.rsvped = !event.rsvped;
+    return {
+      ...event,
+      action: event.rsvped ? 'rsvped' : 'rsvp_removed',
+      userId,
+    };
+  }
+
+  toggleEventSave(id: string, userId: string) {
+    const event = this.getEvent(id);
+    this.getUser(userId);
+    event.saved = !event.saved;
+    return {
+      ...event,
+      action: event.saved ? 'saved' : 'unsaved',
+      userId,
+    };
+  }
+
   getProducts() {
     return this.products;
+  }
+
+  getProduct(id: string) {
+    const product = this.products.find((item) => item.id === id);
+    if (!product) {
+      throw new NotFoundException(`Product ${id} not found`);
+    }
+    return product;
   }
 
   createProduct(input: Omit<ProductRecord, 'id' | 'listingStatus' | 'reviewStatus' | 'views' | 'watchers' | 'chats'>) {

@@ -1,6 +1,11 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { PlatformDataService } from '../data/platform-data.service';
+import {
+  ChangePasswordRequestDto,
+  FollowUserDto,
+  UpdateUserDto,
+} from '../dto/api.dto';
 
 @ApiTags('users')
 @Controller('users')
@@ -8,6 +13,7 @@ export class UsersController {
   constructor(private readonly platformData: PlatformDataService) {}
 
   @Get()
+  @ApiQuery({ name: 'role', required: false })
   getUsers(@Query('role') role?: string) {
     return this.platformData.getUsers(role);
   }
@@ -18,27 +24,22 @@ export class UsersController {
   }
 
   @Patch(':id')
-  updateUser(
-    @Param('id') id: string,
-    @Body() body: { name?: string; username?: string; bio?: string; avatar?: string },
-  ) {
+  updateUser(@Param('id') id: string, @Body() body: UpdateUserDto) {
     return this.platformData.updateUserProfile(id, body);
   }
 
   @Patch(':id/follow')
-  followUser(@Param('id') id: string, @Body() body: { followerId: string }) {
+  followUser(@Param('id') id: string, @Body() body: FollowUserDto) {
     return this.platformData.followUser(id, body.followerId);
   }
 
   @Patch(':id/unfollow')
-  unfollowUser(@Param('id') id: string, @Body() body: { followerId: string }) {
+  unfollowUser(@Param('id') id: string, @Body() body: FollowUserDto) {
     return this.platformData.unfollowUser(id, body.followerId);
   }
 
   @Post('change-password')
-  changePassword(
-    @Body() body: { email: string; oldPassword: string; newPassword: string },
-  ) {
+  changePassword(@Body() body: ChangePasswordRequestDto) {
     return this.platformData.changePassword(body);
   }
 

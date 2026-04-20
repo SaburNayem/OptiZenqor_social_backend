@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { EcosystemDataService } from '../data/ecosystem-data.service';
 import { SettingsDataService } from '../data/settings-data.service';
+import { CreateTicketDto } from '../dto/api.dto';
 
 @ApiTags('support')
 @Controller()
@@ -32,7 +33,7 @@ export class SupportController {
   }
 
   @Post('support/tickets')
-  createTicket(@Body() body: { subject: string; category: string }) {
+  createTicket(@Body() body: CreateTicketDto) {
     return this.ecosystemData.createTicket(body.subject, body.category);
   }
 }

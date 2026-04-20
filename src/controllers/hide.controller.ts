@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { EcosystemDataService } from '../data/ecosystem-data.service';
+import { HideItemDto } from '../dto/api.dto';
 
 @ApiTags('hide')
 @Controller('hide')
@@ -12,15 +13,34 @@ export class HideController {
     return this.ecosystemData.getHiddenItems();
   }
 
+  @Get('posts/all')
+  getHiddenPosts() {
+    return this.ecosystemData
+      .getHiddenItems()
+      .filter((item) => item.targetType === 'post');
+  }
+
   @Post()
-  hideItem(
-    @Body()
-    body: {
-      targetId: string;
-      targetType: 'post' | 'reel' | 'story' | 'comment';
-    },
-  ) {
+  hideItem(@Body() body: HideItemDto) {
     return this.ecosystemData.hideItem(body);
+  }
+
+  @Post('posts/:postId')
+  hidePost(@Param('postId') postId: string) {
+    return this.ecosystemData.hideItem({
+      targetId: postId,
+      targetType: 'post',
+    });
+  }
+
+  @Delete('posts/:postId')
+  unhidePost(@Param('postId') postId: string) {
+    return this.ecosystemData.unhideItem(postId);
+  }
+
+  @Get(':targetId')
+  getHiddenItem(@Param('targetId') targetId: string) {
+    return this.ecosystemData.getHiddenItem(targetId);
   }
 
   @Delete(':targetId')

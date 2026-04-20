@@ -32,6 +32,11 @@ export class DiscoveryController {
     return this.ecosystemData.getCollections();
   }
 
+  @Get('saved-collections/:id')
+  getCollection(@Param('id') id: string) {
+    return this.ecosystemData.getCollection(id);
+  }
+
   @Post('saved-collections')
   createCollection(@Body() body: { name: string }) {
     return this.ecosystemData.createCollection(body.name);

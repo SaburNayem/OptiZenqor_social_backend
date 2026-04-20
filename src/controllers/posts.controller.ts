@@ -1,32 +1,46 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ExtendedDataService } from '../data/extended-data.service';
 import { PlatformDataService } from '../data/platform-data.service';
+import { CreatePostDto, UpdatePostDto } from '../dto/api.dto';
 
 @ApiTags('posts')
 @Controller('posts')
 export class PostsController {
-  constructor(private readonly platformData: PlatformDataService) {}
+  constructor(
+    private readonly platformData: PlatformDataService,
+    private readonly extendedData: ExtendedDataService,
+  ) {}
 
   @Get()
-  getPosts() {
-    return this.platformData.getPosts();
+  @ApiQuery({ name: 'authorId', required: false })
+  getPosts(@Query('authorId') authorId?: string) {
+    return this.platformData.getPosts(authorId);
   }
 
   @Get(':id')
   getPost(@Param('id') id: string) {
-    return this.platformData.getPost(id);
+    const post = this.platformData.getPost(id);
+    const author = this.platformData.getUser(post.authorId);
+    const comments = this.extendedData.getPostComments(id);
+
+    let detail: Record<string, unknown> | null = null;
+    try {
+      detail = this.extendedData.getPostDetail(id);
+    } catch {
+      detail = null;
+    }
+
+    return {
+      ...post,
+      author,
+      detail,
+      comments,
+    };
   }
 
   @Post()
-  createPost(
-    @Body()
-    body: {
-      authorId: string;
-      caption: string;
-      media?: string[];
-      tags?: string[];
-    },
-  ) {
+  createPost(@Body() body: CreatePostDto) {
     return this.platformData.createPost({
       authorId: body.authorId,
       caption: body.caption,
@@ -36,16 +50,7 @@ export class PostsController {
   }
 
   @Patch(':id')
-  updatePost(
-    @Param('id') id: string,
-    @Body()
-    body: {
-      caption?: string;
-      media?: string[];
-      tags?: string[];
-      status?: 'Visible' | 'Featured' | 'Under review' | 'Muted reach';
-    },
-  ) {
+  updatePost(@Param('id') id: string, @Body() body: UpdatePostDto) {
     return this.platformData.updatePost(id, body);
   }
 

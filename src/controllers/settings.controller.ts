@@ -12,9 +12,42 @@ export class SettingsController {
     return this.settingsData.getSections();
   }
 
+  @Get('sections')
+  getSettingsSectionsAlias() {
+    return this.settingsData.getSections();
+  }
+
+  @Get('items')
+  getSettingsItems() {
+    return this.settingsData.getItems();
+  }
+
+  @Get('state')
+  getSettingsState() {
+    return this.settingsData.getState();
+  }
+
+  @Get('items/:itemKey')
+  getSettingsItem(@Param('itemKey') itemKey: string) {
+    return this.settingsData.getItem(itemKey);
+  }
+
   @Get(':sectionKey')
   getSettingsSection(@Param('sectionKey') sectionKey: string) {
     return this.settingsData.getSection(sectionKey);
+  }
+
+  @Patch('items/:itemKey')
+  updateSettingsItem(
+    @Param('itemKey') itemKey: string,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.settingsData.updateItem(itemKey, body);
+  }
+
+  @Patch('state')
+  updateSettingsState(@Body() body: Record<string, unknown>) {
+    return this.settingsData.updateState(body);
   }
 
   @Patch(':sectionKey')

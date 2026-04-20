@@ -187,6 +187,66 @@ export class ExtendedDataService {
     },
   ];
 
+  private storyComments: Array<{
+    id: string;
+    storyId: string;
+    userId: string;
+    comment: string;
+    createdAt: string;
+  }> = [
+    {
+      id: 'sc1',
+      storyId: 's1',
+      userId: 'u4',
+      comment: 'Love this gradient story.',
+      createdAt: '2026-04-19T14:05:00.000Z',
+    },
+  ];
+
+  private storyReactions: Array<{
+    storyId: string;
+    userId: string;
+    reaction: string;
+    createdAt: string;
+  }> = [
+    {
+      storyId: 's1',
+      userId: 'u2',
+      reaction: 'fire',
+      createdAt: '2026-04-19T14:06:00.000Z',
+    },
+  ];
+
+  private reelComments: Array<{
+    id: string;
+    reelId: string;
+    userId: string;
+    comment: string;
+    createdAt: string;
+  }> = [
+    {
+      id: 'rc1',
+      reelId: 'r1',
+      userId: 'u3',
+      comment: 'The pacing here is excellent.',
+      createdAt: '2026-04-19T15:20:00.000Z',
+    },
+  ];
+
+  private reelReactions: Array<{
+    reelId: string;
+    userId: string;
+    reaction: string;
+    createdAt: string;
+  }> = [
+    {
+      reelId: 'r1',
+      userId: 'u4',
+      reaction: 'like',
+      createdAt: '2026-04-19T15:21:00.000Z',
+    },
+  ];
+
   private recommendationState = {
     suggestedUsers: [
       { id: 'u2', username: 'nexa.studio', reason: 'Popular in your interests' },
@@ -419,6 +479,12 @@ export class ExtendedDataService {
     return this.drafts;
   }
 
+  getDraft(id: string) {
+    const draft = this.drafts.find((item) => item.id === id);
+    if (!draft) throw new NotFoundException(`Draft ${id} not found`);
+    return draft;
+  }
+
   createDraft(title: string, type: string) {
     const draft = {
       id: `draft${this.drafts.length + 1}`,
@@ -457,6 +523,12 @@ export class ExtendedDataService {
 
   getUploads() {
     return this.uploads;
+  }
+
+  getUpload(id: string) {
+    const upload = this.uploads.find((item) => item.id === id);
+    if (!upload) throw new NotFoundException(`Upload ${id} not found`);
+    return upload;
   }
 
   updateUpload(id: string, action: 'retry' | 'cancel' | 'pause') {
@@ -525,6 +597,84 @@ export class ExtendedDataService {
       removed,
       message: 'Comment deleted successfully.',
     };
+  }
+
+  getStoryComments(storyId: string) {
+    return this.storyComments.filter((item) => item.storyId === storyId);
+  }
+
+  createStoryComment(storyId: string, userId: string, comment: string) {
+    const next = {
+      id: `sc${this.storyComments.length + 1}`,
+      storyId,
+      userId,
+      comment,
+      createdAt: new Date().toISOString(),
+    };
+    this.storyComments.push(next);
+    return next;
+  }
+
+  getStoryReactions(storyId: string) {
+    return this.storyReactions.filter((item) => item.storyId === storyId);
+  }
+
+  reactToStory(storyId: string, userId: string, reaction: string) {
+    const existing = this.storyReactions.find(
+      (item) => item.storyId === storyId && item.userId === userId,
+    );
+    if (existing) {
+      existing.reaction = reaction;
+      existing.createdAt = new Date().toISOString();
+      return existing;
+    }
+    const next = {
+      storyId,
+      userId,
+      reaction,
+      createdAt: new Date().toISOString(),
+    };
+    this.storyReactions.push(next);
+    return next;
+  }
+
+  getReelComments(reelId: string) {
+    return this.reelComments.filter((item) => item.reelId === reelId);
+  }
+
+  createReelComment(reelId: string, userId: string, comment: string) {
+    const next = {
+      id: `rc${this.reelComments.length + 1}`,
+      reelId,
+      userId,
+      comment,
+      createdAt: new Date().toISOString(),
+    };
+    this.reelComments.push(next);
+    return next;
+  }
+
+  getReelReactions(reelId: string) {
+    return this.reelReactions.filter((item) => item.reelId === reelId);
+  }
+
+  reactToReel(reelId: string, userId: string, reaction: string) {
+    const existing = this.reelReactions.find(
+      (item) => item.reelId === reelId && item.userId === userId,
+    );
+    if (existing) {
+      existing.reaction = reaction;
+      existing.createdAt = new Date().toISOString();
+      return existing;
+    }
+    const next = {
+      reelId,
+      userId,
+      reaction,
+      createdAt: new Date().toISOString(),
+    };
+    this.reelReactions.push(next);
+    return next;
   }
 
   updatePostDetail(id: string, patch: Record<string, unknown>) {

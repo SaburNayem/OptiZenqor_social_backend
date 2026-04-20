@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ExtendedDataService } from '../data/extended-data.service';
+import { CreateCommentDto, ReactToCommentDto } from '../dto/api.dto';
 
 @ApiTags('comments')
 @Controller('posts/:id/comments')
@@ -13,7 +14,7 @@ export class CommentsController {
   }
 
   @Post()
-  createPostComment(@Param('id') id: string, @Body() body: { author: string; message: string }) {
+  createPostComment(@Param('id') id: string, @Body() body: CreateCommentDto) {
     return this.extendedData.createPostComment(id, body.author, body.message);
   }
 
@@ -21,7 +22,7 @@ export class CommentsController {
   reactToComment(
     @Param('id') id: string,
     @Param('commentId') commentId: string,
-    @Body() body: { reaction: string },
+    @Body() body: ReactToCommentDto,
   ) {
     return this.extendedData.reactToComment(id, commentId, body.reaction);
   }

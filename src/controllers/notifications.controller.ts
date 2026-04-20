@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { PlatformDataService } from '../data/platform-data.service';
+import { CreateNotificationCampaignDto } from '../dto/api.dto';
 
 @ApiTags('notifications')
 @Controller('notifications')
@@ -13,9 +14,7 @@ export class NotificationsController {
   }
 
   @Post('campaigns')
-  createCampaign(
-    @Body() body: { name: string; audience: string; schedule: string },
-  ) {
+  createCampaign(@Body() body: CreateNotificationCampaignDto) {
     return this.platformData.createCampaign(body);
   }
 }

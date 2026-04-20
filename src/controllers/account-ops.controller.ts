@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ExtendedDataService } from '../data/extended-data.service';
+import { ResendOtpDto, SendOtpDto, VerifyOtpDto } from '../dto/api.dto';
 
 @ApiTags('account-ops')
 @Controller()
@@ -8,17 +9,17 @@ export class AccountOpsController {
   constructor(private readonly extendedData: ExtendedDataService) {}
 
   @Post('auth/send-otp')
-  sendOtp(@Body() body: { destination: string; channel: 'email' | 'phone' }) {
+  sendOtp(@Body() body: SendOtpDto) {
     return this.extendedData.sendOtp(body.destination, body.channel);
   }
 
   @Post('auth/resend-otp')
-  resendOtp(@Body() body: { destination: string }) {
+  resendOtp(@Body() body: ResendOtpDto) {
     return this.extendedData.resendOtp(body.destination);
   }
 
   @Post('auth/verify-otp')
-  verifyOtp(@Body() body: { code: string }) {
+  verifyOtp(@Body() body: VerifyOtpDto) {
     return this.extendedData.verifyOtp(body.code);
   }
 
