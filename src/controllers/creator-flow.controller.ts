@@ -13,6 +13,11 @@ export class CreatorFlowController {
     return this.extendedData.getDrafts();
   }
 
+  @Get('posts/drafts')
+  getDraftsViaPostAlias() {
+    return this.extendedData.getDrafts();
+  }
+
   @Get('drafts/:id')
   getDraft(@Param('id') id: string) {
     return this.extendedData.getDraft(id);
@@ -35,6 +40,11 @@ export class CreatorFlowController {
 
   @Get('scheduling')
   getScheduling() {
+    return this.extendedData.getScheduledPosts();
+  }
+
+  @Get('posts/scheduled')
+  getSchedulingViaPostAlias() {
     return this.extendedData.getScheduledPosts();
   }
 

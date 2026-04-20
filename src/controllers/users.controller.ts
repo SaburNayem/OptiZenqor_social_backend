@@ -23,6 +23,16 @@ export class UsersController {
     return this.platformData.getUser(id);
   }
 
+  @Get(':id/followers')
+  getFollowers(@Param('id') id: string) {
+    return this.platformData.getFollowers(id);
+  }
+
+  @Get(':id/following')
+  getFollowing(@Param('id') id: string) {
+    return this.platformData.getFollowing(id);
+  }
+
   @Patch(':id')
   updateUser(@Param('id') id: string, @Body() body: UpdateUserDto) {
     return this.platformData.updateUserProfile(id, body);

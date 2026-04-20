@@ -1,4 +1,4 @@
-# Socity Backend
+# OptiZenqor Social Backend
 
 NestJS backend API for the `OptiZenqor_social` mobile app and the `OptiZenqor_social_dashboard` admin panel.
 
@@ -27,182 +27,159 @@ Raw OpenAPI JSON is available at `http://localhost:3000/docs-json`.
 To send real 6-digit verification codes by email, add SMTP settings to `.env`:
 
 ```env
-SMTP_HOST=smtp.gmail.com
+SMTP_HOST=smtp.example.com
 SMTP_PORT=587
-SMTP_USER=hossennayem099@gmail.com
-SMTP_PASS=YOUR_GMAIL_APP_PASSWORD
-SMTP_FROM=hossennayem099@gmail.com
+SMTP_USER=your-smtp-user
+SMTP_PASS=your-smtp-password
+SMTP_FROM=no-reply@example.com
 SMTP_SECURE=false
 ```
 
 Notes:
 
-- For Gmail, use an App Password instead of your normal Gmail password.
+- Replace these placeholders with your actual SMTP provider settings.
 - Without SMTP settings, the backend falls back to development mode and does not send a real email.
 
-## Main routes
+## Main route groups
 
 ```text
+System
 GET    /health
 GET    /app/bootstrap
 GET    /app/config
 POST   /app/session-init
-
 GET    /onboarding/slides
 GET    /onboarding/state
 GET    /onboarding/interests
 POST   /onboarding/complete
 
+Auth
+GET    /auth/demo-accounts
 POST   /auth/login
+POST   /auth/google
 POST   /auth/signup
+POST   /auth/refresh-token
+POST   /auth/logout
 POST   /auth/forgot-password
 POST   /auth/reset-password
+POST   /auth/verify-email/confirm
+GET    /auth/me
 POST   /auth/send-otp
 POST   /auth/resend-otp
 POST   /auth/verify-otp
-GET    /auth/demo-accounts
-POST   /auth/verify-email/confirm
-GET    /auth/me
 
-GET    /users
-GET    /users/:id
-PATCH  /users/:id/follow
-PATCH  /users/:id/block
-
+Content
 GET    /feed
+GET    /users
 GET    /posts
 GET    /posts/:id
 POST   /posts
-PATCH  /posts/:id/like
-GET    /posts/:id/detail
-PATCH  /posts/:id/detail
-DELETE /posts/:id/detail
+PATCH  /posts/:id
+DELETE /posts/:id
 GET    /posts/:id/comments
 POST   /posts/:id/comments
+PATCH  /posts/:id/comments/:commentId/react
+PATCH  /posts/:id/like
+PATCH  /posts/:id/unlike
 GET    /stories
+GET    /stories/:id
 POST   /stories
+PATCH  /stories/:id
+DELETE /stories/:id
+GET    /stories/:id/comments
+POST   /stories/:id/comments
+GET    /stories/:id/reactions
+POST   /stories/:id/reactions
 GET    /reels
+GET    /reels/:id
 POST   /reels
+PATCH  /reels/:id
+DELETE /reels/:id
+GET    /reels/:id/comments
+POST   /reels/:id/comments
+GET    /reels/:id/reactions
+POST   /reels/:id/reactions
 
+Creator flow
 GET    /drafts
+GET    /drafts/:id
 POST   /drafts
 PATCH  /drafts/:id
 DELETE /drafts/:id
 GET    /scheduling
 GET    /upload-manager
+GET    /upload-manager/:id
 PATCH  /upload-manager/:id
 
-GET    /chat/threads
-GET    /chat/threads/:id
-POST   /chat/threads/:id/messages
-PATCH  /chat/threads/:id/archive
-PATCH  /chat/threads/:id/mute
-PATCH  /chat/threads/:id/pin
-PATCH  /chat/threads/:id/unread
-DELETE /chat/threads/:id/clear
-GET    /chat/presence
-GET    /chat/preferences
-
+Experience
 GET    /events
-POST   /events
-
+GET    /events/:id
+PATCH  /events/:id/rsvp
+PATCH  /events/:id/save
+GET    /marketplace
 GET    /marketplace/products
-POST   /marketplace/products
-
-GET    /monetization/overview
-GET    /monetization/wallet
-GET    /monetization/subscriptions
-GET    /monetization/plans
-
-GET    /notifications/campaigns
-POST   /notifications/campaigns
-GET    /notifications/inbox
-
-GET    /hashtags
-GET    /trending
-GET    /search?q=
+GET    /marketplace/products/:id
+GET    /communities
+GET    /jobs
 GET    /bookmarks
 GET    /saved-collections
-POST   /saved-collections
-PATCH  /saved-collections
-PATCH  /saved-collections/:id
-DELETE /saved-collections/:id
-
-GET    /communities
-GET    /communities/:id
-GET    /pages
-GET    /pages/:id
-GET    /groups
-
-GET    /jobs
-GET    /jobs/:id
-POST   /jobs/:id/apply
-GET    /professional-profiles
-
-GET    /invite-referral
-GET    /premium-membership
-GET    /wallet-payments
-GET    /subscriptions
-GET    /wallet/ledger
-
-GET    /recommendations
-GET    /notification-preferences
-PATCH  /notification-preferences
-GET    /settings/sections
-GET    /safety/config
+GET    /settings
+GET    /settings/state
 GET    /support/faqs
 GET    /support/tickets
-POST   /support/tickets
-GET    /support/chat
+GET    /report-center
+GET    /account-switching
+GET    /activity-sessions
+GET    /verification-request
+GET    /deep-link-handler
+GET    /app-update-flow
+GET    /offline-sync
+GET    /localization-support
+GET    /maintenance-mode
+GET    /polls-surveys
+GET    /learning-courses
+GET    /personalization-onboarding
+GET    /share-repost/options
+GET    /advanced-privacy-controls
+GET    /accessibility-support
+GET    /blocked-muted-accounts
+GET    /business-profile
+GET    /creator-dashboard
+GET    /explore-recommendation
+GET    /legal-compliance
+GET    /media-viewer
+GET    /messages
+GET    /profile/:id
+GET    /push-notification-preferences
+GET    /seller-profile
+GET    /support-help
+GET    /user-profile/:id
 
+Realtime and utilities
+GET    /chat/threads
 GET    /group-chat
+GET    /group-chat/:id
 GET    /calls
+GET    /calls/:id
 GET    /live-stream
+GET    /live-stream/:id
 GET    /socket/contract
 
-GET    /master-data
-GET    /legal/consents
-PATCH  /legal/consents
-POST   /legal/account-deletion
-POST   /legal/data-export
-GET    /security/state
-POST   /security/logout-all
-
+Admin
 GET    /admin/dashboard
 POST   /admin/auth/login
-GET    /admin/auth/demo-accounts
-GET    /admin/auth/me
-GET    /admin/auth/sessions
-PATCH  /admin/auth/sessions/:id/revoke
 GET    /admin/users
-GET    /admin/verification-queue
-PATCH  /admin/verification-queue/:id
-GET    /admin/content
-GET    /admin/content-operations
 GET    /admin/reports
-GET    /admin/moderation-cases
-PATCH  /admin/moderation-cases/:id
-GET    /admin/chat-cases
-GET    /admin/chat-control
-PATCH  /admin/chat-control/:id
-GET    /admin/events
-GET    /admin/monetization
-GET    /admin/commerce-risk
-GET    /admin/notifications
-GET    /admin/broadcast-campaigns
-POST   /admin/broadcast-campaigns
-GET    /admin/audience-segments
 GET    /admin/analytics
-GET    /admin/analytics-pipeline
-GET    /admin/roles
-GET    /admin/rbac
 GET    /admin/settings
-GET    /admin/operational-settings
-PATCH  /admin/operational-settings
-GET    /admin/audit-logs
-GET    /admin/audit-log-system
-GET    /admin/support-operations
 ```
+
+For the full route contract with request examples, use Swagger and the curl reference:
+
+- Swagger UI: `/docs`
+- OpenAPI JSON: `/docs-json`
+- OpenAPI YAML: `/docs-yaml`
+- Examples: `BACKEND_CURL_REFERENCE.md`
 
 ## Notes
 

@@ -1,5 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { AdminOpsDataService } from '../data/admin-ops-data.service';
+import { AppExtensionsDataService } from '../data/app-extensions-data.service';
 import { EcosystemDataService } from '../data/ecosystem-data.service';
 import { ExtendedDataService } from '../data/extended-data.service';
 import { PlatformDataService } from '../data/platform-data.service';
@@ -13,6 +14,7 @@ import { MailService } from '../services/mail.service';
     EcosystemDataService,
     ExtendedDataService,
     AdminOpsDataService,
+    AppExtensionsDataService,
     SettingsDataService,
     MailService,
   ],
@@ -21,6 +23,7 @@ import { MailService } from '../services/mail.service';
     EcosystemDataService,
     ExtendedDataService,
     AdminOpsDataService,
+    AppExtensionsDataService,
     SettingsDataService,
     MailService,
   ],

@@ -346,8 +346,10 @@ curl http://localhost:3000/monetization/plans
 
 ```bash
 curl http://localhost:3000/notifications/campaigns
+curl http://localhost:3000/notifications
 curl http://localhost:3000/notifications/inbox
-curl http://localhost:3000/notification-preferences
+curl http://localhost:3000/notifications/preferences
+curl http://localhost:3000/push-notification-preferences
 
 curl -X POST http://localhost:3000/notifications/campaigns ^
   -H "Content-Type: application/json" ^
@@ -367,8 +369,14 @@ curl http://localhost:3000/settings/account
 curl http://localhost:3000/settings/items
 curl http://localhost:3000/settings/items/account-settings
 curl http://localhost:3000/settings/sections
+curl http://localhost:3000/advanced-privacy-controls
+curl "http://localhost:3000/blocked-muted-accounts?actorId=u1"
+curl http://localhost:3000/accessibility-support
+curl http://localhost:3000/explore-recommendation
+curl http://localhost:3000/legal-compliance
 curl http://localhost:3000/safety/config
 curl http://localhost:3000/support/faqs
+curl http://localhost:3000/support-help
 curl http://localhost:3000/support/tickets
 curl http://localhost:3000/support/chat
 
@@ -389,9 +397,39 @@ curl -X POST http://localhost:3000/support/tickets ^
 
 ```bash
 curl http://localhost:3000/group-chat
+curl http://localhost:3000/group-chat/gc1
 curl http://localhost:3000/calls
+curl http://localhost:3000/calls/call1
 curl http://localhost:3000/live-stream
+curl http://localhost:3000/live-stream/live1
 curl http://localhost:3000/socket/contract
+```
+
+## Profiles, Media, and App Contract Aliases
+
+```bash
+curl http://localhost:3000/profile/u1
+curl http://localhost:3000/user-profile/u1
+curl http://localhost:3000/follow-unfollow/u1/followers
+curl http://localhost:3000/follow-unfollow/u1/following
+curl http://localhost:3000/creator-dashboard
+curl http://localhost:3000/business-profile
+curl http://localhost:3000/seller-profile
+curl http://localhost:3000/recruiter-profile
+curl http://localhost:3000/media-viewer
+curl http://localhost:3000/media-viewer/media_p1_1
+curl http://localhost:3000/feed/home
+curl http://localhost:3000/messages
+curl http://localhost:3000/messages/t1
+curl "http://localhost:3000/search-discovery?q=creator"
+
+curl -X POST http://localhost:3000/messages/t1 ^
+  -H "Content-Type: application/json" ^
+  -d "{\"senderId\":\"u1\",\"text\":\"Hello from /messages alias\"}"
+
+curl -X POST http://localhost:3000/posts/create ^
+  -H "Content-Type: application/json" ^
+  -d "{\"authorId\":\"u1\",\"caption\":\"Created from /posts/create\",\"media\":[\"https://placehold.co/800x600\"],\"tags\":[\"alias\"]}"
 ```
 
 ## Master Data

@@ -641,6 +641,17 @@ export class PlatformDataService {
     return user;
   }
 
+  private toUserPreview(user: UserRecord) {
+    return {
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      avatar: user.avatar,
+      role: user.role,
+      verification: user.verification,
+    };
+  }
+
   resolveUserFromAccessToken(accessToken?: string) {
     if (!accessToken) {
       return null;
@@ -913,6 +924,22 @@ export class PlatformDataService {
     const key = `${followerId}:${targetId}`;
     this.followRelations.delete(key);
     return { success: true, followerId, targetId, action: 'unfollowed' };
+  }
+
+  getFollowers(targetId: string) {
+    this.getUser(targetId);
+    return [...this.followRelations]
+      .filter((relation) => relation.endsWith(`:${targetId}`))
+      .map((relation) => relation.split(':')[0])
+      .map((followerId) => this.toUserPreview(this.getUser(followerId)));
+  }
+
+  getFollowing(userId: string) {
+    this.getUser(userId);
+    return [...this.followRelations]
+      .filter((relation) => relation.startsWith(`${userId}:`))
+      .map((relation) => relation.split(':')[1])
+      .map((targetId) => this.toUserPreview(this.getUser(targetId)));
   }
 
   blockUser(targetId: string, actorId: string, reason?: string) {

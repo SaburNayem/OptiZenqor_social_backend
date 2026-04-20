@@ -495,6 +495,64 @@ export class CreateNotificationCampaignDto {
   schedule!: string;
 }
 
+export class SetActiveAccountDto {
+  @ApiProperty()
+  @IsString()
+  accountId!: string;
+}
+
+export class ToggleVerificationDocumentDto {
+  @ApiProperty()
+  @IsString()
+  documentName!: string;
+}
+
+export class UpdateVerificationStatusDto {
+  @ApiProperty({ enum: ['notRequested', 'pending', 'approved', 'rejected'] })
+  @IsIn(['notRequested', 'pending', 'approved', 'rejected'])
+  status!: 'notRequested' | 'pending' | 'approved' | 'rejected';
+}
+
+export class SubmitReportDto {
+  @ApiProperty()
+  @IsString()
+  reason!: string;
+}
+
+export class ResolveDeepLinkDto {
+  @ApiProperty()
+  @IsString()
+  url!: string;
+}
+
+export class SetLocaleDto {
+  @ApiProperty()
+  @IsString()
+  localeCode!: string;
+}
+
+export class VotePollDto {
+  @ApiProperty()
+  @IsNumber()
+  optionIndex!: number;
+}
+
+export class ToggleInterestDto {
+  @ApiProperty()
+  @IsString()
+  name!: string;
+}
+
+export class ShareRepostTrackDto {
+  @ApiProperty()
+  @IsString()
+  targetId!: string;
+
+  @ApiProperty()
+  @IsString()
+  option!: string;
+}
+
 export class CreateProductDto {
   @ApiProperty()
   @IsString()

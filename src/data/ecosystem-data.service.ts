@@ -960,12 +960,36 @@ export class EcosystemDataService {
     return this.groupChats;
   }
 
+  getGroupChat(id: string) {
+    const groupChat = this.groupChats.find((item) => item.id === id);
+    if (!groupChat) {
+      throw new NotFoundException(`Group chat ${id} not found`);
+    }
+    return groupChat;
+  }
+
   getCalls() {
     return this.calls;
   }
 
+  getCall(id: string) {
+    const call = this.calls.find((item) => item.id === id);
+    if (!call) {
+      throw new NotFoundException(`Call ${id} not found`);
+    }
+    return call;
+  }
+
   getLiveStreams() {
     return this.liveStreams;
+  }
+
+  getLiveStream(id: string) {
+    const liveStream = this.liveStreams.find((item) => item.id === id);
+    if (!liveStream) {
+      throw new NotFoundException(`Live stream ${id} not found`);
+    }
+    return liveStream;
   }
 
   getSocketContract() {

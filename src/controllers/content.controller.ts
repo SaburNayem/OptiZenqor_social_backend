@@ -11,4 +11,9 @@ export class ContentController {
   getFeed() {
     return this.platformData.getFeed();
   }
+
+  @Get('feed/home')
+  getHomeFeed() {
+    return this.platformData.getFeed();
+  }
 }

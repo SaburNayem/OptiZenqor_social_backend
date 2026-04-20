@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { EcosystemDataService } from '../data/ecosystem-data.service';
 
 @ApiTags('discovery')
@@ -22,9 +22,15 @@ export class DiscoveryController {
     return this.ecosystemData.search(q);
   }
 
-  @Get('bookmarks')
-  getBookmarks() {
-    return this.ecosystemData.getBookmarks();
+  @Get('search-discovery')
+  @ApiQuery({ name: 'q', required: false })
+  getSearchDiscovery(@Query('q') q?: string) {
+    return {
+      query: q ?? '',
+      results: this.ecosystemData.search(q),
+      trending: this.ecosystemData.getTrending(),
+      hashtags: this.ecosystemData.getHashtags(),
+    };
   }
 
   @Get('saved-collections')

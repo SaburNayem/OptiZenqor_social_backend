@@ -49,6 +49,11 @@ export class PostsController {
     });
   }
 
+  @Post('create')
+  createPostFromAppContract(@Body() body: CreatePostDto) {
+    return this.createPost(body);
+  }
+
   @Patch(':id')
   updatePost(@Param('id') id: string, @Body() body: UpdatePostDto) {
     return this.platformData.updatePost(id, body);

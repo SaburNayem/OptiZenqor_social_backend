@@ -67,4 +67,19 @@ export class CommunitiesController {
       privacy: community.privacy,
     }));
   }
+
+  @Get('groups/:id')
+  getGroup(@Param('id') id: string) {
+    return this.ecosystemData.getCommunity(id);
+  }
+
+  @Get('groups/:id/posts')
+  getGroupPosts(@Param('id') id: string) {
+    return this.ecosystemData.getCommunity(id).posts;
+  }
+
+  @Get('groups/:id/members')
+  getGroupMembers(@Param('id') id: string) {
+    return this.ecosystemData.getCommunity(id).members;
+  }
 }
