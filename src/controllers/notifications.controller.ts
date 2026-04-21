@@ -1,27 +1,27 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { AppExtensionsDataService } from '../data/app-extensions-data.service';
-import { EcosystemDataService } from '../data/ecosystem-data.service';
 import { PlatformDataService } from '../data/platform-data.service';
 import {
   CreateNotificationCampaignDto,
   MarkNotificationReadDto,
 } from '../dto/api.dto';
+import { CoreDatabaseService } from '../services/core-database.service';
 
 @ApiTags('notifications')
 @Controller('notifications')
 export class NotificationsController {
   constructor(
+    private readonly coreDatabase: CoreDatabaseService,
     private readonly platformData: PlatformDataService,
-    private readonly ecosystemData: EcosystemDataService,
     private readonly appExtensionsData: AppExtensionsDataService,
   ) {}
 
   @Get()
   @ApiQuery({ name: 'userId', required: false })
-  getNotificationsOverview(@Query('userId') userId?: string) {
+  async getNotificationsOverview(@Query('userId') userId?: string) {
     return {
-      inbox: this.ecosystemData.getNotificationInbox(userId),
+      inbox: await this.coreDatabase.getNotificationInbox(userId),
       campaigns: this.platformData.getCampaigns(),
       preferences: this.appExtensionsData.getPushNotificationPreferences(),
     };
@@ -29,8 +29,8 @@ export class NotificationsController {
 
   @Get('inbox')
   @ApiQuery({ name: 'userId', required: false })
-  getInbox(@Query('userId') userId?: string) {
-    return this.ecosystemData.getNotificationInbox(userId);
+  async getInbox(@Query('userId') userId?: string) {
+    return this.coreDatabase.getNotificationInbox(userId);
   }
 
   @Get('preferences')
@@ -49,7 +49,7 @@ export class NotificationsController {
   }
 
   @Patch(':id/read')
-  markRead(@Param('id') id: string, @Body() body: MarkNotificationReadDto) {
-    return this.ecosystemData.markNotificationRead(id, body.userId);
+  async markRead(@Param('id') id: string, @Body() body: MarkNotificationReadDto) {
+    return this.coreDatabase.markNotificationRead(id, body.userId);
   }
 }

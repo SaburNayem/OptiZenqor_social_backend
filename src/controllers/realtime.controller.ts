@@ -64,7 +64,7 @@ export class RealtimeController {
   }
 
   @Post('calls/sessions')
-  createCallSession(@Body() body: CreateCallSessionDto) {
+  async createCallSession(@Body() body: CreateCallSessionDto) {
     return this.realtimeState.createCallSession(body);
   }
 

@@ -1,26 +1,26 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { PlatformDataService } from '../data/platform-data.service';
 import { CreateMessageDto } from '../dto/api.dto';
+import { CoreDatabaseService } from '../services/core-database.service';
 
 @ApiTags('messages')
 @Controller('messages')
 export class MessagesController {
-  constructor(private readonly platformData: PlatformDataService) {}
+  constructor(private readonly coreDatabase: CoreDatabaseService) {}
 
   @Get()
-  getThreads() {
-    return this.platformData.getThreads();
+  async getThreads() {
+    return this.coreDatabase.getThreads();
   }
 
   @Get(':id')
-  getThread(@Param('id') id: string) {
-    return this.platformData.getThread(id);
+  async getThread(@Param('id') id: string) {
+    return this.coreDatabase.getThread(id);
   }
 
   @Post(':id')
-  createMessage(@Param('id') id: string, @Body() body: CreateMessageDto) {
-    return this.platformData.createMessage(id, body.senderId, body.text, {
+  async createMessage(@Param('id') id: string, @Body() body: CreateMessageDto) {
+    return this.coreDatabase.createMessage(id, body.senderId, body.text, {
       attachments: body.attachments,
       replyToMessageId: body.replyToMessageId,
       kind: body.kind,

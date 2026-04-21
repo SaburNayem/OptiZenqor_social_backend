@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { EcosystemDataService } from '../data/ecosystem-data.service';
-import { PlatformDataService } from '../data/platform-data.service';
+import { CoreDatabaseService } from './core-database.service';
 
 type CallMode = 'voice' | 'video';
 type CallStatus = 'ringing' | 'ongoing' | 'ended' | 'missed';
@@ -40,10 +39,7 @@ interface CallSessionRecord {
 
 @Injectable()
 export class RealtimeStateService {
-  constructor(
-    private readonly platformData: PlatformDataService,
-    private readonly ecosystemData: EcosystemDataService,
-  ) {}
+  constructor(private readonly coreDatabase: CoreDatabaseService) {}
 
   private readonly socketUsers = new Map<string, string>();
   private readonly userSockets = new Map<string, Set<string>>();
@@ -52,16 +48,16 @@ export class RealtimeStateService {
   private readonly callSessions = new Map<string, CallSessionRecord>();
   private readonly lastSeen = new Map<string, string>();
 
-  authenticateClient(accessToken?: string, fallbackUserId?: string) {
+  async authenticateClient(accessToken?: string, fallbackUserId?: string) {
     const userFromToken = accessToken
-      ? this.platformData.resolveUserFromAccessToken(accessToken)
+      ? await this.coreDatabase.resolveUserFromAccessToken(accessToken)
       : null;
     if (userFromToken) {
       return userFromToken;
     }
     const allowFallback = (process.env.REALTIME_ALLOW_USERID_FALLBACK ?? 'false') === 'true';
     if (allowFallback && fallbackUserId) {
-      return this.platformData.getUser(fallbackUserId);
+      return this.coreDatabase.getUser(fallbackUserId);
     }
     throw new NotFoundException('Realtime authentication failed.');
   }
@@ -117,16 +113,16 @@ export class RealtimeStateService {
     };
   }
 
-  joinThread(threadId: string, userId: string) {
-    this.platformData.getThread(threadId);
-    this.platformData.getUser(userId);
+  async joinThread(threadId: string, userId: string) {
+    await this.coreDatabase.getThread(threadId);
+    await this.coreDatabase.getUser(userId);
     const members = this.threadMembers.get(threadId) ?? new Set<string>();
     members.add(userId);
     this.threadMembers.set(threadId, members);
     return this.getThreadState(threadId);
   }
 
-  leaveThread(threadId: string, userId: string) {
+  async leaveThread(threadId: string, userId: string) {
     const members = this.threadMembers.get(threadId);
     members?.delete(userId);
     const typing = this.threadTyping.get(threadId);
@@ -134,8 +130,8 @@ export class RealtimeStateService {
     return this.getThreadState(threadId);
   }
 
-  setTyping(threadId: string, userId: string, isTyping: boolean) {
-    this.platformData.getThread(threadId);
+  async setTyping(threadId: string, userId: string, isTyping: boolean) {
+    await this.coreDatabase.getThread(threadId);
     const typing = this.threadTyping.get(threadId) ?? new Set<string>();
     if (isTyping) {
       typing.add(userId);
@@ -184,25 +180,27 @@ export class RealtimeStateService {
     };
   }
 
-  createCallSession(input: {
+  async createCallSession(input: {
     initiatorId: string;
     recipientIds?: string[];
     threadId?: string;
     mode: CallMode;
   }) {
-    this.platformData.getUser(input.initiatorId);
-    input.recipientIds?.forEach((id) => this.platformData.getUser(id));
+    await this.coreDatabase.getUser(input.initiatorId);
+    for (const id of input.recipientIds ?? []) {
+      await this.coreDatabase.getUser(id);
+    }
     if (input.threadId) {
-      this.platformData.getThread(input.threadId);
+      await this.coreDatabase.getThread(input.threadId);
     }
 
     const recipients =
       input.recipientIds && input.recipientIds.length > 0
         ? input.recipientIds
         : input.threadId
-          ? this.platformData
-              .getThreadParticipantIds(input.threadId)
-              .filter((id) => id !== input.initiatorId)
+          ? (await this.coreDatabase.getThreadParticipantIds(input.threadId)).filter(
+              (id) => id !== input.initiatorId,
+            )
           : [];
 
     const session: CallSessionRecord = {
@@ -235,9 +233,9 @@ export class RealtimeStateService {
     };
     this.callSessions.set(session.id, session);
 
-    const initiator = this.platformData.getUser(input.initiatorId);
+    const initiator = await this.coreDatabase.getUser(input.initiatorId);
     for (const recipientId of recipients) {
-      this.ecosystemData.pushNotification({
+      await this.coreDatabase.pushNotification({
         recipientId,
         title: `${initiator.name} is calling you`,
         body: `${input.mode === 'video' ? 'Video' : 'Voice'} call started.`,
@@ -267,9 +265,9 @@ export class RealtimeStateService {
     return session;
   }
 
-  joinCallSession(id: string, userId: string) {
+  async joinCallSession(id: string, userId: string) {
     const session = this.getCallSession(id);
-    this.platformData.getUser(userId);
+    await this.coreDatabase.getUser(userId);
     const participant = session.participants.find((item) => item.userId === userId);
     if (participant) {
       participant.state = 'joined';
@@ -287,7 +285,7 @@ export class RealtimeStateService {
     return session;
   }
 
-  leaveCallSession(id: string, userId: string) {
+  async leaveCallSession(id: string, userId: string) {
     const session = this.getCallSession(id);
     const participant = session.participants.find((item) => item.userId === userId);
     if (participant) {
@@ -297,7 +295,7 @@ export class RealtimeStateService {
     return session;
   }
 
-  addCallSignal(input: {
+  async addCallSignal(input: {
     sessionId: string;
     fromUserId: string;
     toUserId?: string;
@@ -305,9 +303,9 @@ export class RealtimeStateService {
     payload: Record<string, unknown>;
   }) {
     const session = this.getCallSession(input.sessionId);
-    this.platformData.getUser(input.fromUserId);
+    await this.coreDatabase.getUser(input.fromUserId);
     if (input.toUserId) {
-      this.platformData.getUser(input.toUserId);
+      await this.coreDatabase.getUser(input.toUserId);
     }
     const signal: CallSignalRecord = {
       fromUserId: input.fromUserId,

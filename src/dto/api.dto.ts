@@ -438,6 +438,12 @@ export class PostReactionDto {
   reaction!: string;
 }
 
+export class UserActorDto {
+  @ApiProperty()
+  @IsString()
+  userId!: string;
+}
+
 export class BlockUserDto {
   @ApiProperty()
   @IsString()

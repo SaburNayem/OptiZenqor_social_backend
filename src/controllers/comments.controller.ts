@@ -1,21 +1,21 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { ExtendedDataService } from '../data/extended-data.service';
 import { CreateCommentDto, ReactToCommentDto } from '../dto/api.dto';
+import { CoreDatabaseService } from '../services/core-database.service';
 
 @ApiTags('comments')
 @Controller('posts/:id/comments')
 export class CommentsController {
-  constructor(private readonly extendedData: ExtendedDataService) {}
+  constructor(private readonly coreDatabase: CoreDatabaseService) {}
 
   @Get()
-  getPostComments(@Param('id') id: string) {
-    return this.extendedData.getPostComments(id);
+  async getPostComments(@Param('id') id: string) {
+    return this.coreDatabase.getPostComments(id);
   }
 
   @Post()
-  createPostComment(@Param('id') id: string, @Body() body: CreateCommentDto) {
-    return this.extendedData.createPostComment(id, body.author, body.message, {
+  async createPostComment(@Param('id') id: string, @Body() body: CreateCommentDto) {
+    return this.coreDatabase.createPostComment(id, body.author, body.message, {
       authorId: body.authorId,
       replyTo: body.replyTo,
       mentions: body.mentions,
@@ -23,17 +23,17 @@ export class CommentsController {
   }
 
   @Get(':commentId/replies')
-  getReplies(@Param('id') id: string, @Param('commentId') commentId: string) {
-    return this.extendedData.getPostCommentReplies(id, commentId);
+  async getReplies(@Param('id') id: string, @Param('commentId') commentId: string) {
+    return this.coreDatabase.getPostCommentReplies(id, commentId);
   }
 
   @Post(':commentId/replies')
-  createReply(
+  async createReply(
     @Param('id') id: string,
     @Param('commentId') commentId: string,
     @Body() body: CreateCommentDto,
   ) {
-    return this.extendedData.createPostComment(id, body.author, body.message, {
+    return this.coreDatabase.createPostComment(id, body.author, body.message, {
       authorId: body.authorId,
       replyTo: commentId,
       mentions: body.mentions,
@@ -41,16 +41,16 @@ export class CommentsController {
   }
 
   @Patch(':commentId/react')
-  reactToComment(
+  async reactToComment(
     @Param('id') id: string,
     @Param('commentId') commentId: string,
     @Body() body: ReactToCommentDto,
   ) {
-    return this.extendedData.reactToComment(id, commentId, body.userId, body.reaction);
+    return this.coreDatabase.reactToComment(id, commentId, body.userId, body.reaction);
   }
 
   @Delete(':commentId')
-  deleteComment(@Param('id') id: string, @Param('commentId') commentId: string) {
-    return this.extendedData.deletePostComment(id, commentId);
+  async deleteComment(@Param('id') id: string, @Param('commentId') commentId: string) {
+    return this.coreDatabase.deletePostComment(id, commentId);
   }
 }

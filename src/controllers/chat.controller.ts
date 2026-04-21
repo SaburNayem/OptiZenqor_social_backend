@@ -1,30 +1,30 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { PlatformDataService } from '../data/platform-data.service';
 import { ExtendedDataService } from '../data/extended-data.service';
 import { CreateMessageDto } from '../dto/api.dto';
+import { CoreDatabaseService } from '../services/core-database.service';
 
 @ApiTags('chat')
 @Controller('chat')
 export class ChatController {
   constructor(
-    private readonly platformData: PlatformDataService,
+    private readonly coreDatabase: CoreDatabaseService,
     private readonly extendedData: ExtendedDataService,
   ) {}
 
   @Get('threads')
-  getThreads() {
-    return this.platformData.getThreads();
+  async getThreads() {
+    return this.coreDatabase.getThreads();
   }
 
   @Get('threads/:id')
-  getThread(@Param('id') id: string) {
-    return this.platformData.getThread(id);
+  async getThread(@Param('id') id: string) {
+    return this.coreDatabase.getThread(id);
   }
 
   @Post('threads/:id/messages')
-  createMessage(@Param('id') id: string, @Body() body: CreateMessageDto) {
-    return this.platformData.createMessage(id, body.senderId, body.text, {
+  async createMessage(@Param('id') id: string, @Body() body: CreateMessageDto) {
+    return this.coreDatabase.createMessage(id, body.senderId, body.text, {
       attachments: body.attachments,
       replyToMessageId: body.replyToMessageId,
       kind: body.kind,
@@ -33,8 +33,8 @@ export class ChatController {
   }
 
   @Patch('threads/:id/read')
-  markRead(@Param('id') id: string, @Body() body: { userId: string }) {
-    return this.platformData.markThreadMessagesRead(id, body.userId);
+  async markRead(@Param('id') id: string, @Body() body: { userId: string }) {
+    return this.coreDatabase.markThreadMessagesRead(id, body.userId);
   }
 
   @Patch('threads/:id/archive')

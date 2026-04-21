@@ -1,0 +1,185 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model app_follow_relations {
+  follower_id                                           String
+  target_id                                             String
+  created_at                                            DateTime  @db.Timestamptz(6)
+  app_users_app_follow_relations_follower_idToapp_users app_users @relation("app_follow_relations_follower_idToapp_users", fields: [follower_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  app_users_app_follow_relations_target_idToapp_users   app_users @relation("app_follow_relations_target_idToapp_users", fields: [target_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([follower_id, target_id])
+}
+
+model app_notifications {
+  id           String    @id
+  recipient_id String
+  title        String
+  body         String
+  created_at   DateTime  @db.Timestamptz(6)
+  read         Boolean   @default(false)
+  type         String
+  route_name   String
+  entity_id    String?
+  metadata     Json      @default("{}")
+  app_users    app_users @relation(fields: [recipient_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model app_post_comment_reactions {
+  comment_id        String
+  user_id           String
+  reaction          String
+  created_at        DateTime          @db.Timestamptz(6)
+  app_post_comments app_post_comments @relation(fields: [comment_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  app_users         app_users         @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([comment_id, user_id])
+}
+
+model app_post_comments {
+  id                         String                       @id
+  post_id                    String
+  author_id                  String?
+  author                     String
+  message                    String
+  reply_to                   String?
+  created_at                 DateTime                     @db.Timestamptz(6)
+  like_count                 Int                          @default(0)
+  is_liked_by_me             Boolean                      @default(false)
+  is_reported                Boolean                      @default(false)
+  is_edited                  Boolean                      @default(false)
+  mentions                   Json                         @default("[]")
+  app_post_comment_reactions app_post_comment_reactions[]
+  app_users                  app_users?                   @relation(fields: [author_id], references: [id], onUpdate: NoAction)
+  app_posts                  app_posts                    @relation(fields: [post_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  app_post_comments          app_post_comments?           @relation("app_post_commentsToapp_post_comments", fields: [reply_to], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  other_app_post_comments    app_post_comments[]          @relation("app_post_commentsToapp_post_comments")
+}
+
+model app_post_reactions {
+  post_id    String
+  user_id    String
+  reaction   String
+  created_at DateTime  @db.Timestamptz(6)
+  app_posts  app_posts @relation(fields: [post_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  app_users  app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([post_id, user_id])
+}
+
+model app_posts {
+  id                 String               @id
+  author_id          String
+  caption            String
+  media              Json                 @default("[]")
+  tags               Json                 @default("[]")
+  likes              Int                  @default(0)
+  comments           Int                  @default(0)
+  shares             Int                  @default(0)
+  views              Int                  @default(0)
+  status             String
+  type               String
+  created_at         DateTime             @db.Timestamptz(6)
+  app_post_comments  app_post_comments[]
+  app_post_reactions app_post_reactions[]
+  app_users          app_users            @relation(fields: [author_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model app_users {
+  id                                                               String                       @id
+  name                                                             String
+  username                                                         String                       @unique
+  email                                                            String                       @unique
+  avatar                                                           String
+  bio                                                              String
+  role                                                             String
+  verification                                                     String
+  status                                                           String
+  followers                                                        Int                          @default(0)
+  following                                                        Int                          @default(0)
+  wallet_summary                                                   String
+  health                                                           String
+  reports                                                          String
+  last_active                                                      String
+  email_verified                                                   Boolean                      @default(false)
+  blocked                                                          Boolean                      @default(false)
+  password_hash                                                    String
+  created_at                                                       DateTime                     @default(now()) @db.Timestamptz(6)
+  updated_at                                                       DateTime                     @default(now()) @db.Timestamptz(6)
+  app_follow_relations_app_follow_relations_follower_idToapp_users app_follow_relations[]       @relation("app_follow_relations_follower_idToapp_users")
+  app_follow_relations_app_follow_relations_target_idToapp_users   app_follow_relations[]       @relation("app_follow_relations_target_idToapp_users")
+  app_notifications                                                app_notifications[]
+  app_post_comment_reactions                                       app_post_comment_reactions[]
+  app_post_comments                                                app_post_comments[]
+  app_post_reactions                                               app_post_reactions[]
+  app_posts                                                        app_posts[]
+  auth_sessions                                                    auth_sessions[]
+  chat_messages                                                    chat_messages[]
+  chat_thread_participants                                         chat_thread_participants[]
+}
+
+model auth_codes {
+  email      String
+  purpose    String
+  code       String
+  expires_at DateTime @db.Timestamptz(6)
+  created_at DateTime @db.Timestamptz(6)
+
+  @@id([email, purpose])
+}
+
+model auth_sessions {
+  session_id         String    @id
+  user_id            String
+  access_token       String    @unique
+  refresh_token      String    @unique
+  created_at         DateTime  @db.Timestamptz(6)
+  access_expires_at  DateTime  @db.Timestamptz(6)
+  refresh_expires_at DateTime  @db.Timestamptz(6)
+  app_users          app_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model chat_messages {
+  id                  String          @id
+  thread_id           String
+  sender_id           String
+  text                String
+  read                Boolean         @default(false)
+  timestamp           DateTime        @db.Timestamptz(6)
+  attachments         Json            @default("[]")
+  reply_to_message_id String?
+  delivery_state      String          @default("sent")
+  kind                String          @default("text")
+  media_path          String?
+  chat_messages       chat_messages?  @relation("chat_messagesTochat_messages", fields: [reply_to_message_id], references: [id], onUpdate: NoAction)
+  other_chat_messages chat_messages[] @relation("chat_messagesTochat_messages")
+  app_users           app_users       @relation(fields: [sender_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  chat_threads        chat_threads    @relation(fields: [thread_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model chat_thread_participants {
+  thread_id    String
+  user_id      String
+  created_at   DateTime     @db.Timestamptz(6)
+  chat_threads chat_threads @relation(fields: [thread_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  app_users    app_users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([thread_id, user_id])
+}
+
+model chat_threads {
+  id                       String                     @id
+  title                    String
+  participants_label       String
+  flag                     String?
+  summary                  String
+  created_at               DateTime                   @default(now()) @db.Timestamptz(6)
+  chat_messages            chat_messages[]
+  chat_thread_participants chat_thread_participants[]
+}

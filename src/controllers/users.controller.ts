@@ -1,60 +1,60 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
-import { PlatformDataService } from '../data/platform-data.service';
 import {
   ChangePasswordRequestDto,
   FollowUserDto,
   UpdateUserDto,
 } from '../dto/api.dto';
+import { CoreDatabaseService } from '../services/core-database.service';
 
 @ApiTags('users')
 @Controller('users')
 export class UsersController {
-  constructor(private readonly platformData: PlatformDataService) {}
+  constructor(private readonly coreDatabase: CoreDatabaseService) {}
 
   @Get()
   @ApiQuery({ name: 'role', required: false })
-  getUsers(@Query('role') role?: string) {
-    return this.platformData.getUsers(role);
+  async getUsers(@Query('role') role?: string) {
+    return this.coreDatabase.getUsers(role);
   }
 
   @Get(':id')
-  getUser(@Param('id') id: string) {
-    return this.platformData.getUser(id);
+  async getUser(@Param('id') id: string) {
+    return this.coreDatabase.getUser(id);
   }
 
   @Get(':id/followers')
-  getFollowers(@Param('id') id: string) {
-    return this.platformData.getFollowers(id);
+  async getFollowers(@Param('id') id: string) {
+    return this.coreDatabase.getFollowers(id);
   }
 
   @Get(':id/following')
-  getFollowing(@Param('id') id: string) {
-    return this.platformData.getFollowing(id);
+  async getFollowing(@Param('id') id: string) {
+    return this.coreDatabase.getFollowing(id);
   }
 
   @Patch(':id')
-  updateUser(@Param('id') id: string, @Body() body: UpdateUserDto) {
-    return this.platformData.updateUserProfile(id, body);
+  async updateUser(@Param('id') id: string, @Body() body: UpdateUserDto) {
+    return this.coreDatabase.updateUserProfile(id, body);
   }
 
   @Patch(':id/follow')
-  followUser(@Param('id') id: string, @Body() body: FollowUserDto) {
-    return this.platformData.followUser(id, body.followerId);
+  async followUser(@Param('id') id: string, @Body() body: FollowUserDto) {
+    return this.coreDatabase.followUser(id, body.followerId);
   }
 
   @Patch(':id/unfollow')
-  unfollowUser(@Param('id') id: string, @Body() body: FollowUserDto) {
-    return this.platformData.unfollowUser(id, body.followerId);
+  async unfollowUser(@Param('id') id: string, @Body() body: FollowUserDto) {
+    return this.coreDatabase.unfollowUser(id, body.followerId);
   }
 
   @Post('change-password')
-  changePassword(@Body() body: ChangePasswordRequestDto) {
-    return this.platformData.changePassword(body);
+  async changePassword(@Body() body: ChangePasswordRequestDto) {
+    return this.coreDatabase.changePassword(body);
   }
 
   @Delete(':id')
-  deleteAccount(@Param('id') id: string) {
-    return this.platformData.deleteUserAccount(id);
+  async deleteAccount(@Param('id') id: string) {
+    return this.coreDatabase.deleteUserAccount(id);
   }
 }

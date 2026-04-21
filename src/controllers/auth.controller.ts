@@ -24,23 +24,14 @@ import {
   SignupDto,
   VerifyEmailConfirmDto,
 } from '../dto/auth.dto';
-import { PlatformDataService } from '../data/platform-data.service';
 import { MailService } from '../services/mail.service';
+import { CoreDatabaseService } from '../services/core-database.service';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  private readonly emailVerificationCodes = new Map<
-    string,
-    { code: string; expiresAt: number }
-  >();
-  private readonly passwordResetCodes = new Map<
-    string,
-    { code: string; expiresAt: number }
-  >();
-
   constructor(
-    private readonly platformData: PlatformDataService,
+    private readonly coreDatabase: CoreDatabaseService,
     private readonly mailService: MailService,
   ) {}
 
@@ -53,11 +44,11 @@ export class AuthController {
   @ApiOkResponse({
     description: 'Seeded demo user accounts for Swagger login testing.',
   })
-  getDemoAccounts() {
+  async getDemoAccounts() {
     return {
       success: true,
       message: 'Demo login accounts fetched successfully.',
-      data: this.platformData.getDemoAuthAccounts(),
+      data: await this.coreDatabase.getDemoAuthAccounts(),
     };
   }
 
@@ -70,8 +61,8 @@ export class AuthController {
   @ApiBody({ type: LoginDto })
   @ApiOkResponse({ description: 'User login successful.' })
   @ApiUnauthorizedResponse({ description: 'Invalid credentials.' })
-  login(@Body() body: LoginDto) {
-    const session = this.platformData.authenticateUser(body);
+  async login(@Body() body: LoginDto) {
+    const session = await this.coreDatabase.authenticateUser(body);
     return {
       success: true,
       message: 'Login successful.',
@@ -86,31 +77,31 @@ export class AuthController {
       'Creates or logs in a user using Google account data. This seeded backend does not validate the Google token externally yet.',
   })
   @ApiBody({ type: GoogleAuthDto })
-  googleAuth(@Body() body: GoogleAuthDto) {
+  async googleAuth(@Body() body: GoogleAuthDto) {
     return {
       success: true,
       message: 'Google authentication successful.',
-      data: this.platformData.loginWithGoogle(body),
+      data: await this.coreDatabase.loginWithGoogle(body),
     };
   }
 
   @Post('refresh-token')
   @ApiOperation({ summary: 'Refresh access token using refresh token' })
   @ApiBody({ type: RefreshTokenDto })
-  refreshToken(@Body() body: RefreshTokenDto) {
+  async refreshToken(@Body() body: RefreshTokenDto) {
     return {
       success: true,
       message: 'Token refreshed successfully.',
-      data: this.platformData.refreshUserToken(body.refreshToken),
+      data: await this.coreDatabase.refreshUserToken(body.refreshToken),
     };
   }
 
   @Post('logout')
   @ApiBearerAuth('user-bearer')
   @ApiOperation({ summary: 'Logout current user session' })
-  logout(@Headers('authorization') authorization?: string) {
+  async logout(@Headers('authorization') authorization?: string) {
     const token = authorization?.replace(/^Bearer\s+/i, '');
-    return this.platformData.revokeUserSession(token);
+    return this.coreDatabase.revokeUserSession(token);
   }
 
   @Post('signup')
@@ -122,12 +113,14 @@ export class AuthController {
       throw new BadRequestException('confirmPassword must match password.');
     }
 
-    const user = this.platformData.createUser(body);
+    const user = await this.coreDatabase.createUser(body);
     const code = this.generateVerificationCode();
-    this.emailVerificationCodes.set(user.email, {
+    await this.coreDatabase.storeAuthCode(
+      user.email,
+      'verify_email',
       code,
-      expiresAt: Date.now() + 10 * 60 * 1000,
-    });
+      new Date(Date.now() + 10 * 60 * 1000),
+    );
     const delivery = await this.mailService.sendVerificationEmail(user.email, code);
 
     return {
@@ -151,20 +144,20 @@ export class AuthController {
     summary: 'Confirm 6-digit email verification code',
   })
   @ApiBody({ type: VerifyEmailConfirmDto })
-  verifyEmail(@Body() body: VerifyEmailConfirmDto) {
-    const verification = this.emailVerificationCodes.get(body.email);
+  async verifyEmail(@Body() body: VerifyEmailConfirmDto) {
+    const verification = await this.coreDatabase.getAuthCode(body.email, 'verify_email');
     if (!verification) {
       throw new BadRequestException('No verification request found for this email.');
     }
-    if (Date.now() > verification.expiresAt) {
+    if (Date.now() > new Date(verification.expiresAt).getTime()) {
       throw new BadRequestException('Verification code has expired.');
     }
     if (verification.code !== body.code) {
       throw new BadRequestException('Invalid verification code.');
     }
 
-    const user = this.platformData.markEmailVerified(body.email);
-    this.emailVerificationCodes.delete(body.email);
+    const user = await this.coreDatabase.markEmailVerified(body.email);
+    await this.coreDatabase.deleteAuthCode(body.email, 'verify_email');
 
     return {
       success: true,
@@ -176,13 +169,16 @@ export class AuthController {
   @Post('forgot-password')
   @ApiOperation({ summary: 'Start forgot-password flow' })
   @ApiBody({ type: ForgotPasswordDto })
-  forgotPassword(@Body() body: ForgotPasswordDto) {
-    this.platformData.getUserByEmail(body.email);
+  async forgotPassword(@Body() body: ForgotPasswordDto) {
+    await this.coreDatabase.getUserByEmail(body.email);
     const code = this.generateVerificationCode();
-    this.passwordResetCodes.set(body.email, {
+    await this.coreDatabase.storeAuthCode(
+      body.email,
+      'reset_password',
       code,
-      expiresAt: Date.now() + 10 * 60 * 1000,
-    });
+      new Date(Date.now() + 10 * 60 * 1000),
+    );
+    const delivery = await this.mailService.sendPasswordResetEmail(body.email, code);
     return {
       success: true,
       message: 'Password reset OTP sent successfully.',
@@ -191,8 +187,8 @@ export class AuthController {
         otp: {
           required: true,
           expiresInMinutes: 10,
-          code,
         },
+        delivery,
       },
     };
   }
@@ -200,19 +196,19 @@ export class AuthController {
   @Post('reset-password')
   @ApiOperation({ summary: 'Complete password reset with OTP' })
   @ApiBody({ type: ResetPasswordDto })
-  resetPassword(@Body() body: ResetPasswordDto) {
-    const request = this.passwordResetCodes.get(body.email);
+  async resetPassword(@Body() body: ResetPasswordDto) {
+    const request = await this.coreDatabase.getAuthCode(body.email, 'reset_password');
     if (!request) {
       throw new BadRequestException('No password reset request found for this email.');
     }
-    if (Date.now() > request.expiresAt) {
+    if (Date.now() > new Date(request.expiresAt).getTime()) {
       throw new BadRequestException('Password reset code has expired.');
     }
     if (request.code !== body.otp) {
       throw new BadRequestException('Invalid password reset code.');
     }
-    this.platformData.forceSetPassword(body.email, body.password);
-    this.passwordResetCodes.delete(body.email);
+    await this.coreDatabase.forceSetPassword(body.email, body.password);
+    await this.coreDatabase.deleteAuthCode(body.email, 'reset_password');
 
     return {
       success: true,
@@ -229,9 +225,9 @@ export class AuthController {
     summary: 'Get current user from bearer token',
     description: 'Use the token returned from /auth/login in Swagger Authorize.',
   })
-  me(@Headers('authorization') authorization?: string) {
+  async me(@Headers('authorization') authorization?: string) {
     const token = authorization?.replace(/^Bearer\s+/i, '');
-    const user = this.platformData.resolveUserFromAccessToken(token);
+    const user = await this.coreDatabase.resolveUserFromAccessToken(token);
     if (!user) {
       throw new UnauthorizedException('Invalid or expired access token.');
     }

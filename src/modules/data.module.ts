@@ -6,6 +6,8 @@ import { ExtendedDataService } from '../data/extended-data.service';
 import { PlatformDataService } from '../data/platform-data.service';
 import { SettingsDataService } from '../data/settings-data.service';
 import { CloudinaryUploadService } from '../services/cloudinary-upload.service';
+import { CoreDatabaseService } from '../services/core-database.service';
+import { DatabaseService } from '../services/database.service';
 import { MailService } from '../services/mail.service';
 import { RealtimeStateService } from '../services/realtime-state.service';
 
@@ -19,6 +21,8 @@ import { RealtimeStateService } from '../services/realtime-state.service';
     AppExtensionsDataService,
     SettingsDataService,
     CloudinaryUploadService,
+    DatabaseService,
+    CoreDatabaseService,
     RealtimeStateService,
     MailService,
   ],
@@ -30,6 +34,8 @@ import { RealtimeStateService } from '../services/realtime-state.service';
     AppExtensionsDataService,
     SettingsDataService,
     CloudinaryUploadService,
+    DatabaseService,
+    CoreDatabaseService,
     RealtimeStateService,
     MailService,
   ],

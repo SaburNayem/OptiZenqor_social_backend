@@ -9,7 +9,7 @@ import {
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
-import { PlatformDataService } from '../data/platform-data.service';
+import { CoreDatabaseService } from '../services/core-database.service';
 import { RealtimeStateService } from '../services/realtime-state.service';
 
 @WebSocketGateway({
@@ -28,15 +28,15 @@ export class RealtimeGateway
   server!: Server;
 
   constructor(
-    private readonly platformData: PlatformDataService,
+    private readonly coreDatabase: CoreDatabaseService,
     private readonly realtimeState: RealtimeStateService,
   ) {}
 
-  handleConnection(client: Socket) {
+  async handleConnection(client: Socket) {
     try {
       const token = this.readAuthToken(client);
       const fallbackUserId = this.readFallbackUserId(client);
-      const user = this.realtimeState.authenticateClient(token, fallbackUserId);
+      const user = await this.realtimeState.authenticateClient(token, fallbackUserId);
       client.data.userId = user.id;
       client.join(`user:${user.id}`);
 
@@ -68,42 +68,42 @@ export class RealtimeGateway
   }
 
   @SubscribeMessage('thread.join')
-  handleThreadJoin(
+  async handleThreadJoin(
     @ConnectedSocket() client: Socket,
     @MessageBody() body: { threadId: string },
   ) {
     const userId = this.requireUserId(client);
     client.join(`thread:${body.threadId}`);
-    const state = this.realtimeState.joinThread(body.threadId, userId);
+    const state = await this.realtimeState.joinThread(body.threadId, userId);
     this.server.to(`thread:${body.threadId}`).emit('thread.presence.updated', state);
     return state;
   }
 
   @SubscribeMessage('thread.leave')
-  handleThreadLeave(
+  async handleThreadLeave(
     @ConnectedSocket() client: Socket,
     @MessageBody() body: { threadId: string },
   ) {
     const userId = this.requireUserId(client);
     client.leave(`thread:${body.threadId}`);
-    const state = this.realtimeState.leaveThread(body.threadId, userId);
+    const state = await this.realtimeState.leaveThread(body.threadId, userId);
     this.server.to(`thread:${body.threadId}`).emit('thread.presence.updated', state);
     return state;
   }
 
   @SubscribeMessage('thread.typing')
-  handleTyping(
+  async handleTyping(
     @ConnectedSocket() client: Socket,
     @MessageBody() body: { threadId: string; isTyping: boolean },
   ) {
     const userId = this.requireUserId(client);
-    const state = this.realtimeState.setTyping(body.threadId, userId, body.isTyping);
+    const state = await this.realtimeState.setTyping(body.threadId, userId, body.isTyping);
     this.server.to(`thread:${body.threadId}`).emit('thread.presence.updated', state);
     return state;
   }
 
   @SubscribeMessage('thread.message.send')
-  handleMessageSend(
+  async handleMessageSend(
     @ConnectedSocket() client: Socket,
     @MessageBody()
     body: {
@@ -116,24 +116,24 @@ export class RealtimeGateway
     },
   ) {
     const userId = this.requireUserId(client);
-    const message = this.platformData.createMessage(body.threadId, userId, body.text, {
+    const message = await this.coreDatabase.createMessage(body.threadId, userId, body.text, {
       attachments: body.attachments,
       replyToMessageId: body.replyToMessageId,
       kind: body.kind,
       mediaPath: body.mediaPath,
     });
-    this.platformData.updateMessageDeliveryState(body.threadId, message.id, 'delivered');
+    await this.coreDatabase.updateMessageDeliveryState(body.threadId, message.id, 'delivered');
 
     const eventPayload = {
       ...message,
-      sender: this.platformData.getUser(userId),
+      sender: await this.coreDatabase.getUser(userId),
     };
 
     this.server.to(`thread:${body.threadId}`).emit('chat.message.created', eventPayload);
 
-    for (const participantId of this.platformData
-      .getThreadParticipantIds(body.threadId)
-      .filter((id) => id !== userId)) {
+    for (const participantId of (await this.coreDatabase.getThreadParticipantIds(body.threadId)).filter(
+      (id) => id !== userId,
+    )) {
       this.server.to(`user:${participantId}`).emit('notification.created', {
         type: 'chat.message.created',
         threadId: body.threadId,
@@ -146,23 +146,23 @@ export class RealtimeGateway
   }
 
   @SubscribeMessage('thread.message.read')
-  handleMessageRead(
+  async handleMessageRead(
     @ConnectedSocket() client: Socket,
     @MessageBody() body: { threadId: string },
   ) {
     const userId = this.requireUserId(client);
-    const receipt = this.platformData.markThreadMessagesRead(body.threadId, userId);
+    const receipt = await this.coreDatabase.markThreadMessagesRead(body.threadId, userId);
     this.server.to(`thread:${body.threadId}`).emit('chat.message.read', receipt);
     return receipt;
   }
 
   @SubscribeMessage('call.create')
-  handleCallCreate(
+  async handleCallCreate(
     @ConnectedSocket() client: Socket,
     @MessageBody() body: { recipientIds?: string[]; threadId?: string; mode: 'voice' | 'video' },
   ) {
     const userId = this.requireUserId(client);
-    const session = this.realtimeState.createCallSession({
+    const session = await this.realtimeState.createCallSession({
       initiatorId: userId,
       recipientIds: body.recipientIds,
       threadId: body.threadId,
@@ -177,12 +177,12 @@ export class RealtimeGateway
   }
 
   @SubscribeMessage('call.join')
-  handleCallJoin(
+  async handleCallJoin(
     @ConnectedSocket() client: Socket,
     @MessageBody() body: { sessionId: string },
   ) {
     const userId = this.requireUserId(client);
-    const session = this.realtimeState.joinCallSession(body.sessionId, userId);
+    const session = await this.realtimeState.joinCallSession(body.sessionId, userId);
     client.join(session.roomName);
     this.server.to(session.roomName).emit('call.participant.joined', {
       sessionId: session.id,
@@ -193,12 +193,12 @@ export class RealtimeGateway
   }
 
   @SubscribeMessage('call.leave')
-  handleCallLeave(
+  async handleCallLeave(
     @ConnectedSocket() client: Socket,
     @MessageBody() body: { sessionId: string },
   ) {
     const userId = this.requireUserId(client);
-    const session = this.realtimeState.leaveCallSession(body.sessionId, userId);
+    const session = await this.realtimeState.leaveCallSession(body.sessionId, userId);
     client.leave(session.roomName);
     this.server.to(session.roomName).emit('call.participant.left', {
       sessionId: session.id,
@@ -209,7 +209,7 @@ export class RealtimeGateway
   }
 
   @SubscribeMessage('call.signal')
-  handleCallSignal(
+  async handleCallSignal(
     @ConnectedSocket() client: Socket,
     @MessageBody()
     body: {
@@ -220,7 +220,7 @@ export class RealtimeGateway
     },
   ) {
     const userId = this.requireUserId(client);
-    const signal = this.realtimeState.addCallSignal({
+    const signal = await this.realtimeState.addCallSignal({
       sessionId: body.sessionId,
       fromUserId: userId,
       toUserId: body.toUserId,
