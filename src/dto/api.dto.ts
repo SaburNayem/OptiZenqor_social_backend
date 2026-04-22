@@ -522,6 +522,106 @@ export class CreateEventDto {
   status?: 'Featured' | 'Approved' | 'Review';
 }
 
+export class CreatePageDto {
+  @ApiProperty()
+  @IsString()
+  name!: string;
+
+  @ApiProperty()
+  @IsString()
+  about!: string;
+
+  @ApiProperty()
+  @IsString()
+  category!: string;
+
+  @ApiProperty()
+  @IsString()
+  ownerId!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  contactLabel?: string;
+}
+
+export class CreateJobDto {
+  @ApiProperty()
+  @IsString()
+  title!: string;
+
+  @ApiProperty()
+  @IsString()
+  company!: string;
+
+  @ApiProperty()
+  @IsString()
+  location!: string;
+
+  @ApiProperty()
+  @IsString()
+  salary!: string;
+
+  @ApiPropertyOptional({ enum: ['remote', 'fullTime', 'partTime', 'freelance', 'internship', 'contract', 'hybrid', 'onsite'] })
+  @IsOptional()
+  @IsIn(['remote', 'fullTime', 'partTime', 'freelance', 'internship', 'contract', 'hybrid', 'onsite'])
+  type?: 'remote' | 'fullTime' | 'partTime' | 'freelance' | 'internship' | 'contract' | 'hybrid' | 'onsite';
+
+  @ApiPropertyOptional({ enum: ['entry', 'mid', 'senior', 'lead'] })
+  @IsOptional()
+  @IsIn(['entry', 'mid', 'senior', 'lead'])
+  experienceLevel?: 'entry' | 'mid' | 'senior' | 'lead';
+}
+
+export class CreateMarketplaceOrderDto {
+  @ApiProperty()
+  @IsString()
+  productId!: string;
+
+  @ApiProperty()
+  @IsString()
+  address!: string;
+
+  @ApiProperty()
+  @IsString()
+  deliveryMethod!: string;
+
+  @ApiProperty()
+  @IsString()
+  paymentMethod!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  buyerId?: string;
+}
+
+export class LiveCommentDto {
+  @ApiProperty()
+  @IsString()
+  username!: string;
+
+  @ApiProperty()
+  @IsString()
+  message!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  avatarUrl?: string;
+}
+
+export class LiveReactionDto {
+  @ApiProperty({ enum: ['like', 'love', 'wow'] })
+  @IsIn(['like', 'love', 'wow'])
+  type!: 'like' | 'love' | 'wow';
+}
+
 export class EventActorDto {
   @ApiProperty()
   @IsString()

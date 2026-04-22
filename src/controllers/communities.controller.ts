@@ -1,6 +1,7 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { EcosystemDataService } from '../data/ecosystem-data.service';
+import { CreatePageDto } from '../dto/api.dto';
 
 @ApiTags('communities')
 @Controller()
@@ -50,6 +51,35 @@ export class CommunitiesController {
   @Get('pages')
   getPages() {
     return this.ecosystemData.getPages();
+  }
+
+  @Get('pages/create')
+  getCreatePageOptions() {
+    return {
+      categories: [...new Set(this.ecosystemData.getPages().map((page) => page.category))],
+      ownerSuggestions: ['u1', 'u2', 'u4', 'u5'],
+      locations: ['Dhaka, Bangladesh', 'Remote', 'Global'],
+    };
+  }
+
+  @Get('pages/detail')
+  getPageDetail(@Query('id') id: string) {
+    return this.ecosystemData.getPage(id);
+  }
+
+  @Get('pages/detail/:id')
+  getPageDetailById(@Param('id') id: string) {
+    return this.ecosystemData.getPage(id);
+  }
+
+  @Post('pages/create')
+  createPage(@Body() body: CreatePageDto) {
+    return this.ecosystemData.createPage(body);
+  }
+
+  @Patch('pages/:id/follow')
+  followPage(@Param('id') id: string) {
+    return this.ecosystemData.togglePageFollow(id);
   }
 
   @Get('pages/:id')

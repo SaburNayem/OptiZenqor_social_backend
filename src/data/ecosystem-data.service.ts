@@ -36,6 +36,15 @@ export interface PageRecord {
   reviewSummary: string;
   visitorPostsSummary: string;
   followersInsight: string;
+  avatarUrl?: string;
+  coverUrl?: string;
+  followersCount?: number;
+  likesCount?: number;
+  verified?: boolean;
+  ownerId?: string;
+  location?: string;
+  contactLabel?: string;
+  highlights?: string[];
 }
 
 export interface CommunityMemberRecord {
@@ -218,6 +227,21 @@ export interface LiveStreamRecord {
   audienceCount: number;
   status: 'scheduled' | 'live' | 'ended';
   scheduledAt?: string;
+  description?: string;
+  category?: string;
+  location?: string;
+  quickOptions?: Array<{ id: string; label: string; selected?: boolean }>;
+  comments?: Array<{
+    id: string;
+    username: string;
+    avatarUrl: string;
+    message: string;
+    verified?: boolean;
+  }>;
+  reactions?: Array<{
+    id: string;
+    type: 'like' | 'love' | 'wow';
+  }>;
 }
 
 @Injectable()
@@ -272,25 +296,50 @@ export class EcosystemDataService {
       id: 'page1',
       name: 'OptiZenqor Creators',
       about: 'Official page for creator programs, events, and launches.',
-      posts: ['p1', 'p2'],
+      posts: [
+        'Roadmap Q2 is live with creator tools improvements.',
+        'Creator Spotlight: Maya Quinn shared her launch workflow.',
+        'New moderation features are rolling out to public pages.',
+      ],
       following: true,
       category: 'Creator Economy',
       actionButtonLabel: 'Following',
       reviewSummary: '4.8 average rating from creators.',
       visitorPostsSummary: 'Weekly creator wins and launch notes.',
       followersInsight: 'Fastest growing page this month.',
+      avatarUrl: 'https://images.unsplash.com/photo-1551434678-e076c223a692?w=500',
+      coverUrl: 'https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=1200',
+      followersCount: 284000,
+      likesCount: 191000,
+      verified: true,
+      ownerId: 'u2',
+      location: 'Global',
+      contactLabel: 'Message',
+      highlights: ['Announcements', 'Creators', 'Product'],
     },
     {
       id: 'page2',
       name: 'Nexa Studio',
       about: 'Brand page for studio launches and marketplace drops.',
-      posts: ['p2'],
+      posts: [
+        'Design sprint notes from this week are now published.',
+        'Template drop for landing page hero sections is live.',
+      ],
       following: false,
       category: 'Business',
       actionButtonLabel: 'Follow',
       reviewSummary: 'High satisfaction on product launches.',
       visitorPostsSummary: 'Audience asks about launch timing and bundles.',
       followersInsight: 'Strong engagement from business accounts.',
+      avatarUrl: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=500',
+      coverUrl: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1200',
+      followersCount: 15400,
+      likesCount: 11800,
+      verified: true,
+      ownerId: 'u2',
+      location: 'Remote Team',
+      contactLabel: 'Message',
+      highlights: ['Design', 'Templates', 'Campaigns'],
     },
   ];
 
@@ -663,6 +712,34 @@ export class EcosystemDataService {
       host: 'Maya Quinn',
       audienceCount: 420,
       status: 'live',
+      description: 'Quick behind-the-scenes stream with Q&A and live product highlights.',
+      category: 'Creator Studio',
+      location: 'Dhaka, Bangladesh',
+      quickOptions: [
+        { id: 'live', label: 'Live video', selected: true },
+        { id: 'friend', label: 'Bring a friend' },
+        { id: 'poll', label: 'Poll' },
+        { id: 'products', label: 'Sell products' },
+      ],
+      comments: [
+        {
+          id: 'lc1',
+          username: 'sadia.designs',
+          avatarUrl: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=500',
+          message: 'The setup looks so clean today.',
+          verified: true,
+        },
+        {
+          id: 'lc2',
+          username: 'rahul.codes',
+          avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500',
+          message: 'Please talk about your creator workflow.',
+        },
+      ],
+      reactions: [
+        { id: 'lr1', type: 'love' },
+        { id: 'lr2', type: 'wow' },
+      ],
     },
     {
       id: 'live2',
@@ -671,6 +748,122 @@ export class EcosystemDataService {
       audienceCount: 0,
       status: 'scheduled',
       scheduledAt: '2026-04-21T13:00:00.000Z',
+      description: 'Preview the next storefront launch and answer buyer questions.',
+      category: 'Shopping',
+      location: 'Remote',
+      quickOptions: [
+        { id: 'live', label: 'Live video', selected: true },
+        { id: 'products', label: 'Sell products', selected: true },
+      ],
+      comments: [],
+      reactions: [],
+    },
+  ];
+
+  private readonly jobApplications = [
+    {
+      id: 'a1',
+      jobId: 'job1',
+      applicantName: 'You',
+      status: 'pending',
+      appliedDate: 'Apr 4',
+      timeline: ['Application submitted', 'Recruiter review pending'],
+    },
+    {
+      id: 'a2',
+      jobId: 'job2',
+      applicantName: 'You',
+      status: 'viewed',
+      appliedDate: 'Apr 1',
+      timeline: ['Application submitted', 'Viewed by hiring manager'],
+    },
+  ];
+
+  private readonly jobAlerts = [
+    {
+      id: 'al1',
+      keyword: 'Flutter',
+      location: 'Remote',
+      frequency: 'daily',
+    },
+    {
+      id: 'al2',
+      keyword: 'Product Design',
+      location: 'Asia',
+      frequency: 'instant',
+    },
+  ];
+
+  private readonly companies = [
+    {
+      id: 'c1',
+      name: 'OptiZenqor Labs',
+      tagline: 'Creator growth tools',
+      logoInitial: 'O',
+      colorValue: 0xff2563eb,
+      followers: 18200,
+      verified: true,
+    },
+    {
+      id: 'c2',
+      name: 'Nexa Studio',
+      tagline: 'Brand, launch, and creator programs',
+      logoInitial: 'N',
+      colorValue: 0xffec4899,
+      followers: 9100,
+      verified: true,
+    },
+  ];
+
+  private readonly careerProfile = {
+    name: 'Maya Quinn',
+    title: 'Product Designer',
+    skills: ['Product Design', 'Design Systems', 'User Research', 'Figma'],
+    experience: ['Senior Product Designer at North Peak', 'UI Designer at Delta Studio'],
+    education: ['B.Des in Interaction Design'],
+    resumeLabel: 'maya_quinn_resume.pdf',
+    portfolioLinks: ['https://portfolio.maya.local', 'https://dribbble.com/mayaquinn'],
+    availability: 'Open to work',
+  };
+
+  private readonly employerStats = {
+    totalJobs: 8,
+    totalApplicants: 124,
+    shortlistedCandidates: 19,
+    messages: 12,
+  };
+
+  private readonly employerProfile = {
+    companyName: 'North Peak Hiring Studio',
+    hiringTitle: 'Talent Partner and Job Provider',
+    about:
+      'Hiring product, engineering, and creator-operations talent for fast-growing social and commerce teams.',
+    location: 'Dhaka, Bangladesh',
+    hiringFocus: [
+      'Flutter and mobile engineering',
+      'Product design and UX research',
+      'Creator growth and partnerships',
+    ],
+    openRoles: ['Senior Flutter Engineer', 'Product Designer', 'Community Operations Specialist'],
+    teamHighlights: ['Fast review cycle', 'Candidate feedback within 5 days', 'Remote-friendly hiring'],
+  };
+
+  private readonly applicants = [
+    {
+      id: 'ap1',
+      name: 'Raisa Ahmed',
+      title: 'Senior Flutter Engineer',
+      skills: ['Flutter', 'Dart', 'Architecture'],
+      status: 'shortlisted',
+      resumeLabel: 'raisa_flutter_resume.pdf',
+    },
+    {
+      id: 'ap2',
+      name: 'Noor Rahman',
+      title: 'Product Designer',
+      skills: ['Figma', 'Systems', 'Research'],
+      status: 'viewed',
+      resumeLabel: 'noor_design_resume.pdf',
     },
   ];
 
@@ -879,6 +1072,50 @@ export class EcosystemDataService {
     return page;
   }
 
+  createPage(input: {
+    name: string;
+    about: string;
+    category: string;
+    ownerId: string;
+    location?: string;
+    contactLabel?: string;
+  }) {
+    const page: PageRecord = {
+      id: `page${this.pages.length + 1}`,
+      name: input.name,
+      about: input.about,
+      posts: ['Welcome post created. Add your first update to introduce this page.'],
+      following: true,
+      category: input.category,
+      actionButtonLabel: 'Following',
+      reviewSummary: 'Audience reviews will appear once your page grows.',
+      visitorPostsSummary: 'Visitor posts are curated before publishing.',
+      followersInsight: 'New page created. Publish regularly to build reach.',
+      avatarUrl: 'https://placehold.co/300x300',
+      coverUrl: 'https://placehold.co/1200x400',
+      followersCount: 0,
+      likesCount: 0,
+      verified: false,
+      ownerId: input.ownerId,
+      location: input.location ?? 'Global',
+      contactLabel: input.contactLabel ?? 'Message',
+      highlights: ['Welcome'],
+    };
+    this.pages.unshift(page);
+    return page;
+  }
+
+  togglePageFollow(id: string) {
+    const page = this.getPage(id);
+    page.following = !page.following;
+    page.followersCount = Math.max(
+      0,
+      (page.followersCount ?? 0) + (page.following ? 1 : -1),
+    );
+    page.actionButtonLabel = page.following ? 'Following' : 'Follow';
+    return page;
+  }
+
   getCommunities() {
     return this.communities;
   }
@@ -903,6 +1140,64 @@ export class EcosystemDataService {
     return job;
   }
 
+  getJobsNetworkingOverview() {
+    return {
+      jobs: this.getJobs(),
+      myJobs: this.jobs.map((job, index) => ({
+        ...job,
+        draft: index === 1,
+        closed: index === 0 ? false : job.closed,
+      })),
+      applications: this.jobApplications,
+      alerts: this.jobAlerts,
+      companies: this.companies,
+      profile: this.careerProfile,
+      employerStats: this.employerStats,
+      employerProfile: this.employerProfile,
+      applicants: this.applicants,
+    };
+  }
+
+  createJob(input: {
+    title: string;
+    company: string;
+    location: string;
+    salary: string;
+    type?: JobRecord['type'];
+    experienceLevel?: JobRecord['experienceLevel'];
+  }) {
+    const job: JobRecord = {
+      id: `job${this.jobs.length + 1}`,
+      title: input.title,
+      company: input.company,
+      location: input.location,
+      salary: input.salary,
+      type: input.type ?? 'remote',
+      experienceLevel: input.experienceLevel ?? 'mid',
+      postedTime: 'just now',
+      logoInitial: input.company.charAt(0).toUpperCase() || 'J',
+      logoColorValue: 0xff2563eb,
+      description: 'New job draft created from the updated jobs networking flow.',
+      responsibilities: ['Define role scope', 'Review applications', 'Run interviews'],
+      requirements: ['Role requirements pending update'],
+      skills: ['Communication'],
+      benefits: ['Flexible workflow'],
+      aboutCompany: `${input.company} hiring workspace`,
+      quickApplyEnabled: true,
+      verifiedEmployer: true,
+      saved: false,
+      applied: false,
+      featured: false,
+      remoteFriendly: input.type === 'remote' || input.type === 'hybrid',
+      draft: true,
+      closed: false,
+      externalApplyEnabled: false,
+      deadlineLabel: 'Add deadline',
+    };
+    this.jobs.unshift(job);
+    return job;
+  }
+
   applyForJob(jobId: string, applicantName: string) {
     const job = this.getJob(jobId);
     return {
@@ -913,6 +1208,34 @@ export class EcosystemDataService {
       status: 'pending',
       submittedAt: new Date().toISOString(),
     };
+  }
+
+  getJobApplications() {
+    return this.jobApplications;
+  }
+
+  getJobAlerts() {
+    return this.jobAlerts;
+  }
+
+  getCompanies() {
+    return this.companies;
+  }
+
+  getCareerProfile() {
+    return this.careerProfile;
+  }
+
+  getEmployerStats() {
+    return this.employerStats;
+  }
+
+  getEmployerProfile() {
+    return this.employerProfile;
+  }
+
+  getApplicants() {
+    return this.applicants;
   }
 
   getReferral() {
@@ -1033,6 +1356,35 @@ export class EcosystemDataService {
       throw new NotFoundException(`Live stream ${id} not found`);
     }
     return liveStream;
+  }
+
+  getLiveStreamStudio() {
+    return this.getLiveStream('live1');
+  }
+
+  addLiveStreamComment(id: string, input: { username: string; message: string; avatarUrl?: string }) {
+    const liveStream = this.getLiveStream(id);
+    liveStream.comments ??= [];
+    const comment = {
+      id: `lc${liveStream.comments.length + 1}`,
+      username: input.username,
+      avatarUrl: input.avatarUrl ?? 'https://placehold.co/80x80',
+      message: input.message,
+      verified: false,
+    };
+    liveStream.comments.push(comment);
+    return comment;
+  }
+
+  addLiveStreamReaction(id: string, type: 'like' | 'love' | 'wow') {
+    const liveStream = this.getLiveStream(id);
+    liveStream.reactions ??= [];
+    const reaction = {
+      id: `lr${liveStream.reactions.length + 1}`,
+      type,
+    };
+    liveStream.reactions.push(reaction);
+    return reaction;
   }
 
   getSocketContract() {

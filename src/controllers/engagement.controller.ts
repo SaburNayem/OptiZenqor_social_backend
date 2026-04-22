@@ -17,6 +17,11 @@ export class EngagementController {
     return this.ecosystemData.getPremiumPlans();
   }
 
+  @Get('premium')
+  getPremiumAlias() {
+    return this.ecosystemData.getPremiumPlans();
+  }
+
   @Get('wallet-payments')
   getWallet() {
     return this.ecosystemData.getWallet();

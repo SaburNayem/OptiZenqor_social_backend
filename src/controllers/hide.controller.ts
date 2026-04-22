@@ -20,6 +20,11 @@ export class HideController {
       .filter((item) => item.targetType === 'post');
   }
 
+  @Get('/hidden-posts')
+  getHiddenPostsAlias() {
+    return this.getHiddenPosts();
+  }
+
   @Post()
   hideItem(@Body() body: HideItemDto) {
     return this.ecosystemData.hideItem(body);
@@ -36,6 +41,16 @@ export class HideController {
   @Delete('posts/:postId')
   unhidePost(@Param('postId') postId: string) {
     return this.ecosystemData.unhideItem(postId);
+  }
+
+  @Get('/hidden-posts/:targetId')
+  getHiddenPostAlias(@Param('targetId') targetId: string) {
+    return this.ecosystemData.getHiddenItem(targetId);
+  }
+
+  @Delete('/hidden-posts/:targetId')
+  unhidePostAlias(@Param('targetId') targetId: string) {
+    return this.ecosystemData.unhideItem(targetId);
   }
 
   @Get(':targetId')

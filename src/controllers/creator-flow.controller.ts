@@ -48,6 +48,15 @@ export class CreatorFlowController {
     return this.extendedData.getScheduledPosts();
   }
 
+  @Get('drafts-scheduling')
+  getDraftsScheduling() {
+    return {
+      drafts: this.extendedData.getDrafts(),
+      scheduled: this.extendedData.getScheduledPosts(),
+      uploads: this.extendedData.getUploads(),
+    };
+  }
+
   @Get('upload-manager')
   getUploads() {
     return this.extendedData.getUploads();

@@ -34,7 +34,7 @@ export class SettingsController {
 
   @Get(':sectionKey')
   getSettingsSection(@Param('sectionKey') sectionKey: string) {
-    return this.settingsData.getSection(sectionKey);
+    return this.settingsData.getRouteEntry(`/settings/${sectionKey}`);
   }
 
   @Patch('items/:itemKey')
@@ -55,6 +55,6 @@ export class SettingsController {
     @Param('sectionKey') sectionKey: string,
     @Body() body: Record<string, unknown>,
   ) {
-    return this.settingsData.updateSection(sectionKey, body);
+    return this.settingsData.updateRouteEntry(`/settings/${sectionKey}`, body);
   }
 }

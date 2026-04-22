@@ -528,6 +528,26 @@ export class SettingsDataService {
     throw new NotFoundException(`Settings item ${itemKey} not found`);
   }
 
+  getRouteEntry(routePath: string) {
+    for (const section of this.sections.values()) {
+      const item = section.items.find((value) => value.routeName === routePath);
+      if (item) {
+        return {
+          ...this.decorateItem(item),
+          sectionKey: section.key,
+          sectionTitle: section.title,
+        };
+      }
+    }
+
+    const sectionKey = routePath.replace('/settings/', '');
+    if (this.sections.has(sectionKey)) {
+      return this.getSection(sectionKey);
+    }
+
+    return this.getItem(sectionKey);
+  }
+
   updateItem(itemKey: string, patch: Record<string, unknown>) {
     for (const section of this.sections.values()) {
       const item = section.items.find((value) => value.key === itemKey);
@@ -547,6 +567,23 @@ export class SettingsDataService {
       };
     }
     throw new NotFoundException(`Settings item ${itemKey} not found`);
+  }
+
+  updateRouteEntry(routePath: string, patch: Record<string, unknown>) {
+    for (const section of this.sections.values()) {
+      const item = section.items.find((value) => value.routeName === routePath);
+      if (!item) {
+        continue;
+      }
+      return this.updateItem(item.key, patch);
+    }
+
+    const sectionKey = routePath.replace('/settings/', '');
+    if (this.sections.has(sectionKey)) {
+      return this.updateSection(sectionKey, patch);
+    }
+
+    return this.updateItem(sectionKey, patch);
   }
 
   getState() {

@@ -8,6 +8,7 @@ import { DeepLinkHandlerController } from '../controllers/deep-link-handler.cont
 import { DiscoveryController } from '../controllers/discovery.controller';
 import { EngagementController } from '../controllers/engagement.controller';
 import { EventsController } from '../controllers/events.controller';
+import { HiddenPostsController } from '../controllers/hidden-posts.controller';
 import { HideController } from '../controllers/hide.controller';
 import { InviteFriendsController } from '../controllers/invite-friends.controller';
 import { JobsController } from '../controllers/jobs.controller';
@@ -39,6 +40,7 @@ import { AppUpdateFlowController } from '../controllers/app-update-flow.controll
     BlockController,
     BookmarksController,
     DeepLinkHandlerController,
+    HiddenPostsController,
     HideController,
     DiscoveryController,
     CommunitiesController,

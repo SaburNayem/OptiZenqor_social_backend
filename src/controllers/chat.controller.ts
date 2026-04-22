@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ExtendedDataService } from '../data/extended-data.service';
 import { CreateMessageDto } from '../dto/api.dto';
@@ -11,6 +11,46 @@ export class ChatController {
     private readonly coreDatabase: CoreDatabaseService,
     private readonly extendedData: ExtendedDataService,
   ) {}
+
+  @Get()
+  async getChatOverview() {
+    const threads = await this.coreDatabase.getThreads();
+    return {
+      threads,
+      unreadCount: threads.reduce(
+        (count, thread) => count + thread.messages.filter((message) => !message.read).length,
+        0,
+      ),
+      presence: this.extendedData.getPresence(),
+      inboxFilters: ['all', 'unread', 'groups', 'marketplace', 'support'],
+    };
+  }
+
+  @Get('detail')
+  async getChatDetail(@Query('id') id: string) {
+    const thread = await this.coreDatabase.getThread(id);
+    return {
+      thread,
+      presence: this.extendedData.getPresence(),
+      preferences: this.extendedData
+        .getConversationPreferences()
+        .find((item) => item.threadId === id) ?? null,
+    };
+  }
+
+  @Get('detail/:id')
+  async getChatDetailById(@Param('id') id: string) {
+    return this.getChatDetail(id);
+  }
+
+  @Get('settings')
+  getChatSettings() {
+    return {
+      conversationPreferences: this.extendedData.getConversationPreferences(),
+      notificationPreferences: this.extendedData.getNotificationPreferences(),
+      safetyConfig: this.extendedData.getSafetyConfig(),
+    };
+  }
 
   @Get('threads')
   async getThreads() {

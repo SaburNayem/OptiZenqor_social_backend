@@ -288,6 +288,68 @@ export class AppExtensionsDataService {
     },
   ];
 
+  private marketplaceWorkspace = {
+    savedItemIds: ['prd1', 'prd2'],
+    followedSellerIds: ['u4', 'u2'],
+    savedSearches: ['sony camera', 'creator desk'],
+    recentSearches: ['lighting setup', 'remote design audit'],
+    trendingSearches: ['creator bundle', 'studio lamp', 'office chair'],
+    notifications: [
+      'Price dropped 8% on Studio Lamp Drop',
+      'Seller replied to your delivery question',
+      'Your saved search matched a new product listing',
+    ],
+    blockedKeywords: ['counterfeit', 'stolen', 'weapons'],
+    chatMessages: [
+      {
+        id: 'mkt-chat-1',
+        senderName: 'Luna Crafts',
+        text: 'Yes, this lamp ships tomorrow morning.',
+        timestamp: '2026-04-21T08:35:00.000Z',
+        productTitle: 'Studio Lamp Drop',
+      },
+      {
+        id: 'mkt-chat-2',
+        senderName: 'You',
+        text: 'Can you hold it until evening?',
+        timestamp: '2026-04-21T09:10:00.000Z',
+      },
+    ],
+    offerHistory: [
+      {
+        actor: 'You',
+        action: 'Offered',
+        amount: 135,
+        timestamp: '2026-04-21T09:14:00.000Z',
+      },
+      {
+        actor: 'Luna Crafts',
+        action: 'Countered',
+        amount: 142,
+        timestamp: '2026-04-21T09:16:00.000Z',
+      },
+    ],
+    orders: [
+      {
+        id: 'ord-1',
+        productId: 'prd1',
+        productTitle: 'Studio Lamp Drop',
+        amount: 149.99,
+        status: 'Pending',
+        address: 'House 14, Road 7, Dhanmondi, Dhaka',
+        deliveryMethod: 'Home delivery',
+        paymentMethod: 'Cash on delivery',
+        createdAt: '2026-04-20T11:10:00.000Z',
+      },
+    ],
+  };
+
+  private supportMail = {
+    contactEmail: 'support@optizenqor.app',
+    escalationEmail: 'trust@optizenqor.app',
+    responseTime: 'Usually within 24 hours',
+  };
+
   getAccountSwitching() {
     return {
       accounts: this.linkedAccounts,
@@ -601,5 +663,39 @@ export class AppExtensionsDataService {
       throw new NotFoundException(`Media item ${id} not found`);
     }
     return item;
+  }
+
+  getMarketplaceWorkspace() {
+    return this.marketplaceWorkspace;
+  }
+
+  createMarketplaceOrder(input: {
+    productId: string;
+    productTitle: string;
+    amount: number;
+    address: string;
+    deliveryMethod: string;
+    paymentMethod: string;
+  }) {
+    const order = {
+      id: `ord-${this.marketplaceWorkspace.orders.length + 1}`,
+      productId: input.productId,
+      productTitle: input.productTitle,
+      amount: input.amount,
+      status: 'Pending',
+      address: input.address,
+      deliveryMethod: input.deliveryMethod,
+      paymentMethod: input.paymentMethod,
+      createdAt: new Date().toISOString(),
+    };
+    this.marketplaceWorkspace = {
+      ...this.marketplaceWorkspace,
+      orders: [order, ...this.marketplaceWorkspace.orders],
+    };
+    return order;
+  }
+
+  getSupportMail() {
+    return this.supportMail;
   }
 }

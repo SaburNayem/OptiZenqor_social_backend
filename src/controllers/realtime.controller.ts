@@ -1,8 +1,12 @@
-import { Body, Controller, Get, Patch, Post } from '@nestjs/common';
-import { Param } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { EcosystemDataService } from '../data/ecosystem-data.service';
-import { CreateCallSessionDto, EndCallSessionDto } from '../dto/api.dto';
+import {
+  CreateCallSessionDto,
+  EndCallSessionDto,
+  LiveCommentDto,
+  LiveReactionDto,
+} from '../dto/api.dto';
 import { RealtimeStateService } from '../services/realtime-state.service';
 
 @ApiTags('realtime')
@@ -36,6 +40,36 @@ export class RealtimeController {
   @Get('live-stream')
   getLiveStreams() {
     return this.ecosystemData.getLiveStreams();
+  }
+
+  @Get('live-stream/setup')
+  getLiveStreamSetup() {
+    return this.ecosystemData.getLiveStreamStudio();
+  }
+
+  @Get('live-stream/studio')
+  getLiveStreamStudio() {
+    return this.ecosystemData.getLiveStreamStudio();
+  }
+
+  @Get('live-stream/:id/comments')
+  getLiveStreamComments(@Param('id') id: string) {
+    return this.ecosystemData.getLiveStream(id).comments ?? [];
+  }
+
+  @Post('live-stream/:id/comments')
+  createLiveStreamComment(@Param('id') id: string, @Body() body: LiveCommentDto) {
+    return this.ecosystemData.addLiveStreamComment(id, body);
+  }
+
+  @Get('live-stream/:id/reactions')
+  getLiveStreamReactions(@Param('id') id: string) {
+    return this.ecosystemData.getLiveStream(id).reactions ?? [];
+  }
+
+  @Post('live-stream/:id/reactions')
+  createLiveStreamReaction(@Param('id') id: string, @Body() body: LiveReactionDto) {
+    return this.ecosystemData.addLiveStreamReaction(id, body.type);
   }
 
   @Get('live-stream/:id')
