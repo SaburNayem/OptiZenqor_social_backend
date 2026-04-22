@@ -160,6 +160,13 @@ Used for:
 - `POST /auth/forgot-password`
 - `POST /auth/reset-password`
 
+Signup payload notes:
+
+- required fields: `name`, `username`, `email`, `password`, `confirmPassword`, `role`
+- optional fields: `bio`, `interests` (up to 5), and one photo reference
+- supported photo aliases: `avatarUrl`, `photoUrl`, `avatarId`, `photoId`
+- if you pass `avatarId` or `photoId`, use an upload id returned from `/uploads` or `/upload-manager`
+
 ### OTP and verification support
 
 - `POST /auth/send-otp`

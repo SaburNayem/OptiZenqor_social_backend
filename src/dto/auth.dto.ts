@@ -1,10 +1,15 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
+  ArrayUnique,
   IsEmail,
+  IsArray,
   IsIn,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Matches,
+  MaxLength,
   MinLength,
 } from 'class-validator';
 
@@ -88,6 +93,65 @@ export class SignupDto {
   })
   @IsString()
   role!: string;
+
+  @ApiPropertyOptional({
+    example: 'Mobile engineer and coffee explorer.',
+    description: 'Optional profile bio. The mobile signup UI currently limits this to 150 characters.',
+    maxLength: 150,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  bio?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    example: ['Tech', 'Travel', 'Photography'],
+    description: 'Optional signup interests. Supports up to 5 unique items.',
+    maxItems: 5,
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @ArrayUnique()
+  @IsString({ each: true })
+  interests?: string[];
+
+  @ApiPropertyOptional({
+    example: 'https://res.cloudinary.com/demo/image/upload/v1/avatar.jpg',
+    description:
+      'Optional uploaded avatar URL. Use one photo field only. Alias: photoUrl.',
+  })
+  @IsOptional()
+  @IsString()
+  avatarUrl?: string;
+
+  @ApiPropertyOptional({
+    example: 'https://res.cloudinary.com/demo/image/upload/v1/avatar.jpg',
+    description:
+      'Optional uploaded photo URL alias for signup. Use one photo field only. Alias: avatarUrl.',
+  })
+  @IsOptional()
+  @IsString()
+  photoUrl?: string;
+
+  @ApiPropertyOptional({
+    example: 'up1',
+    description:
+      'Optional uploaded avatar id returned from /uploads or /upload-manager. Use one photo field only. Alias: photoId.',
+  })
+  @IsOptional()
+  @IsString()
+  avatarId?: string;
+
+  @ApiPropertyOptional({
+    example: 'up1',
+    description:
+      'Optional uploaded photo id alias for signup. Use one photo field only. Alias: avatarId.',
+  })
+  @IsOptional()
+  @IsString()
+  photoId?: string;
 }
 
 export class ForgotPasswordDto {

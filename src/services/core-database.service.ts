@@ -17,6 +17,7 @@ type UserRow = QueryResultRow & {
   email: string;
   avatar: string;
   bio: string;
+  interests: string[];
   role: string;
   verification: string;
   status: string;
@@ -185,27 +186,32 @@ export class CoreDatabaseService implements OnModuleInit {
     email: string;
     password: string;
     role: string;
+    bio?: string;
+    avatar?: string;
+    interests?: string[];
   }) {
     await this.assertEmailAndUsernameAvailable(input.email, input.username);
     const id = `u${Date.now()}`;
     const passwordHash = this.hashPassword(input.password);
+    const interests = [...new Set((input.interests ?? []).map((interest) => interest.trim()).filter(Boolean))];
     await this.database.query(
       `insert into app_users (
-        id, name, username, email, avatar, bio, role, verification, status,
+        id, name, username, email, avatar, bio, interests, role, verification, status,
         followers, following, wallet_summary, health, reports, last_active,
         email_verified, blocked, password_hash
       ) values (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,
-        $10,$11,$12,$13,$14,$15,
-        $16,$17,$18
+        $1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,
+        $11,$12,$13,$14,$15,$16,
+        $17,$18,$19
       )`,
       [
         id,
         input.name,
         input.username,
         input.email,
-        'https://placehold.co/120x120',
-        'Newly created account from signup flow.',
+        input.avatar?.trim() || 'https://placehold.co/120x120',
+        input.bio?.trim() ?? '',
+        JSON.stringify(interests),
         input.role,
         'Not Requested',
         'Active',
@@ -1110,6 +1116,7 @@ export class CoreDatabaseService implements OnModuleInit {
         email text not null unique,
         avatar text not null,
         bio text not null,
+        interests jsonb not null default '[]'::jsonb,
         role text not null,
         verification text not null,
         status text not null,
@@ -1125,6 +1132,10 @@ export class CoreDatabaseService implements OnModuleInit {
         created_at timestamptz not null default now(),
         updated_at timestamptz not null default now()
       );
+    `);
+    await this.database.query(`
+      alter table app_users
+      add column if not exists interests jsonb not null default '[]'::jsonb;
     `);
     await this.database.query(`
       create table if not exists auth_sessions (
@@ -1633,6 +1644,7 @@ export class CoreDatabaseService implements OnModuleInit {
       email: row.email,
       avatar: row.avatar,
       bio: row.bio,
+      interests: Array.isArray(row.interests) ? row.interests : [],
       role: row.role,
       verification: row.verification,
       status: row.status,

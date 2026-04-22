@@ -52,7 +52,7 @@ curl -X POST http://localhost:3000/auth/login ^
 
 curl -X POST http://localhost:3000/auth/signup ^
   -H "Content-Type: application/json" ^
-  -d "{\"name\":\"New User\",\"username\":\"newuser\",\"email\":\"new@optizenqor.app\",\"role\":\"User\"}"
+  -d "{\"name\":\"New User\",\"username\":\"newuser\",\"email\":\"new@optizenqor.app\",\"password\":\"Password123\",\"confirmPassword\":\"Password123\",\"role\":\"User\",\"bio\":\"Mobile engineer and coffee explorer.\",\"interests\":[\"Tech\",\"Travel\",\"Photography\"],\"avatarUrl\":\"https://placehold.co/120x120?text=NU\"}"
 
 curl -X POST http://localhost:3000/auth/forgot-password ^
   -H "Content-Type: application/json" ^
@@ -74,6 +74,9 @@ curl -X POST http://localhost:3000/auth/verify-otp ^
   -H "Content-Type: application/json" ^
   -d "{\"code\":\"123456\"}"
 ```
+
+For signup photo input, send only one of `avatarUrl`, `photoUrl`, `avatarId`, or `photoId`.
+If you upload first through `/uploads`, you can replace `avatarUrl` with something like `"avatarId":"up1"`.
 
 ## Users
 

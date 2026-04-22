@@ -24,6 +24,7 @@ import {
   SignupDto,
   VerifyEmailConfirmDto,
 } from '../dto/auth.dto';
+import { ExtendedDataService } from '../data/extended-data.service';
 import { MailService } from '../services/mail.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 
@@ -33,6 +34,7 @@ export class AuthController {
   constructor(
     private readonly coreDatabase: CoreDatabaseService,
     private readonly mailService: MailService,
+    private readonly extendedData: ExtendedDataService,
   ) {}
 
   @Get('demo-accounts')
@@ -105,7 +107,11 @@ export class AuthController {
   }
 
   @Post('signup')
-  @ApiOperation({ summary: 'Signup a new user account' })
+  @ApiOperation({
+    summary: 'Signup a new user account',
+    description:
+      'Supports required account fields plus optional bio, interests, and one photo reference via avatarUrl/photoUrl or avatarId/photoId.',
+  })
   @ApiBody({ type: SignupDto })
   @ApiOkResponse({ description: 'Signup completed.' })
   async signup(@Body() body: SignupDto) {
@@ -113,7 +119,16 @@ export class AuthController {
       throw new BadRequestException('confirmPassword must match password.');
     }
 
-    const user = await this.coreDatabase.createUser(body);
+    const user = await this.coreDatabase.createUser({
+      name: body.name.trim(),
+      username: body.username.trim(),
+      email: body.email.trim(),
+      password: body.password,
+      role: body.role,
+      bio: body.bio?.trim(),
+      interests: this.normalizeInterests(body.interests),
+      avatar: await this.resolveSignupAvatar(body),
+    });
     const code = this.generateVerificationCode();
     await this.coreDatabase.storeAuthCode(
       user.email,
@@ -240,5 +255,63 @@ export class AuthController {
 
   private generateVerificationCode() {
     return String(Math.floor(100000 + Math.random() * 900000));
+  }
+
+  private normalizeInterests(interests?: string[]) {
+    if (!interests) {
+      return undefined;
+    }
+
+    const normalized = [...new Set(interests.map((interest) => interest.trim()).filter(Boolean))];
+    return normalized.length > 0 ? normalized : undefined;
+  }
+
+  private async resolveSignupAvatar(body: SignupDto) {
+    const urlValues = [body.avatarUrl, body.photoUrl]
+      .map((value) => value?.trim())
+      .filter((value): value is string => Boolean(value));
+    const uploadIds = [body.avatarId, body.photoId]
+      .map((value) => value?.trim())
+      .filter((value): value is string => Boolean(value));
+    const distinctUrls = [...new Set(urlValues)];
+    const distinctUploadIds = [...new Set(uploadIds)];
+
+    if (
+      distinctUrls.length > 1 ||
+      distinctUploadIds.length > 1 ||
+      (distinctUrls.length > 0 && distinctUploadIds.length > 0)
+    ) {
+      throw new BadRequestException(
+        'Provide only one photo field for signup: avatarUrl, photoUrl, avatarId, or photoId.',
+      );
+    }
+
+    const directUrl = distinctUrls[0];
+    if (directUrl) {
+      return directUrl;
+    }
+
+    const uploadId = distinctUploadIds[0];
+    if (!uploadId) {
+      return undefined;
+    }
+
+    try {
+      const upload = this.extendedData.getUpload(uploadId);
+      const avatar = upload.secureUrl ?? upload.url;
+      if (!avatar) {
+        throw new BadRequestException(
+          `Upload ${uploadId} does not have a usable file URL for signup.`,
+        );
+      }
+      return avatar;
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException(
+        `Upload ${uploadId} was not found. Upload the image first or pass avatarUrl/photoUrl instead.`,
+      );
+    }
   }
 }

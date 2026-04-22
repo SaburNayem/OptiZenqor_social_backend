@@ -5,6 +5,7 @@ NestJS backend API for the `OptiZenqor_social` mobile app and the `OptiZenqor_so
 ## What is included
 
 - Auth endpoints for login, signup, forgot password, and reset password
+- Signup support for optional `bio`, `interests`, and one profile photo reference via `avatarUrl`/`photoUrl` or `avatarId`/`photoId`
 - User APIs for profile lookup plus follow and block actions
 - Social content APIs for feed, posts, stories, and reels
 - Chat APIs for threads and sending messages
