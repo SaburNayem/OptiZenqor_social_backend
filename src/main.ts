@@ -78,12 +78,55 @@ async function bootstrap() {
     customSiteTitle: 'OptiZenqor Social Backend Docs',
   });
 
+  const docsOnlineHtml = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OptiZenqor Social Backend Docs</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css"
+    />
+    <style>
+      html, body {
+        margin: 0;
+        background: #f4f7fb;
+      }
+
+      .topbar {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script>
+      window.ui = SwaggerUIBundle({
+        url: '/docs-json',
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        docExpansion: 'list',
+        displayRequestDuration: true,
+        persistAuthorization: true,
+        presets: [SwaggerUIBundle.presets.apis],
+      });
+    </script>
+  </body>
+</html>`;
+
+  app.getHttpAdapter().get('/docs-online', (_req, res) => {
+    res.type('html').send(docsOnlineHtml);
+  });
+
   const port = Number(process.env.PORT ?? 3000);
   const host = process.env.HOST ?? '0.0.0.0';
   await app.listen(port, host);
 
   console.log(`API running at http://localhost:${port}`);
   console.log(`Swagger UI at http://localhost:${port}/docs`);
+  console.log(`Public-friendly Swagger UI at http://localhost:${port}/docs-online`);
   console.log(`OpenAPI JSON at http://localhost:${port}/docs-json`);
 }
 
