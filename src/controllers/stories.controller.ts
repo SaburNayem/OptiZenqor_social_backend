@@ -20,16 +20,31 @@ export class StoriesController {
   @Get()
   @ApiQuery({ name: 'userId', required: false })
   getStories(@Query('userId') userId?: string) {
-    return this.platformData.getStories(userId);
+    const stories = this.platformData.getStories(userId);
+    return {
+      success: true,
+      message: 'Stories fetched successfully.',
+      data: stories,
+      items: stories,
+      results: stories,
+      count: stories.length,
+    };
   }
 
   @Get(':id')
   getStory(@Param('id') id: string) {
     const story = this.platformData.getStory(id);
-    return {
+    const payload = {
       ...story,
       comments: this.extendedData.getStoryComments(id),
       reactions: this.extendedData.getStoryReactions(id),
+    };
+    return {
+      success: true,
+      message: 'Story fetched successfully.',
+      ...payload,
+      story: payload,
+      data: payload,
     };
   }
 

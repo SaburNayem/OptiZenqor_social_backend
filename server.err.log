@@ -1,0 +1,7 @@
+[31m[Nest] 2360  - [39m04/23/2026, 9:26:43 PM [31m  ERROR[39m [38;5;3m[NestApplication] [39m[31mError: listen EADDRINUSE: address already in use 0.0.0.0:3000[39m[38;5;3m +3ms[39m
+Error: listen EADDRINUSE: address already in use 0.0.0.0:3000
+    at Server.setupListenHandle [as _listen2] (node:net:1948:16)
+    at listenInCluster (node:net:2005:12)
+    at node:net:2214:7
+    at processTicksAndRejections (node:internal/process/task_queues:90:21)
+^C^C

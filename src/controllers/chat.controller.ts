@@ -16,11 +16,11 @@ export class ChatController {
   async getChatOverview() {
     const threads = await this.coreDatabase.getThreads();
     return {
+      success: true,
+      message: 'Chat overview fetched successfully.',
       threads,
-      unreadCount: threads.reduce(
-        (count, thread) => count + thread.messages.filter((message) => !message.read).length,
-        0,
-      ),
+      data: threads,
+      unreadCount: threads.reduce((count, thread) => count + thread.unreadCount, 0),
       presence: this.extendedData.getPresence(),
       inboxFilters: ['all', 'unread', 'groups', 'marketplace', 'support'],
     };
@@ -54,27 +54,67 @@ export class ChatController {
 
   @Get('threads')
   async getThreads() {
-    return this.coreDatabase.getThreads();
+    const threads = await this.coreDatabase.getThreads();
+    return {
+      success: true,
+      message: 'Threads fetched successfully.',
+      data: threads,
+      items: threads,
+      results: threads,
+      threads,
+    };
   }
 
   @Get('threads/:id')
   async getThread(@Param('id') id: string) {
-    return this.coreDatabase.getThread(id);
+    const thread = await this.coreDatabase.getThread(id);
+    return {
+      success: true,
+      message: 'Thread fetched successfully.',
+      ...thread,
+      thread,
+      data: thread,
+    };
+  }
+
+  @Get('threads/:id/messages')
+  async getThreadMessages(@Param('id') id: string) {
+    const messages = await this.coreDatabase.getThreadMessages(id);
+    return {
+      success: true,
+      message: 'Thread messages fetched successfully.',
+      data: messages,
+      items: messages,
+      results: messages,
+      messages,
+    };
   }
 
   @Post('threads/:id/messages')
   async createMessage(@Param('id') id: string, @Body() body: CreateMessageDto) {
-    return this.coreDatabase.createMessage(id, body.senderId, body.text, {
+    const message = await this.coreDatabase.createMessage(id, body.senderId, body.text, {
       attachments: body.attachments,
       replyToMessageId: body.replyToMessageId,
       kind: body.kind,
       mediaPath: body.mediaPath,
     });
+    return {
+      success: true,
+      message: 'Message sent successfully.',
+      ...message,
+      data: message,
+    };
   }
 
   @Patch('threads/:id/read')
   async markRead(@Param('id') id: string, @Body() body: { userId: string }) {
-    return this.coreDatabase.markThreadMessagesRead(id, body.userId);
+    const result = await this.coreDatabase.markThreadMessagesRead(id, body.userId);
+    return {
+      success: true,
+      message: 'Thread marked as read successfully.',
+      ...result,
+      data: result,
+    };
   }
 
   @Patch('threads/:id/archive')

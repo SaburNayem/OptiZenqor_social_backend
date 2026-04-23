@@ -20,8 +20,15 @@ export class NotificationsController {
   @Get()
   @ApiQuery({ name: 'userId', required: false })
   async getNotificationsOverview(@Query('userId') userId?: string) {
+    const notifications = await this.coreDatabase.getNotificationInbox(userId);
     return {
-      inbox: await this.coreDatabase.getNotificationInbox(userId),
+      success: true,
+      message: 'Notifications fetched successfully.',
+      notifications,
+      items: notifications,
+      results: notifications,
+      data: notifications,
+      inbox: notifications,
       campaigns: this.platformData.getCampaigns(),
       preferences: this.appExtensionsData.getPushNotificationPreferences(),
     };
@@ -30,7 +37,16 @@ export class NotificationsController {
   @Get('inbox')
   @ApiQuery({ name: 'userId', required: false })
   async getInbox(@Query('userId') userId?: string) {
-    return this.coreDatabase.getNotificationInbox(userId);
+    const notifications = await this.coreDatabase.getNotificationInbox(userId);
+    return {
+      success: true,
+      message: 'Notification inbox fetched successfully.',
+      notifications,
+      items: notifications,
+      results: notifications,
+      data: notifications,
+      inbox: notifications,
+    };
   }
 
   @Get('preferences')
@@ -50,6 +66,13 @@ export class NotificationsController {
 
   @Patch(':id/read')
   async markRead(@Param('id') id: string, @Body() body: MarkNotificationReadDto) {
-    return this.coreDatabase.markNotificationRead(id, body.userId);
+    const notification = await this.coreDatabase.markNotificationRead(id, body.userId);
+    return {
+      success: true,
+      message: 'Notification marked as read successfully.',
+      ...notification,
+      notification,
+      data: notification,
+    };
   }
 }

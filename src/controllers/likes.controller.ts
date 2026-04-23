@@ -10,21 +10,45 @@ export class LikesController {
 
   @Get(':id/reactions')
   async getPostReactions(@Param('id') id: string) {
-    return this.coreDatabase.getPostReactions(id);
+    const reactions = await this.coreDatabase.getPostReactions(id);
+    return this.wrapListResponse('Post reactions fetched successfully.', reactions);
   }
 
   @Post(':id/reactions')
   async reactToPost(@Param('id') id: string, @Body() body: PostReactionDto) {
-    return this.coreDatabase.reactToPost(id, body.userId, body.reaction);
+    const result = await this.coreDatabase.reactToPost(id, body.userId, body.reaction);
+    return this.wrapMutationResponse('Post reaction updated successfully.', result);
   }
 
   @Patch(':id/like')
   async likePost(@Param('id') id: string, @Body() body: UserActorDto) {
-    return this.coreDatabase.reactToPost(id, body.userId, 'like');
+    const result = await this.coreDatabase.reactToPost(id, body.userId, 'like');
+    return this.wrapMutationResponse('Post liked successfully.', result);
   }
 
   @Patch(':id/unlike')
   async unlikePost(@Param('id') id: string, @Body() body: UserActorDto) {
-    return this.coreDatabase.unlikePost(id, body.userId);
+    const result = await this.coreDatabase.unlikePost(id, body.userId);
+    return this.wrapMutationResponse('Post unliked successfully.', result);
+  }
+
+  private wrapListResponse(message: string, items: unknown[]) {
+    return {
+      success: true,
+      message,
+      data: items,
+      items,
+      results: items,
+      count: items.length,
+    };
+  }
+
+  private wrapMutationResponse(message: string, payload: Record<string, unknown>) {
+    return {
+      success: true,
+      message,
+      ...payload,
+      data: payload,
+    };
   }
 }

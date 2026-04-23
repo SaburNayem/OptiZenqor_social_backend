@@ -61,6 +61,11 @@ export class UpdateUserDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   name?: string;
 
   @ApiPropertyOptional()
@@ -77,12 +82,43 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   avatar?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  avatarUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  website?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  coverImageUrl?: string;
 }
 
 export class FollowUserDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   followerId!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  actorId?: string;
 }
 
 export class ChangePasswordRequestDto {
@@ -416,6 +452,16 @@ export class VerifyOtpDto {
   @ApiProperty()
   @IsString()
   code!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  destination?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  email?: string;
 }
 
 export class ReactToCommentDto {

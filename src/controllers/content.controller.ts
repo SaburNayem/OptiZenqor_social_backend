@@ -1,19 +1,36 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { PlatformDataService } from '../data/platform-data.service';
+import { CoreDatabaseService } from '../services/core-database.service';
 
 @ApiTags('feed')
 @Controller()
 export class ContentController {
-  constructor(private readonly platformData: PlatformDataService) {}
+  constructor(private readonly coreDatabase: CoreDatabaseService) {}
 
   @Get('feed')
-  getFeed() {
-    return this.platformData.getFeed();
+  async getFeed() {
+    return this.wrapFeedResponse(
+      'Feed fetched successfully.',
+      await this.coreDatabase.getFeed(),
+    );
   }
 
   @Get('feed/home')
-  getHomeFeed() {
-    return this.platformData.getFeed();
+  async getHomeFeed() {
+    return this.wrapFeedResponse(
+      'Feed fetched successfully.',
+      await this.coreDatabase.getFeed(),
+    );
+  }
+
+  private wrapFeedResponse(message: string, items: unknown[]) {
+    return {
+      success: true,
+      message,
+      data: items,
+      items,
+      results: items,
+      count: items.length,
+    };
   }
 }

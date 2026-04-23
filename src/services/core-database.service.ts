@@ -30,6 +30,13 @@ type UserRow = QueryResultRow & {
   email_verified: boolean;
   blocked: boolean;
   password_hash: string;
+  website?: string | null;
+  location?: string | null;
+  cover_image_url?: string | null;
+  is_private?: boolean | null;
+  note?: string | null;
+  note_privacy?: string | null;
+  supporter_badge?: boolean | null;
 };
 
 type PostRow = QueryResultRow & {
@@ -252,16 +259,7 @@ export class CoreDatabaseService implements OnModuleInit {
       throw new UnauthorizedException('This account is currently blocked.');
     }
     const tokens = await this.issueTokens(userRow.id);
-    return {
-      token: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      sessionId: tokens.sessionId,
-      tokenType: tokens.tokenType,
-      expiresInSeconds: tokens.expiresInSeconds,
-      refreshExpiresInSeconds: tokens.refreshExpiresInSeconds,
-      user: this.mapUser(userRow),
-      sessionCreatedAt: tokens.createdAt,
-    };
+    return this.buildSessionPayload(this.mapUser(userRow), tokens);
   }
 
   async loginWithGoogle(input: { email: string; name: string; googleIdToken?: string }) {
@@ -328,17 +326,9 @@ export class CoreDatabaseService implements OnModuleInit {
     }
 
     const tokens = await this.issueTokens(userRow.id);
-    return {
-      token: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      sessionId: tokens.sessionId,
-      tokenType: tokens.tokenType,
-      expiresInSeconds: tokens.expiresInSeconds,
-      refreshExpiresInSeconds: tokens.refreshExpiresInSeconds,
-      user: this.mapUser(userRow),
+    return this.buildSessionPayload(this.mapUser(userRow), tokens, {
       provider: 'google',
-      sessionCreatedAt: tokens.createdAt,
-    };
+    });
   }
 
   async refreshUserToken(refreshToken: string) {
@@ -352,16 +342,12 @@ export class CoreDatabaseService implements OnModuleInit {
     }
     await this.database.query(`delete from auth_sessions where refresh_token = $1`, [refreshToken]);
     const tokens = await this.issueTokens(session.user_id);
-    return {
-      token: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      sessionId: tokens.sessionId,
-      tokenType: tokens.tokenType,
-      expiresInSeconds: tokens.expiresInSeconds,
-      refreshExpiresInSeconds: tokens.refreshExpiresInSeconds,
-      user: await this.getUser(session.user_id),
-      sessionCreatedAt: tokens.createdAt,
-    };
+    return this.buildSessionPayload(await this.getUser(session.user_id), tokens);
+  }
+
+  async createUserSession(userId: string) {
+    const tokens = await this.issueTokens(userId);
+    return this.buildSessionPayload(await this.getUser(userId), tokens);
   }
 
   async revokeUserSession(accessToken?: string) {
@@ -392,7 +378,15 @@ export class CoreDatabaseService implements OnModuleInit {
 
   async updateUserProfile(
     id: string,
-    patch: Partial<{ name: string; username: string; bio: string; avatar: string }>,
+    patch: Partial<{
+      name: string;
+      username: string;
+      bio: string;
+      avatar: string;
+      website: string;
+      location: string;
+      coverImageUrl: string;
+    }>,
   ) {
     await this.getUser(id);
     if (patch.username) {
@@ -412,9 +406,21 @@ export class CoreDatabaseService implements OnModuleInit {
            username = coalesce($3, username),
            bio = coalesce($4, bio),
            avatar = coalesce($5, avatar),
+           website = coalesce($6, website),
+           location = coalesce($7, location),
+           cover_image_url = coalesce($8, cover_image_url),
            updated_at = now()
        where id = $1`,
-      [id, patch.name ?? null, patch.username ?? null, patch.bio ?? null, patch.avatar ?? null],
+      [
+        id,
+        patch.name ?? null,
+        patch.username ?? null,
+        patch.bio ?? null,
+        patch.avatar ?? null,
+        patch.website ?? null,
+        patch.location ?? null,
+        patch.coverImageUrl ?? null,
+      ],
     );
     return this.getUser(id);
   }
@@ -469,7 +475,14 @@ export class CoreDatabaseService implements OnModuleInit {
       [followerId, targetId],
     );
     if (existing.rows[0]) {
-      throw new ConflictException('Already following this user.');
+      return {
+        success: true,
+        followerId,
+        targetId,
+        action: 'followed',
+        isFollowing: true,
+        hasPendingRequest: false,
+      };
     }
     await this.database.query(
       `insert into app_follow_relations (follower_id, target_id, created_at)
@@ -484,7 +497,14 @@ export class CoreDatabaseService implements OnModuleInit {
        where id in ($1, $2)`,
       [targetId, followerId],
     );
-    return { success: true, followerId, targetId, action: 'followed' };
+    return {
+      success: true,
+      followerId,
+      targetId,
+      action: 'followed',
+      isFollowing: true,
+      hasPendingRequest: false,
+    };
   }
 
   async unfollowUser(targetId: string, followerId: string) {
@@ -504,7 +524,14 @@ export class CoreDatabaseService implements OnModuleInit {
         [targetId, followerId],
       );
     }
-    return { success: true, followerId, targetId, action: 'unfollowed' };
+    return {
+      success: true,
+      followerId,
+      targetId,
+      action: 'unfollowed',
+      isFollowing: false,
+      hasPendingRequest: false,
+    };
   }
 
   async getFollowers(targetId: string) {
@@ -690,7 +717,9 @@ export class CoreDatabaseService implements OnModuleInit {
         routeName: `/posts/${postId}`,
         entityId: postId,
         type: 'social',
-        metadata: { postId, reaction, actorId: userId },
+        actorName: actor.name,
+        entityType: 'post',
+        metadata: { postId, reaction, actorId: userId, actorName: actor.name },
       });
     }
 
@@ -806,7 +835,14 @@ export class CoreDatabaseService implements OnModuleInit {
         routeName: `/posts/${postId}`,
         entityId: id,
         type: 'social',
-        metadata: { postId, commentId: id, replyTo: options?.replyTo ?? null },
+        actorName: resolvedAuthor,
+        entityType: 'comment',
+        metadata: {
+          postId,
+          commentId: id,
+          replyTo: options?.replyTo ?? null,
+          actorName: resolvedAuthor,
+        },
       });
     }
 
@@ -843,7 +879,15 @@ export class CoreDatabaseService implements OnModuleInit {
         routeName: `/posts/${postId}`,
         entityId: commentId,
         type: 'social',
-        metadata: { postId, commentId, reaction, actorId: userId },
+        actorName: actor.name,
+        entityType: 'comment',
+        metadata: {
+          postId,
+          commentId,
+          reaction,
+          actorId: userId,
+          actorName: actor.name,
+        },
       });
     }
 
@@ -877,13 +921,7 @@ export class CoreDatabaseService implements OnModuleInit {
     const { rows } = await this.database.query<ThreadRow>(
       `select * from chat_threads order by created_at desc`,
     );
-    return Promise.all(
-      rows.map(async (thread) => ({
-        ...this.mapThread(thread),
-        participants: await this.getThreadParticipants(thread.id),
-        messages: await this.getThreadMessages(thread.id),
-      })),
-    );
+    return Promise.all(rows.map((thread) => this.buildThreadPayload(thread)));
   }
 
   async getThread(id: string) {
@@ -895,12 +933,11 @@ export class CoreDatabaseService implements OnModuleInit {
     if (!row) {
       throw new NotFoundException(`Thread ${id} not found`);
     }
-    return {
-      ...this.mapThread(row),
-      participantIds: await this.getThreadParticipantIds(id),
-      participants: await this.getThreadParticipants(id),
-      messages: await this.getThreadMessages(id),
-    };
+    return this.buildThreadPayload(row, {
+      includeParticipantIds: true,
+      includeParticipants: true,
+      includeMessages: true,
+    });
   }
 
   async getThreadParticipantIds(threadId: string) {
@@ -909,6 +946,11 @@ export class CoreDatabaseService implements OnModuleInit {
       [threadId],
     );
     return rows.map((row) => row.user_id);
+  }
+
+  async getThreadMessages(threadId: string) {
+    await this.getThread(threadId);
+    return this.listThreadMessages(threadId);
   }
 
   async createMessage(
@@ -923,6 +965,7 @@ export class CoreDatabaseService implements OnModuleInit {
     },
   ) {
     const thread = await this.getThread(threadId);
+    const participantIds = thread.participantIds ?? (await this.getThreadParticipantIds(threadId));
     await this.getUser(senderId);
     const id = `m${Date.now()}`;
     await this.database.query(
@@ -948,7 +991,7 @@ export class CoreDatabaseService implements OnModuleInit {
     );
 
     const sender = await this.getUser(senderId);
-    for (const participantId of thread.participantIds.filter((id) => id !== senderId)) {
+    for (const participantId of participantIds.filter((id) => id !== senderId)) {
       await this.pushNotification({
         recipientId: participantId,
         title: `New message from ${sender.name}`,
@@ -956,7 +999,9 @@ export class CoreDatabaseService implements OnModuleInit {
         routeName: `/chat/threads/${threadId}`,
         entityId: id,
         type: 'social',
-        metadata: { threadId, messageId: id, senderId },
+        actorName: sender.name,
+        entityType: 'message',
+        metadata: { threadId, messageId: id, senderId, actorName: sender.name },
       });
     }
 
@@ -1028,9 +1073,16 @@ export class CoreDatabaseService implements OnModuleInit {
     routeName: string;
     entityId?: string;
     type?: 'social' | 'commerce' | 'security' | 'system';
+    actorName?: string;
+    entityType?: string;
     metadata?: Record<string, unknown>;
   }) {
     const id = `n${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    const metadata = {
+      ...(input.metadata ?? {}),
+      ...(input.actorName ? { actorName: input.actorName } : {}),
+      ...(input.entityType ? { entityType: input.entityType } : {}),
+    };
     await this.database.query(
       `insert into app_notifications (
         id, recipient_id, title, body, created_at, read, type, route_name, entity_id, metadata
@@ -1047,7 +1099,7 @@ export class CoreDatabaseService implements OnModuleInit {
         input.type ?? 'social',
         input.routeName,
         input.entityId ?? null,
-        JSON.stringify(input.metadata ?? {}),
+        JSON.stringify(metadata),
       ],
     );
     const { rows } = await this.database.query<NotificationRow>(
@@ -1136,6 +1188,34 @@ export class CoreDatabaseService implements OnModuleInit {
     await this.database.query(`
       alter table app_users
       add column if not exists interests jsonb not null default '[]'::jsonb;
+    `);
+    await this.database.query(`
+      alter table app_users
+      add column if not exists website text not null default '';
+    `);
+    await this.database.query(`
+      alter table app_users
+      add column if not exists location text not null default '';
+    `);
+    await this.database.query(`
+      alter table app_users
+      add column if not exists cover_image_url text not null default '';
+    `);
+    await this.database.query(`
+      alter table app_users
+      add column if not exists is_private boolean not null default false;
+    `);
+    await this.database.query(`
+      alter table app_users
+      add column if not exists note text null;
+    `);
+    await this.database.query(`
+      alter table app_users
+      add column if not exists note_privacy text not null default 'followers';
+    `);
+    await this.database.query(`
+      alter table app_users
+      add column if not exists supporter_badge boolean not null default false;
     `);
     await this.database.query(`
       create table if not exists auth_sessions (
@@ -1451,12 +1531,39 @@ export class CoreDatabaseService implements OnModuleInit {
     return rows.map((row) => this.mapUser(row));
   }
 
-  private async getThreadMessages(threadId: string) {
+  private async listThreadMessages(threadId: string) {
     const { rows } = await this.database.query<MessageRow>(
       `select * from chat_messages where thread_id = $1 order by timestamp asc`,
       [threadId],
     );
     return rows.map((row) => this.mapMessage(row));
+  }
+
+  private async buildThreadPayload(
+    row: ThreadRow,
+    options: {
+      includeParticipantIds?: boolean;
+      includeParticipants?: boolean;
+      includeMessages?: boolean;
+    } = {},
+  ) {
+    const messages = await this.listThreadMessages(row.id);
+    const participants = options.includeParticipants
+      ? await this.getThreadParticipants(row.id)
+      : undefined;
+    const participantIds = options.includeParticipantIds
+      ? await this.getThreadParticipantIds(row.id)
+      : undefined;
+    const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+
+    return {
+      ...this.mapThread(row),
+      unreadCount: messages.filter((message) => !message.read).length,
+      lastMessage,
+      ...(options.includeParticipants ? { participants } : {}),
+      ...(options.includeParticipantIds ? { participantIds } : {}),
+      ...(options.includeMessages ? { messages } : {}),
+    };
   }
 
   private async getCommentRow(commentId: string, postId: string) {
@@ -1620,6 +1727,26 @@ export class CoreDatabaseService implements OnModuleInit {
     };
   }
 
+  private buildSessionPayload(
+    user: Record<string, unknown>,
+    tokens: Awaited<ReturnType<CoreDatabaseService['issueTokens']>>,
+    extras: Record<string, unknown> = {},
+  ) {
+    return {
+      token: tokens.accessToken,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      sessionId: tokens.sessionId,
+      tokenType: tokens.tokenType,
+      expiresInSeconds: tokens.expiresInSeconds,
+      refreshExpiresInSeconds: tokens.refreshExpiresInSeconds,
+      sessionCreatedAt: tokens.createdAt,
+      isLoggedIn: true,
+      user,
+      ...extras,
+    };
+  }
+
   private hashPassword(password: string) {
     const salt = randomBytes(16).toString('hex');
     const hash = scryptSync(password, salt, 64).toString('hex');
@@ -1637,19 +1764,45 @@ export class CoreDatabaseService implements OnModuleInit {
   }
 
   private mapUser(row: UserRow) {
+    const normalizedRole = row.role.trim().toLowerCase();
+    const verificationStatus = this.normalizeVerificationStatus(
+      row.verification,
+      row.email_verified,
+    );
+    const verified = row.email_verified || verificationStatus.includes('verified');
+    const badgeStyle = this.normalizeBadgeStyle(normalizedRole);
+
     return {
       id: row.id,
       name: row.name,
       username: row.username,
       email: row.email,
       avatar: row.avatar,
+      avatarUrl: row.avatar,
       bio: row.bio,
       interests: Array.isArray(row.interests) ? row.interests : [],
-      role: row.role,
-      verification: row.verification,
+      role: normalizedRole,
+      verification: verificationStatus,
+      verified,
+      verificationStatus,
+      verificationReason: verified
+        ? 'identity confirmed'
+        : 'Email verification is still pending.',
+      badgeStyle,
       status: row.status,
       followers: row.followers,
       following: row.following,
+      website: row.website ?? '',
+      location: row.location ?? '',
+      coverImageUrl: row.cover_image_url ?? '',
+      coverUrl: row.cover_image_url ?? '',
+      coverPhotoUrl: row.cover_image_url ?? '',
+      isPrivate: row.is_private ?? false,
+      publicProfileUrl: `https://optizenqor.app/@${row.username}`,
+      profilePreview: `${row.name} on OptiZenqor`,
+      note: row.note ?? null,
+      notePrivacy: row.note_privacy ?? 'followers',
+      supporterBadge: row.supporter_badge ?? false,
       walletSummary: row.wallet_summary,
       health: row.health,
       reports: row.reports,
@@ -1665,9 +1818,51 @@ export class CoreDatabaseService implements OnModuleInit {
       name: user.name,
       username: user.username,
       avatar: user.avatar,
+      avatarUrl: user.avatar,
+      bio: user.bio,
       role: user.role,
       verification: user.verification,
+      verificationStatus: user.verificationStatus,
+      verified: user.verified,
+      followers: user.followers,
+      following: user.following,
+      website: user.website,
+      location: user.location,
+      coverImageUrl: user.coverImageUrl,
+      coverUrl: user.coverUrl,
+      coverPhotoUrl: user.coverPhotoUrl,
+      publicProfileUrl: user.publicProfileUrl,
+      badgeStyle: user.badgeStyle,
+      isPrivate: user.isPrivate,
+      verificationReason: user.verificationReason,
+      note: user.note,
+      notePrivacy: user.notePrivacy,
+      supporterBadge: user.supporterBadge,
     };
+  }
+
+  private normalizeVerificationStatus(value: string, emailVerified: boolean) {
+    if (emailVerified) {
+      return 'verified';
+    }
+
+    const normalized = value.trim().toLowerCase().replace(/\s+/g, '_');
+    if (!normalized) {
+      return 'not_requested';
+    }
+    return normalized;
+  }
+
+  private normalizeBadgeStyle(role: string) {
+    switch (role) {
+      case 'creator':
+      case 'business':
+      case 'seller':
+      case 'recruiter':
+        return role;
+      default:
+        return 'standard';
+    }
   }
 
   private mapPost(row: PostRow) {
@@ -1681,6 +1876,9 @@ export class CoreDatabaseService implements OnModuleInit {
       comments: row.comments,
       shares: row.shares,
       views: row.views,
+      taggedUserIds: [],
+      mentionUsernames: [],
+      location: null,
       status: row.status,
       type: row.type,
       createdAt: this.iso(row.created_at),
@@ -1690,6 +1888,8 @@ export class CoreDatabaseService implements OnModuleInit {
   private mapThread(row: ThreadRow) {
     return {
       id: row.id,
+      threadId: row.id,
+      chatId: row.id,
       title: row.title,
       participantsLabel: row.participants_label,
       flag: row.flag ?? undefined,
@@ -1700,10 +1900,12 @@ export class CoreDatabaseService implements OnModuleInit {
   private mapMessage(row: MessageRow) {
     return {
       id: row.id,
+      chatId: row.thread_id,
       threadId: row.thread_id,
       senderId: row.sender_id,
       text: row.text,
       read: row.read,
+      starred: false,
       timestamp: this.iso(row.timestamp),
       attachments: row.attachments ?? [],
       replyToMessageId: row.reply_to_message_id,
@@ -1714,20 +1916,87 @@ export class CoreDatabaseService implements OnModuleInit {
   }
 
   private mapNotification(row: NotificationRow) {
+    const metadata =
+      row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
     return {
       id: row.id,
       recipientId: row.recipient_id,
       title: row.title,
       body: row.body,
       createdAt: this.iso(row.created_at),
+      unread: !row.read,
       read: row.read,
+      actorName: this.resolveNotificationActorName(row.title, metadata),
+      entityType: this.resolveNotificationEntityType(
+        row.route_name,
+        row.entity_id,
+        metadata,
+      ),
       payload: {
         type: row.type,
         routeName: row.route_name,
         entityId: row.entity_id ?? undefined,
-        metadata: row.metadata ?? {},
+        metadata,
       },
     };
+  }
+
+  private resolveNotificationActorName(
+    title: string,
+    metadata: Record<string, unknown>,
+  ) {
+    const fromMetadata = [metadata.actorName, metadata.senderName].find(
+      (value) => typeof value === 'string' && value.trim().length > 0,
+    );
+    if (typeof fromMetadata === 'string') {
+      return fromMetadata.trim();
+    }
+
+    const patterns = [
+      /^New message from (.+)$/i,
+      /^(.+?) reacted to /i,
+      /^(.+?) replied to /i,
+      /^(.+?) commented on /i,
+      /^(.+?) followed /i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = title.match(pattern);
+      if (match?.[1]?.trim()) {
+        return match[1].trim();
+      }
+    }
+
+    return undefined;
+  }
+
+  private resolveNotificationEntityType(
+    routeName: string,
+    entityId: string | null,
+    metadata: Record<string, unknown>,
+  ) {
+    if (typeof metadata.entityType === 'string' && metadata.entityType.trim()) {
+      return metadata.entityType.trim();
+    }
+    if (typeof metadata.messageId === 'string' || routeName.includes('/chat/')) {
+      return 'message';
+    }
+    if (typeof metadata.commentId === 'string') {
+      return 'comment';
+    }
+    if (typeof metadata.postId === 'string' || routeName.includes('/posts')) {
+      return 'post';
+    }
+    if (routeName.includes('/reels')) {
+      return 'reel';
+    }
+    if (routeName.includes('/wallet') || String(entityId ?? '').startsWith('txn-')) {
+      return 'order';
+    }
+    if (routeName.includes('/profile') || String(entityId ?? '').startsWith('u')) {
+      return 'user';
+    }
+    return 'generic';
   }
 
   private iso(value: string | Date) {

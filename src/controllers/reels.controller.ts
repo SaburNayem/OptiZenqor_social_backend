@@ -19,23 +19,32 @@ export class ReelsController {
 
   @Get()
   @ApiQuery({ name: 'authorId', required: false })
-  getReels(@Query('authorId') authorId?: string) {
-    return this.platformData.getReels(authorId);
+  @ApiQuery({ name: 'userId', required: false })
+  getReels(@Query('authorId') authorId?: string, @Query('userId') userId?: string) {
+    const reels = this.platformData.getReels(authorId ?? userId);
+    return this.wrapListResponse('Reels fetched successfully.', reels);
   }
 
   @Get(':id')
   getReel(@Param('id') id: string) {
     const reel = this.platformData.getReel(id);
-    return {
+    const payload = {
       ...reel,
       comments: this.extendedData.getReelComments(id),
       reactions: this.extendedData.getReelReactions(id),
+    };
+    return {
+      success: true,
+      message: 'Reel fetched successfully.',
+      ...payload,
+      reel: payload,
+      data: payload,
     };
   }
 
   @Post()
   createReel(@Body() body: CreateReelDto) {
-    return this.platformData.createReel({
+    const reel = this.platformData.createReel({
       authorId: body.authorId,
       caption: body.caption,
       audioName: body.audioName,
@@ -47,11 +56,23 @@ export class ReelsController {
       remixEnabled: body.remixEnabled ?? false,
       isDraft: body.isDraft ?? false,
     });
+    return {
+      success: true,
+      message: 'Reel created successfully.',
+      reel,
+      data: reel,
+    };
   }
 
   @Patch(':id')
   updateReel(@Param('id') id: string, @Body() body: UpdateReelDto) {
-    return this.platformData.updateReel(id, body);
+    const reel = this.platformData.updateReel(id, body);
+    return {
+      success: true,
+      message: 'Reel updated successfully.',
+      reel,
+      data: reel,
+    };
   }
 
   @Get(':id/comments')
@@ -77,5 +98,16 @@ export class ReelsController {
   @Delete(':id')
   deleteReel(@Param('id') id: string) {
     return this.platformData.deleteReel(id);
+  }
+
+  private wrapListResponse(message: string, items: unknown[]) {
+    return {
+      success: true,
+      message,
+      data: items,
+      items,
+      results: items,
+      count: items.length,
+    };
   }
 }

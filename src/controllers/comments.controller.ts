@@ -10,21 +10,28 @@ export class CommentsController {
 
   @Get()
   async getPostComments(@Param('id') id: string) {
-    return this.coreDatabase.getPostComments(id);
+    const comments = await this.coreDatabase.getPostComments(id);
+    return this.wrapListResponse('Comments fetched successfully.', comments);
   }
 
   @Post()
   async createPostComment(@Param('id') id: string, @Body() body: CreateCommentDto) {
-    return this.coreDatabase.createPostComment(id, body.author, body.message, {
+    const comment = await this.coreDatabase.createPostComment(id, body.author, body.message, {
       authorId: body.authorId,
       replyTo: body.replyTo,
       mentions: body.mentions,
     });
+    return {
+      success: true,
+      ...comment,
+      data: comment,
+    };
   }
 
   @Get(':commentId/replies')
   async getReplies(@Param('id') id: string, @Param('commentId') commentId: string) {
-    return this.coreDatabase.getPostCommentReplies(id, commentId);
+    const replies = await this.coreDatabase.getPostCommentReplies(id, commentId);
+    return this.wrapListResponse('Replies fetched successfully.', replies);
   }
 
   @Post(':commentId/replies')
@@ -33,11 +40,16 @@ export class CommentsController {
     @Param('commentId') commentId: string,
     @Body() body: CreateCommentDto,
   ) {
-    return this.coreDatabase.createPostComment(id, body.author, body.message, {
+    const comment = await this.coreDatabase.createPostComment(id, body.author, body.message, {
       authorId: body.authorId,
       replyTo: commentId,
       mentions: body.mentions,
     });
+    return {
+      success: true,
+      ...comment,
+      data: comment,
+    };
   }
 
   @Patch(':commentId/react')
@@ -46,11 +58,36 @@ export class CommentsController {
     @Param('commentId') commentId: string,
     @Body() body: ReactToCommentDto,
   ) {
-    return this.coreDatabase.reactToComment(id, commentId, body.userId, body.reaction);
+    const comment = await this.coreDatabase.reactToComment(
+      id,
+      commentId,
+      body.userId,
+      body.reaction,
+    );
+    return {
+      success: true,
+      ...comment,
+      data: comment,
+    };
   }
 
   @Delete(':commentId')
   async deleteComment(@Param('id') id: string, @Param('commentId') commentId: string) {
-    return this.coreDatabase.deletePostComment(id, commentId);
+    const result = await this.coreDatabase.deletePostComment(id, commentId);
+    return {
+      ...result,
+      data: result.removed,
+    };
+  }
+
+  private wrapListResponse(message: string, items: unknown[]) {
+    return {
+      success: true,
+      message,
+      data: items,
+      items,
+      results: items,
+      count: items.length,
+    };
   }
 }

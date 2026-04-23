@@ -14,8 +14,18 @@ export class PostsController {
 
   @Get()
   @ApiQuery({ name: 'authorId', required: false })
-  async getPosts(@Query('authorId') authorId?: string) {
-    return this.coreDatabase.getPosts(authorId);
+  @ApiQuery({ name: 'userId', required: false })
+  async getPosts(
+    @Query('authorId') authorId?: string,
+    @Query('userId') userId?: string,
+  ) {
+    const posts = await Promise.all(
+      (await this.coreDatabase.getPosts(authorId ?? userId)).map(async (post) => ({
+        ...post,
+        author: await this.coreDatabase.getUser(post.authorId),
+      })),
+    );
+    return this.wrapListResponse('Posts fetched successfully.', posts);
   }
 
   @Get(':id')
@@ -32,23 +42,42 @@ export class PostsController {
       detail = null;
     }
 
-    return {
+    const payload = {
       ...post,
       author,
       detail,
       comments,
       reactions,
     };
+
+    return {
+      success: true,
+      message: 'Post fetched successfully.',
+      ...payload,
+      post: payload,
+      data: payload,
+    };
   }
 
   @Post()
   async createPost(@Body() body: CreatePostDto) {
-    return this.coreDatabase.createPost({
+    const created = await this.coreDatabase.createPost({
       authorId: body.authorId,
       caption: body.caption,
       media: body.media ?? [],
       tags: body.tags ?? [],
     });
+    const post = {
+      ...created,
+      author: await this.coreDatabase.getUser(created.authorId),
+    };
+    return {
+      success: true,
+      message: 'Post created successfully.',
+      ...post,
+      post,
+      data: post,
+    };
   }
 
   @Post('create')
@@ -58,11 +87,33 @@ export class PostsController {
 
   @Patch(':id')
   async updatePost(@Param('id') id: string, @Body() body: UpdatePostDto) {
-    return this.coreDatabase.updatePost(id, body);
+    const updated = await this.coreDatabase.updatePost(id, body);
+    const post = {
+      ...updated,
+      author: await this.coreDatabase.getUser(updated.authorId),
+    };
+    return {
+      success: true,
+      message: 'Post updated successfully.',
+      ...post,
+      post,
+      data: post,
+    };
   }
 
   @Delete(':id')
   async deletePost(@Param('id') id: string) {
     return this.coreDatabase.deletePost(id);
+  }
+
+  private wrapListResponse(message: string, items: unknown[]) {
+    return {
+      success: true,
+      message,
+      data: items,
+      items,
+      results: items,
+      count: items.length,
+    };
   }
 }

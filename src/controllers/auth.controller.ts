@@ -65,11 +65,7 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: 'Invalid credentials.' })
   async login(@Body() body: LoginDto) {
     const session = await this.coreDatabase.authenticateUser(body);
-    return {
-      success: true,
-      message: 'Login successful.',
-      data: session,
-    };
+    return this.buildSessionResponse(session, 'Login successful.');
   }
 
   @Post('google')
@@ -80,22 +76,20 @@ export class AuthController {
   })
   @ApiBody({ type: GoogleAuthDto })
   async googleAuth(@Body() body: GoogleAuthDto) {
-    return {
-      success: true,
-      message: 'Google authentication successful.',
-      data: await this.coreDatabase.loginWithGoogle(body),
-    };
+    return this.buildSessionResponse(
+      await this.coreDatabase.loginWithGoogle(body),
+      'Google authentication successful.',
+    );
   }
 
   @Post('refresh-token')
   @ApiOperation({ summary: 'Refresh access token using refresh token' })
   @ApiBody({ type: RefreshTokenDto })
   async refreshToken(@Body() body: RefreshTokenDto) {
-    return {
-      success: true,
-      message: 'Token refreshed successfully.',
-      data: await this.coreDatabase.refreshUserToken(body.refreshToken),
-    };
+    return this.buildSessionResponse(
+      await this.coreDatabase.refreshUserToken(body.refreshToken),
+      'Token refreshed successfully.',
+    );
   }
 
   @Post('logout')
@@ -137,21 +131,19 @@ export class AuthController {
       new Date(Date.now() + 10 * 60 * 1000),
     );
     const delivery = await this.mailService.sendVerificationEmail(user.email, code);
-
-    return {
-      success: true,
-      message:
-        'Signup successful. A 6-digit verification code has been sent to the email address.',
-      data: {
-        user,
-        verification: {
-          required: true,
-          email: user.email,
-          verificationExpiresInMinutes: 10,
-          delivery,
-        },
-      },
+    const session = await this.coreDatabase.createUserSession(user.id);
+    const verification = {
+      required: true,
+      email: user.email,
+      verificationExpiresInMinutes: 10,
+      delivery,
     };
+
+    return this.buildSessionResponse(
+      session,
+      'Signup successful. A 6-digit verification code has been sent to the email address.',
+      { verification },
+    );
   }
 
   @Post('verify-email/confirm')
@@ -173,12 +165,11 @@ export class AuthController {
 
     const user = await this.coreDatabase.markEmailVerified(body.email);
     await this.coreDatabase.deleteAuthCode(body.email, 'verify_email');
+    const session = await this.coreDatabase.createUserSession(user.id);
 
-    return {
-      success: true,
-      message: 'Email verified successfully.',
-      data: user,
-    };
+    return this.buildSessionResponse(session, 'Email verified successfully.', {
+      emailVerified: true,
+    });
   }
 
   @Post('forgot-password')
@@ -249,7 +240,27 @@ export class AuthController {
     return {
       success: true,
       message: 'Current user fetched successfully.',
+      user,
+      profile: user,
       data: user,
+    };
+  }
+
+  private buildSessionResponse(
+    session: Record<string, unknown>,
+    message: string,
+    extras: Record<string, unknown> = {},
+  ) {
+    return {
+      success: true,
+      message,
+      ...session,
+      ...extras,
+      user: session.user,
+      data: {
+        ...session,
+        ...extras,
+      },
     };
   }
 

@@ -23,12 +23,32 @@ export class UploadsController {
 
   @Get('uploads')
   getUploads() {
-    return this.extendedData.getUploads();
+    const uploads = this.extendedData.getUploads();
+    return {
+      success: true,
+      message: 'Uploads fetched successfully.',
+      data: uploads,
+      items: uploads,
+      results: uploads,
+      count: uploads.length,
+    };
   }
 
   @Get('uploads/:id')
   getUpload(@Param('id') id: string) {
-    return this.extendedData.getUpload(id);
+    const upload = this.extendedData.getUpload(id);
+    const remotePath = upload.secureUrl ?? upload.url ?? null;
+    return {
+      success: true,
+      message: 'Upload fetched successfully.',
+      upload,
+      url: remotePath,
+      secureUrl: upload.secureUrl,
+      remotePath,
+      path: remotePath,
+      fileUrl: remotePath,
+      data: upload,
+    };
   }
 
   @Post(['uploads', 'upload-manager'])
@@ -87,10 +107,22 @@ export class UploadsController {
       provider: uploaded.provider,
     });
 
-    return {
-      success: true,
+    const remotePath = uploaded.secureUrl ?? uploaded.url ?? uploadTask.secureUrl ?? uploadTask.url;
+    const payload = {
       upload: uploadTask,
       asset: uploaded,
+      url: remotePath ?? uploaded.url ?? uploadTask.url ?? null,
+      secureUrl: uploaded.secureUrl ?? uploadTask.secureUrl ?? null,
+      remotePath: remotePath ?? null,
+      path: remotePath ?? null,
+      fileUrl: remotePath ?? null,
+    };
+
+    return {
+      success: true,
+      message: 'File uploaded successfully.',
+      ...payload,
+      data: payload,
     };
   }
 }
