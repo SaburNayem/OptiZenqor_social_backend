@@ -357,6 +357,21 @@ export class AppExtensionsDataService {
     };
   }
 
+  getActiveAccount() {
+    const account = this.linkedAccounts.find((item) => item.id === this.activeAccountId);
+    if (!account) {
+      throw new NotFoundException(`Account ${this.activeAccountId} not found`);
+    }
+    return {
+      success: true,
+      accountId: this.activeAccountId,
+      activeAccountId: this.activeAccountId,
+      account,
+      active: account,
+      data: account,
+    };
+  }
+
   setActiveAccount(accountId: string) {
     const account = this.linkedAccounts.find((item) => item.id === accountId);
     if (!account) {
@@ -365,8 +380,11 @@ export class AppExtensionsDataService {
     this.activeAccountId = accountId;
     return {
       success: true,
+      accountId: this.activeAccountId,
       activeAccountId: this.activeAccountId,
       account,
+      active: account,
+      data: account,
     };
   }
 
@@ -401,6 +419,24 @@ export class AppExtensionsDataService {
 
   getVerificationRequest() {
     return this.verificationRequest;
+  }
+
+  getVerificationRequestStatus() {
+    return {
+      success: true,
+      ...this.verificationRequest,
+      data: this.verificationRequest,
+      result: this.verificationRequest,
+    };
+  }
+
+  getVerificationDocuments() {
+    return {
+      success: true,
+      documents: this.verificationRequest.requiredDocuments,
+      items: this.verificationRequest.requiredDocuments,
+      data: this.verificationRequest.requiredDocuments,
+    };
   }
 
   toggleVerificationDocument(documentName: string) {

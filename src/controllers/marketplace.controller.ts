@@ -37,10 +37,9 @@ export class MarketplaceController {
     };
   }
 
-  @Get()
-  getMarketplaceOverview() {
+  private buildMarketplacePayload() {
     const products = this.platformData.getProducts();
-    const masterData = this.extendedData.getMasterData();
+    const categories = this.extendedData.getMasterData().marketplaceCategories;
     const workspace = this.appExtensionsData.getMarketplaceWorkspace();
     const sellers = [...new Set(products.map((item) => item.sellerId))].map((sellerId) =>
       this.buildSellerProfile(sellerId),
@@ -48,7 +47,20 @@ export class MarketplaceController {
 
     return {
       totalProducts: products.length,
-      categories: masterData.marketplaceCategories,
+      products,
+      items: products,
+      categories,
+      sellers,
+      savedItemIds: workspace.savedItemIds,
+      followedSellerIds: workspace.followedSellerIds,
+      savedSearches: workspace.savedSearches,
+      recentSearches: workspace.recentSearches,
+      trendingSearches: workspace.trendingSearches,
+      notifications: workspace.notifications,
+      blockedKeywords: workspace.blockedKeywords,
+      chatMessages: workspace.chatMessages,
+      offerHistory: workspace.offerHistory,
+      orders: workspace.orders,
       featuredProducts: products.slice(0, 5),
       trendingProducts: products
         .slice()
@@ -58,8 +70,19 @@ export class MarketplaceController {
         .slice()
         .sort((left, right) => right.views - left.views)
         .slice(0, 8),
-      sellers,
       workspace,
+    };
+  }
+
+  @Get()
+  getMarketplaceOverview() {
+    const payload = this.buildMarketplacePayload();
+    return {
+      success: true,
+      message: 'Marketplace fetched successfully.',
+      ...payload,
+      data: payload,
+      result: payload,
     };
   }
 

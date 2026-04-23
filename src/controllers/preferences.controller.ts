@@ -46,9 +46,20 @@ export class PreferencesController {
   @Get('blocked-muted-accounts')
   @ApiQuery({ name: 'actorId', required: false })
   getBlockedMutedAccounts(@Query('actorId') actorId?: string) {
+    const blocked = this.platformData.getBlockedUsers(actorId);
+    const blockedMuted = this.appExtensionsData.getBlockedMutedAccounts();
     return {
-      blockedAccounts: this.platformData.getBlockedUsers(actorId),
-      ...this.appExtensionsData.getBlockedMutedAccounts(),
+      success: true,
+      blocked,
+      muted: blockedMuted.mutedAccounts,
+      blockedAccounts: blocked,
+      ...blockedMuted,
+      data: {
+        blocked,
+        muted: blockedMuted.mutedAccounts,
+        blockedAccounts: blocked,
+        ...blockedMuted,
+      },
     };
   }
 }

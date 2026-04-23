@@ -16,6 +16,16 @@ export class VerificationRequestController {
     return this.appExtensionsData.getVerificationRequest();
   }
 
+  @Get('status')
+  getVerificationRequestStatus() {
+    return this.appExtensionsData.getVerificationRequestStatus();
+  }
+
+  @Get('documents')
+  getVerificationDocuments() {
+    return this.appExtensionsData.getVerificationDocuments();
+  }
+
   @Patch('documents')
   toggleDocument(@Body() body: ToggleVerificationDocumentDto) {
     return this.appExtensionsData.toggleVerificationDocument(body.documentName);
