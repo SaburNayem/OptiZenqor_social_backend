@@ -56,8 +56,8 @@ export class EventsController {
   }
 
   @Post('pool/create')
-  createEventFromPool(@Body() body: CreateEventDto & { pollTemplate?: string }) {
-    const event = this.createEvent(body);
+  async createEventFromPool(@Body() body: CreateEventDto & { pollTemplate?: string }) {
+    const event = await this.createEvent(body);
     return {
       ...event,
       pollTemplate: body.pollTemplate ?? null,

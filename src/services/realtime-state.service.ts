@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { CoreDatabaseService } from './core-database.service';
+import { StateSnapshotService } from './state-snapshot.service';
 
 type CallMode = 'voice' | 'video';
 type CallStatus = 'ringing' | 'ongoing' | 'ended' | 'missed';
@@ -38,8 +39,11 @@ interface CallSessionRecord {
 }
 
 @Injectable()
-export class RealtimeStateService {
-  constructor(private readonly coreDatabase: CoreDatabaseService) {}
+export class RealtimeStateService implements OnModuleInit {
+  constructor(
+    private readonly coreDatabase: CoreDatabaseService,
+    private readonly stateSnapshots: StateSnapshotService,
+  ) {}
 
   private readonly socketUsers = new Map<string, string>();
   private readonly userSockets = new Map<string, Set<string>>();
@@ -47,6 +51,20 @@ export class RealtimeStateService {
   private readonly threadTyping = new Map<string, Set<string>>();
   private readonly callSessions = new Map<string, CallSessionRecord>();
   private readonly lastSeen = new Map<string, string>();
+
+  async onModuleInit() {
+    const snapshot = await this.stateSnapshots.load<CallSessionRecord[]>(
+      'realtime_call_sessions',
+    );
+    if (!snapshot) {
+      return;
+    }
+
+    this.callSessions.clear();
+    for (const session of snapshot) {
+      this.callSessions.set(session.id, session);
+    }
+  }
 
   async authenticateClient(accessToken?: string, fallbackUserId?: string) {
     const userFromToken = accessToken
@@ -250,6 +268,7 @@ export class RealtimeStateService {
       });
     }
 
+    await this.persistState();
     return session;
   }
 
@@ -282,6 +301,7 @@ export class RealtimeStateService {
       });
     }
     session.status = 'ongoing';
+    await this.persistState();
     return session;
   }
 
@@ -292,6 +312,7 @@ export class RealtimeStateService {
       participant.state = 'left';
       participant.leftAt = new Date().toISOString();
     }
+    await this.persistState();
     return session;
   }
 
@@ -315,6 +336,7 @@ export class RealtimeStateService {
       createdAt: new Date().toISOString(),
     };
     session.signals.push(signal);
+    await this.persistState();
     return signal;
   }
 
@@ -324,6 +346,7 @@ export class RealtimeStateService {
     session.endedAt = new Date().toISOString();
     session.endedBy = endedBy;
     session.reason = reason ?? 'completed';
+    void this.persistState();
     return session;
   }
 
@@ -361,5 +384,12 @@ export class RealtimeStateService {
         'call.ended',
       ],
     };
+  }
+
+  private async persistState() {
+    await this.stateSnapshots.save(
+      'realtime_call_sessions',
+      [...this.callSessions.values()],
+    );
   }
 }

@@ -21,14 +21,23 @@ export class StoriesController {
   @ApiQuery({ name: 'userId', required: false })
   getStories(@Query('userId') userId?: string) {
     const stories = this.platformData.getStories(userId);
-    return {
-      success: true,
-      message: 'Stories fetched successfully.',
-      data: stories,
-      items: stories,
-      results: stories,
-      count: stories.length,
-    };
+    return this.wrapListResponse('Stories fetched successfully.', stories);
+  }
+
+  @Get('archive')
+  getArchivedStories() {
+    const stories = this.extendedData
+      .getArchivedStoryIds()
+      .map((storyId) => this.platformData.getStory(storyId));
+    return this.wrapListResponse('Archived stories fetched successfully.', stories);
+  }
+
+  @Get(':id/viewers')
+  getStoryViewers(@Param('id') id: string) {
+    return this.wrapListResponse(
+      'Story viewers fetched successfully.',
+      this.extendedData.getStoryViewers(id),
+    );
   }
 
   @Get(':id')
@@ -89,5 +98,16 @@ export class StoriesController {
   @Delete(':id')
   deleteStory(@Param('id') id: string) {
     return this.platformData.deleteStory(id);
+  }
+
+  private wrapListResponse(message: string, items: unknown[]) {
+    return {
+      success: true,
+      message,
+      data: items,
+      items,
+      results: items,
+      count: items.length,
+    };
   }
 }

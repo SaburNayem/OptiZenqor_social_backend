@@ -95,7 +95,7 @@ export class UploadsController {
       mimeType: file.mimetype,
     });
 
-    const uploadTask = this.extendedData.registerUpload({
+    const uploadTask = await this.extendedData.registerUpload({
       fileName: file.originalname,
       progress: 1,
       status: 'completed',

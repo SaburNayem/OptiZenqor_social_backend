@@ -1,7 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { StateSnapshotService } from '../services/state-snapshot.service';
 
 @Injectable()
-export class AppExtensionsDataService {
+export class AppExtensionsDataService implements OnModuleInit {
+  constructor(private readonly stateSnapshots: StateSnapshotService) {}
+
   private linkedAccounts = [
     {
       id: 'u1',
@@ -350,6 +353,36 @@ export class AppExtensionsDataService {
     responseTime: 'Usually within 24 hours',
   };
 
+  async onModuleInit() {
+    const snapshot = await this.stateSnapshots.load<any>('app_extensions_state');
+
+    if (!snapshot) {
+      return;
+    }
+
+    this.linkedAccounts = snapshot.linkedAccounts ?? this.linkedAccounts;
+    this.activeAccountId = snapshot.activeAccountId ?? this.activeAccountId;
+    this.activitySessions = snapshot.activitySessions ?? this.activitySessions;
+    this.loginHistory = snapshot.loginHistory ?? this.loginHistory;
+    this.verificationRequest =
+      snapshot.verificationRequest ?? this.verificationRequest;
+    this.reportCenter = snapshot.reportCenter ?? this.reportCenter;
+    this.deepLinkState = snapshot.deepLinkState ?? this.deepLinkState;
+    this.appUpdate = snapshot.appUpdate ?? this.appUpdate;
+    this.offlineSync = snapshot.offlineSync ?? this.offlineSync;
+    this.localizationSupport =
+      snapshot.localizationSupport ?? this.localizationSupport;
+    this.activePolls = snapshot.activePolls ?? this.activePolls;
+    this.draftPolls = snapshot.draftPolls ?? this.draftPolls;
+    this.personalizationInterests =
+      snapshot.personalizationInterests ?? this.personalizationInterests;
+    this.legalCompliance = snapshot.legalCompliance ?? this.legalCompliance;
+    this.pushNotificationPreferences =
+      snapshot.pushNotificationPreferences ?? this.pushNotificationPreferences;
+    this.marketplaceWorkspace =
+      snapshot.marketplaceWorkspace ?? this.marketplaceWorkspace;
+  }
+
   getAccountSwitching() {
     return {
       accounts: this.linkedAccounts,
@@ -372,12 +405,13 @@ export class AppExtensionsDataService {
     };
   }
 
-  setActiveAccount(accountId: string) {
+  async setActiveAccount(accountId: string) {
     const account = this.linkedAccounts.find((item) => item.id === accountId);
     if (!account) {
       throw new NotFoundException(`Account ${accountId} not found`);
     }
     this.activeAccountId = accountId;
+    await this.persistState();
     return {
       success: true,
       accountId: this.activeAccountId,
@@ -398,22 +432,24 @@ export class AppExtensionsDataService {
     };
   }
 
-  logoutOtherDevices() {
+  async logoutOtherDevices() {
     this.activitySessions = this.activitySessions.map((item) =>
       item.isCurrent
         ? item
         : { ...item, active: false, lastActive: 'Signed out remotely' },
     );
+    await this.persistState();
     return this.getActivitySessions();
   }
 
-  revokeSession(sessionId: string) {
+  async revokeSession(sessionId: string) {
     const session = this.activitySessions.find((item) => item.id === sessionId);
     if (!session) {
       throw new NotFoundException(`Session ${sessionId} not found`);
     }
     session.active = false;
     session.lastActive = 'Signed out remotely';
+    await this.persistState();
     return session;
   }
 
@@ -439,7 +475,7 @@ export class AppExtensionsDataService {
     };
   }
 
-  toggleVerificationDocument(documentName: string) {
+  async toggleVerificationDocument(documentName: string) {
     if (this.verificationRequest.selectedDocuments.includes(documentName)) {
       this.verificationRequest.selectedDocuments =
         this.verificationRequest.selectedDocuments.filter((item) => item !== documentName);
@@ -449,20 +485,24 @@ export class AppExtensionsDataService {
         documentName,
       ];
     }
+    await this.persistState();
     return this.verificationRequest;
   }
 
-  submitVerificationRequest() {
+  async submitVerificationRequest() {
     this.verificationRequest = {
       ...this.verificationRequest,
       status: 'pending',
       reason: 'Documents uploaded. Under review.',
       submittedAt: new Date().toISOString(),
     };
+    await this.persistState();
     return this.verificationRequest;
   }
 
-  updateVerificationStatus(status: 'notRequested' | 'pending' | 'approved' | 'rejected') {
+  async updateVerificationStatus(
+    status: 'notRequested' | 'pending' | 'approved' | 'rejected',
+  ) {
     const reason =
       status === 'notRequested'
         ? 'Submit creator or business documents to start review.'
@@ -480,6 +520,7 @@ export class AppExtensionsDataService {
           ? null
           : (this.verificationRequest.submittedAt ?? new Date().toISOString()),
     };
+    await this.persistState();
     return this.verificationRequest;
   }
 
@@ -487,11 +528,12 @@ export class AppExtensionsDataService {
     return this.reportCenter;
   }
 
-  submitReport(reason: string) {
+  async submitReport(reason: string) {
     this.reportCenter = {
       ...this.reportCenter,
       history: [{ reason, status: 'Submitted' }, ...this.reportCenter.history],
     };
+    await this.persistState();
     return this.reportCenter;
   }
 
@@ -499,7 +541,7 @@ export class AppExtensionsDataService {
     return this.deepLinkState;
   }
 
-  resolveDeepLink(url: string) {
+  async resolveDeepLink(url: string) {
     const path = url
       .replace('optizenqor://', '/')
       .replace('https://optizenqor.app', '')
@@ -509,6 +551,7 @@ export class AppExtensionsDataService {
       ...this.deepLinkState,
       recentLinks: [url, ...this.deepLinkState.recentLinks].slice(0, 5),
     };
+    await this.persistState();
     return {
       url,
       path: resolvedPath,
@@ -520,11 +563,12 @@ export class AppExtensionsDataService {
     return this.appUpdate;
   }
 
-  startAppUpdate() {
+  async startAppUpdate() {
     this.appUpdate = {
       ...this.appUpdate,
       isUpdating: false,
     };
+    await this.persistState();
     return {
       ...this.appUpdate,
       status: 'completed',
@@ -536,11 +580,12 @@ export class AppExtensionsDataService {
     return this.offlineSync;
   }
 
-  retryOfflineSync() {
+  async retryOfflineSync() {
     this.offlineSync = {
       isOffline: false,
       queue: this.offlineSync.queue.map((action) => ({ ...action, pending: false })),
     };
+    await this.persistState();
     return this.offlineSync;
   }
 
@@ -548,7 +593,7 @@ export class AppExtensionsDataService {
     return this.localizationSupport;
   }
 
-  setLocale(localeCode: string) {
+  async setLocale(localeCode: string) {
     const locale = this.localizationSupport.locales.find(
       (item) => item.localeCode === localeCode,
     );
@@ -559,6 +604,7 @@ export class AppExtensionsDataService {
       ...this.localizationSupport,
       selected: localeCode,
     };
+    await this.persistState();
     return this.localizationSupport;
   }
 
@@ -566,11 +612,12 @@ export class AppExtensionsDataService {
     return this.maintenanceMode;
   }
 
-  retryMaintenance() {
+  async retryMaintenance() {
     this.maintenanceMode = {
       ...this.maintenanceMode,
       isRetrying: false,
     };
+    await this.persistState();
     return {
       ...this.maintenanceMode,
       status: 'retried',
@@ -585,7 +632,7 @@ export class AppExtensionsDataService {
     };
   }
 
-  votePoll(id: string, optionIndex: number) {
+  async votePoll(id: string, optionIndex: number) {
     this.activePolls = this.activePolls.map((entry) => {
       if (entry.id !== id || optionIndex < 0 || optionIndex >= entry.votes.length) {
         return entry;
@@ -602,6 +649,7 @@ export class AppExtensionsDataService {
     if (!updated) {
       throw new NotFoundException(`Poll ${id} not found`);
     }
+    await this.persistState();
     return updated;
   }
 
@@ -617,10 +665,11 @@ export class AppExtensionsDataService {
     };
   }
 
-  toggleInterest(name: string) {
+  async toggleInterest(name: string) {
     this.personalizationInterests = this.personalizationInterests.map((item) =>
       item.name === name ? { ...item, selected: !item.selected } : item,
     );
+    await this.persistState();
     return this.getPersonalizationOnboarding();
   }
 
@@ -655,7 +704,7 @@ export class AppExtensionsDataService {
     return this.legalCompliance;
   }
 
-  updateLegalCompliance(
+  async updateLegalCompliance(
     patch: Partial<{
       termsAccepted: boolean;
       privacyAccepted: boolean;
@@ -666,6 +715,7 @@ export class AppExtensionsDataService {
       ...this.legalCompliance,
       ...patch,
     };
+    await this.persistState();
     return this.legalCompliance;
   }
 
@@ -680,12 +730,13 @@ export class AppExtensionsDataService {
     return this.pushNotificationPreferences;
   }
 
-  updatePushNotificationPreference(title: string, enabled: boolean) {
+  async updatePushNotificationPreference(title: string, enabled: boolean) {
     const preference = this.pushNotificationPreferences.find((item) => item.title === title);
     if (!preference) {
       throw new NotFoundException(`Notification preference ${title} not found`);
     }
     preference.enabled = enabled;
+    await this.persistState();
     return preference;
   }
 
@@ -705,7 +756,7 @@ export class AppExtensionsDataService {
     return this.marketplaceWorkspace;
   }
 
-  createMarketplaceOrder(input: {
+  async createMarketplaceOrder(input: {
     productId: string;
     productTitle: string;
     amount: number;
@@ -728,10 +779,32 @@ export class AppExtensionsDataService {
       ...this.marketplaceWorkspace,
       orders: [order, ...this.marketplaceWorkspace.orders],
     };
+    await this.persistState();
     return order;
   }
 
   getSupportMail() {
     return this.supportMail;
+  }
+
+  private async persistState() {
+    await this.stateSnapshots.save('app_extensions_state', {
+      linkedAccounts: this.linkedAccounts,
+      activeAccountId: this.activeAccountId,
+      activitySessions: this.activitySessions,
+      loginHistory: this.loginHistory,
+      verificationRequest: this.verificationRequest,
+      reportCenter: this.reportCenter,
+      deepLinkState: this.deepLinkState,
+      appUpdate: this.appUpdate,
+      offlineSync: this.offlineSync,
+      localizationSupport: this.localizationSupport,
+      activePolls: this.activePolls,
+      draftPolls: this.draftPolls,
+      personalizationInterests: this.personalizationInterests,
+      legalCompliance: this.legalCompliance,
+      pushNotificationPreferences: this.pushNotificationPreferences,
+      marketplaceWorkspace: this.marketplaceWorkspace,
+    });
   }
 }

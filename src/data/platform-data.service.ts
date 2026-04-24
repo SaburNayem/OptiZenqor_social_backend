@@ -2,10 +2,12 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
   UnauthorizedException,
 } from '@nestjs/common';
 import { randomBytes, randomUUID } from 'crypto';
 import { EcosystemDataService } from './ecosystem-data.service';
+import { StateSnapshotService } from '../services/state-snapshot.service';
 
 export type RoleType =
   | 'User'
@@ -200,8 +202,11 @@ interface BlockRelationRecord {
 }
 
 @Injectable()
-export class PlatformDataService {
-  constructor(private readonly ecosystemData: EcosystemDataService) {}
+export class PlatformDataService implements OnModuleInit {
+  constructor(
+    private readonly ecosystemData: EcosystemDataService,
+    private readonly stateSnapshots: StateSnapshotService,
+  ) {}
 
   private readonly users: UserRecord[] = [
     {
@@ -661,6 +666,28 @@ export class PlatformDataService {
     },
   ];
 
+  async onModuleInit() {
+    const snapshot = await this.stateSnapshots.load<{
+      blockRelations: BlockRelationRecord[];
+      stories: StoryRecord[];
+      reels: ReelRecord[];
+      events: EventRecord[];
+      products: ProductRecord[];
+      campaigns: NotificationCampaignRecord[];
+    }>('platform_data_state');
+
+    if (!snapshot) {
+      return;
+    }
+
+    this.replaceArray(this.blockRelations, snapshot.blockRelations);
+    this.replaceArray(this.stories, snapshot.stories);
+    this.replaceArray(this.reels, snapshot.reels);
+    this.replaceArray(this.events, snapshot.events);
+    this.replaceArray(this.products, snapshot.products);
+    this.replaceArray(this.campaigns, snapshot.campaigns);
+  }
+
   getUsers(role?: string) {
     return role ? this.users.filter((user) => user.role === role) : this.users;
   }
@@ -986,7 +1013,7 @@ export class PlatformDataService {
       .map((targetId) => this.toUserPreview(this.getUser(targetId)));
   }
 
-  blockUser(targetId: string, actorId: string, reason?: string) {
+  async blockUser(targetId: string, actorId: string, reason?: string) {
     this.getUser(targetId);
     this.getUser(actorId);
     const existing = this.blockRelations.find(
@@ -1010,6 +1037,7 @@ export class PlatformDataService {
       blockedAt: new Date().toISOString(),
     };
     this.blockRelations.unshift(blockRecord);
+    await this.persistState();
     return {
       success: true,
       actorId,
@@ -1020,7 +1048,7 @@ export class PlatformDataService {
     };
   }
 
-  unblockUser(targetId: string, actorId: string) {
+  async unblockUser(targetId: string, actorId: string) {
     this.getUser(targetId);
     this.getUser(actorId);
     const before = this.blockRelations.length;
@@ -1028,6 +1056,7 @@ export class PlatformDataService {
       (relation) => !(relation.actorId === actorId && relation.targetId === targetId),
     );
     this.blockRelations.splice(0, this.blockRelations.length, ...filtered);
+    await this.persistState();
     return {
       success: true,
       actorId,
@@ -1237,7 +1266,7 @@ export class PlatformDataService {
     };
   }
 
-  createStory(
+  async createStory(
     input: Pick<
       StoryRecord,
       | 'userId'
@@ -1262,10 +1291,11 @@ export class PlatformDataService {
       createdAt: new Date().toISOString(),
     };
     this.stories.unshift(story);
+    await this.persistState();
     return story;
   }
 
-  updateStory(
+  async updateStory(
     id: string,
     patch: Partial<
       Pick<
@@ -1285,18 +1315,20 @@ export class PlatformDataService {
       throw new NotFoundException(`Story ${id} not found`);
     }
     Object.assign(story, patch);
+    await this.persistState();
     return {
       ...story,
       author: this.getUser(story.userId),
     };
   }
 
-  deleteStory(id: string) {
+  async deleteStory(id: string) {
     const index = this.stories.findIndex((item) => item.id === id);
     if (index === -1) {
       throw new NotFoundException(`Story ${id} not found`);
     }
     const [removed] = this.stories.splice(index, 1);
+    await this.persistState();
     return {
       success: true,
       removed,
@@ -1325,7 +1357,7 @@ export class PlatformDataService {
     };
   }
 
-  createReel(
+  async createReel(
     input: Pick<
       ReelRecord,
       | 'authorId'
@@ -1360,10 +1392,11 @@ export class PlatformDataService {
       createdAt: new Date().toISOString(),
     };
     this.reels.unshift(reel);
+    await this.persistState();
     return reel;
   }
 
-  updateReel(
+  async updateReel(
     id: string,
     patch: Partial<
       Pick<
@@ -1385,18 +1418,20 @@ export class PlatformDataService {
       throw new NotFoundException(`Reel ${id} not found`);
     }
     Object.assign(reel, patch);
+    await this.persistState();
     return {
       ...reel,
       author: this.getUser(reel.authorId),
     };
   }
 
-  deleteReel(id: string) {
+  async deleteReel(id: string) {
     const index = this.reels.findIndex((item) => item.id === id);
     if (index === -1) {
       throw new NotFoundException(`Reel ${id} not found`);
     }
     const [removed] = this.reels.splice(index, 1);
+    await this.persistState();
     return {
       success: true,
       removed,
@@ -1525,7 +1560,7 @@ export class PlatformDataService {
     return event;
   }
 
-  createEvent(
+  async createEvent(
     input: Omit<EventRecord, 'id' | 'status' | 'rsvped' | 'saved' | 'mediaGallery' | 'hostToolsSummary'> & {
       status?: EventRecord['status'];
       rsvped?: boolean;
@@ -1544,13 +1579,15 @@ export class PlatformDataService {
       hostToolsSummary: input.hostToolsSummary ?? 'Host tools placeholder',
     };
     this.events.unshift(event);
+    await this.persistState();
     return event;
   }
 
-  toggleEventRsvp(id: string, userId: string) {
+  async toggleEventRsvp(id: string, userId: string) {
     const event = this.getEvent(id);
     this.getUser(userId);
     event.rsvped = !event.rsvped;
+    await this.persistState();
     return {
       ...event,
       action: event.rsvped ? 'rsvped' : 'rsvp_removed',
@@ -1558,10 +1595,11 @@ export class PlatformDataService {
     };
   }
 
-  toggleEventSave(id: string, userId: string) {
+  async toggleEventSave(id: string, userId: string) {
     const event = this.getEvent(id);
     this.getUser(userId);
     event.saved = !event.saved;
+    await this.persistState();
     return {
       ...event,
       action: event.saved ? 'saved' : 'unsaved',
@@ -1581,7 +1619,12 @@ export class PlatformDataService {
     return product;
   }
 
-  createProduct(input: Omit<ProductRecord, 'id' | 'listingStatus' | 'reviewStatus' | 'views' | 'watchers' | 'chats'>) {
+  async createProduct(
+    input: Omit<
+      ProductRecord,
+      'id' | 'listingStatus' | 'reviewStatus' | 'views' | 'watchers' | 'chats'
+    >,
+  ) {
     const product: ProductRecord = {
       id: `prd${this.products.length + 1}`,
       ...input,
@@ -1592,6 +1635,7 @@ export class PlatformDataService {
       chats: 0,
     };
     this.products.unshift(product);
+    await this.persistState();
     return product;
   }
 
@@ -1614,7 +1658,9 @@ export class PlatformDataService {
     return this.campaigns;
   }
 
-  createCampaign(input: Pick<NotificationCampaignRecord, 'name' | 'audience' | 'schedule'>) {
+  async createCampaign(
+    input: Pick<NotificationCampaignRecord, 'name' | 'audience' | 'schedule'>,
+  ) {
     const campaign: NotificationCampaignRecord = {
       id: `cmp-${this.campaigns.length + 1}`,
       name: input.name,
@@ -1623,6 +1669,7 @@ export class PlatformDataService {
       status: 'Scheduled',
     };
     this.campaigns.unshift(campaign);
+    await this.persistState();
     return campaign;
   }
 
@@ -1737,5 +1784,23 @@ export class PlatformDataService {
       ['8:37 PM', 'Finance Admin', 'Updated premium plan', 'Creator Pro', 'Success'],
       ['8:10 PM', 'Support Admin', 'Restored account', '@nexa.studio', 'Success'],
     ];
+  }
+
+  private replaceArray<T>(target: T[], next?: T[]) {
+    if (!next) {
+      return;
+    }
+    target.splice(0, target.length, ...next);
+  }
+
+  private async persistState() {
+    await this.stateSnapshots.save('platform_data_state', {
+      blockRelations: this.blockRelations,
+      stories: this.stories,
+      reels: this.reels,
+      events: this.events,
+      products: this.products,
+      campaigns: this.campaigns,
+    });
   }
 }

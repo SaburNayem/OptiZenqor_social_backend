@@ -59,6 +59,22 @@ export class ProfilesController {
     );
   }
 
+  @Get('profile/:id/tagged-posts')
+  async getTaggedPosts(@Param('id') id: string) {
+    return this.wrapListResponse(
+      'Tagged posts fetched successfully.',
+      this.ecosystemData.getTaggedPostSummaries(id),
+    );
+  }
+
+  @Get('profile/:id/mention-history')
+  async getMentionHistory(@Param('id') id: string) {
+    return this.wrapListResponse(
+      'Mention history fetched successfully.',
+      this.ecosystemData.getMentionHistory(id),
+    );
+  }
+
   @Get('user-profile/edit')
   @ApiQuery({ name: 'id', required: false })
   async getUserProfileEditState(
@@ -176,6 +192,33 @@ export class ProfilesController {
     );
   }
 
+  @Get('follow-unfollow/:id/mutuals')
+  async getFollowFeatureMutuals(
+    @Param('id') id: string,
+    @Query('viewerId') viewerId?: string,
+    @Query('userId') userId?: string,
+    @Query('actorId') actorId?: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const followState = await this.coreDatabase.getFollowState(
+      id,
+      await this.resolveActorIdFromQuery(
+        [viewerId, userId, actorId],
+        authorization,
+      ),
+    );
+    const payload = this.decorateFollowState(followState);
+    return {
+      success: true,
+      message: 'Mutual connections fetched successfully.',
+      ...payload,
+      data: payload.mutuals,
+      items: payload.mutuals,
+      results: payload.mutuals,
+      count: payload.mutuals.length,
+    };
+  }
+
   @Patch('follow-unfollow/:id/follow')
   @Post('follow-unfollow/:id/follow')
   async followUserAlias(
@@ -240,6 +283,20 @@ export class ProfilesController {
     return this.resolveTargetId(actorId, authorization);
   }
 
+  private async resolveActorIdFromQuery(
+    candidates: Array<string | undefined>,
+    authorization?: string,
+  ) {
+    for (const candidate of candidates) {
+      const normalized = candidate?.trim();
+      if (normalized) {
+        return normalized;
+      }
+    }
+
+    return (await this.resolveViewerId(authorization)) ?? 'u1';
+  }
+
   private async resolveViewerId(authorization?: string) {
     const token = authorization?.replace(/^Bearer\s+/i, '');
     const user = await this.coreDatabase.resolveUserFromAccessToken(token);
@@ -299,13 +356,36 @@ export class ProfilesController {
       targetId,
       followerId,
       isFollowing,
+      following: isFollowing,
+      followed: isFollowing,
       hasPendingRequest: false,
+      pending: false,
+      requested: false,
+      requestPending: false,
       data: {
         targetId,
         followerId,
         isFollowing,
+        following: isFollowing,
+        followed: isFollowing,
         hasPendingRequest: false,
+        pending: false,
+        requested: false,
+        requestPending: false,
       },
+    };
+  }
+
+  private decorateFollowState(
+    followState: Awaited<ReturnType<CoreDatabaseService['getFollowState']>>,
+  ) {
+    return {
+      ...followState,
+      following: followState.isFollowing,
+      followed: followState.isFollowing,
+      pending: followState.hasPendingRequest,
+      requested: followState.hasPendingRequest,
+      requestPending: followState.hasPendingRequest,
     };
   }
 }

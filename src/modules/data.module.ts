@@ -10,6 +10,7 @@ import { CoreDatabaseService } from '../services/core-database.service';
 import { DatabaseService } from '../services/database.service';
 import { MailService } from '../services/mail.service';
 import { RealtimeStateService } from '../services/realtime-state.service';
+import { StateSnapshotService } from '../services/state-snapshot.service';
 
 @Global()
 @Module({
@@ -24,6 +25,7 @@ import { RealtimeStateService } from '../services/realtime-state.service';
     DatabaseService,
     CoreDatabaseService,
     RealtimeStateService,
+    StateSnapshotService,
     MailService,
   ],
   exports: [
@@ -37,6 +39,7 @@ import { RealtimeStateService } from '../services/realtime-state.service';
     DatabaseService,
     CoreDatabaseService,
     RealtimeStateService,
+    StateSnapshotService,
     MailService,
   ],
 })

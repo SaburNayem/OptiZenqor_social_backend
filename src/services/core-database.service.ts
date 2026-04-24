@@ -558,6 +558,69 @@ export class CoreDatabaseService implements OnModuleInit {
     return rows.map((row) => this.toUserPreview(this.mapUser(row)));
   }
 
+  async getFollowState(targetId: string, actorId?: string | null) {
+    await this.getUser(targetId);
+    const normalizedActorId = actorId?.trim();
+
+    if (!normalizedActorId || normalizedActorId === targetId) {
+      return {
+        targetId,
+        actorId: normalizedActorId ?? null,
+        isFollowing: false,
+        hasPendingRequest: false,
+        isFollowedBy: false,
+        mutuals: [],
+        mutualCount: 0,
+      };
+    }
+
+    await this.getUser(normalizedActorId);
+
+    const [followingResult, followedByResult, mutualsResult] = await Promise.all([
+      this.database.query(
+        `select 1
+         from app_follow_relations
+         where follower_id = $1 and target_id = $2
+         limit 1`,
+        [normalizedActorId, targetId],
+      ),
+      this.database.query(
+        `select 1
+         from app_follow_relations
+         where follower_id = $1 and target_id = $2
+         limit 1`,
+        [targetId, normalizedActorId],
+      ),
+      this.database.query<UserRow>(
+        `select distinct u.*
+         from app_follow_relations actor_rel
+         join app_follow_relations target_rel
+           on target_rel.target_id = actor_rel.target_id
+         join app_users u on u.id = actor_rel.target_id
+         where actor_rel.follower_id = $1
+           and target_rel.follower_id = $2
+           and u.id not in ($1, $2)
+         order by u.followers desc, u.name asc
+         limit 12`,
+        [normalizedActorId, targetId],
+      ),
+    ]);
+
+    const mutuals = mutualsResult.rows.map((row) =>
+      this.toUserPreview(this.mapUser(row)),
+    );
+
+    return {
+      targetId,
+      actorId: normalizedActorId,
+      isFollowing: Boolean(followingResult.rows[0]),
+      hasPendingRequest: false,
+      isFollowedBy: Boolean(followedByResult.rows[0]),
+      mutuals,
+      mutualCount: mutuals.length,
+    };
+  }
+
   async getFeed() {
     const posts = await this.getPosts();
     return Promise.all(
@@ -1346,6 +1409,11 @@ export class CoreDatabaseService implements OnModuleInit {
   }
 
   private async seedCoreData() {
+    const shouldSeedDemoData = (process.env.CORE_DB_SEED ?? 'false') === 'true';
+    if (!shouldSeedDemoData) {
+      return;
+    }
+
     const existingUsers = await this.database.query<QueryResultRow & { count: string }>(
       `select count(*)::text as count from app_users`,
     );

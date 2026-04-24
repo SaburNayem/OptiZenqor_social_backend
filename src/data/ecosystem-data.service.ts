@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { StateSnapshotService } from '../services/state-snapshot.service';
 
 export interface HashtagRecord {
   tag: string;
@@ -115,6 +116,29 @@ export interface CommunityRecord {
   allowChatRoom: boolean;
   notificationLevel: 'all' | 'highlights' | 'off';
 }
+
+type CommunityMutationInput = {
+  name: string;
+  description: string;
+  privacy?: CommunityRecord['privacy'];
+  category?: string;
+  location?: string;
+  tags?: string[];
+  rules?: string[];
+  links?: string[];
+  contactInfo?: string;
+  coverColors?: number[];
+  avatarColor?: number;
+  approvalRequired?: boolean;
+  allowEvents?: boolean;
+  allowLive?: boolean;
+  allowPolls?: boolean;
+  allowMarketplace?: boolean;
+  allowChatRoom?: boolean;
+  notificationLevel?: CommunityRecord['notificationLevel'];
+  ownerId?: string;
+  ownerName?: string;
+};
 
 export interface JobRecord {
   id: string;
@@ -245,7 +269,9 @@ export interface LiveStreamRecord {
 }
 
 @Injectable()
-export class EcosystemDataService {
+export class EcosystemDataService implements OnModuleInit {
+  constructor(private readonly stateSnapshots: StateSnapshotService) {}
+
   private readonly hashtags: HashtagRecord[] = [
     { tag: '#creator', count: 12040 },
     { tag: '#dhaka', count: 9420 },
@@ -472,6 +498,50 @@ export class EcosystemDataService {
       notificationLevel: 'all',
     },
   ];
+
+  private readonly taggedPostSummariesByUser: Record<
+    string,
+    Array<{
+      id: string;
+      title: string;
+      location: string;
+      mediaCount: number;
+    }>
+  > = {
+    u1: [
+      {
+        id: 'p1',
+        title: 'Creator studio check-in',
+        location: 'Dhaka',
+        mediaCount: 1,
+      },
+      {
+        id: 'p2',
+        title: 'Launch card review',
+        location: 'Remote',
+        mediaCount: 2,
+      },
+    ],
+    u4: [
+      {
+        id: 'p3',
+        title: 'Weekend storefront drop',
+        location: 'Cox\'s Bazar',
+        mediaCount: 3,
+      },
+    ],
+  };
+
+  private readonly mentionHistoryByUser: Record<
+    string,
+    Array<{ message: string }>
+  > = {
+    u1: [
+      { message: '@rafiahmed mentioned you in a post' },
+      { message: '@luna.crafts mentioned you in a reel comment' },
+    ],
+    u4: [{ message: '@mayaquinn mentioned you in a collaboration thread' }],
+  };
 
   private readonly jobs: JobRecord[] = [
     {
@@ -867,6 +937,25 @@ export class EcosystemDataService {
     },
   ];
 
+  async onModuleInit() {
+    const snapshot = await this.stateSnapshots.load<any>('ecosystem_data_state');
+
+    if (!snapshot) {
+      return;
+    }
+
+    this.replaceArray(this.bookmarks, snapshot.bookmarks);
+    this.replaceArray(this.hiddenItems, snapshot.hiddenItems);
+    this.replaceArray(this.collections, snapshot.collections);
+    this.replaceArray(this.pages, snapshot.pages);
+    this.replaceArray(this.communities, snapshot.communities);
+    this.replaceArray(this.jobs, snapshot.jobs);
+    this.replaceArray(this.jobApplications, snapshot.jobApplications);
+    this.notificationInbox = snapshot.notificationInbox ?? this.notificationInbox;
+    this.replaceArray(this.tickets, snapshot.tickets);
+    this.replaceArray(this.liveStreams, snapshot.liveStreams);
+  }
+
   getHashtags() {
     return this.hashtags;
   }
@@ -904,7 +993,7 @@ export class EcosystemDataService {
     return bookmark;
   }
 
-  addBookmark(input: {
+  async addBookmark(input: {
     id: string;
     title?: string;
     type?: 'post' | 'reel' | 'product';
@@ -925,6 +1014,7 @@ export class EcosystemDataService {
       createdAt: new Date().toISOString(),
     };
     this.bookmarks.unshift(bookmark);
+    await this.persistState();
     return {
       success: true,
       action: 'bookmarked',
@@ -932,12 +1022,13 @@ export class EcosystemDataService {
     };
   }
 
-  removeBookmark(id: string) {
+  async removeBookmark(id: string) {
     const index = this.bookmarks.findIndex((item) => item.id === id);
     if (index === -1) {
       throw new NotFoundException(`Bookmark ${id} not found`);
     }
     const [removed] = this.bookmarks.splice(index, 1);
+    await this.persistState();
     return {
       success: true,
       action: 'removed',
@@ -957,7 +1048,7 @@ export class EcosystemDataService {
     return item;
   }
 
-  hideItem(input: {
+  async hideItem(input: {
     targetId: string;
     targetType: 'post' | 'reel' | 'story' | 'comment';
   }) {
@@ -977,6 +1068,7 @@ export class EcosystemDataService {
       hiddenAt: new Date().toISOString(),
     };
     this.hiddenItems.unshift(hidden);
+    await this.persistState();
     return {
       success: true,
       action: 'hidden',
@@ -984,12 +1076,13 @@ export class EcosystemDataService {
     };
   }
 
-  unhideItem(targetId: string) {
+  async unhideItem(targetId: string) {
     const index = this.hiddenItems.findIndex((item) => item.targetId === targetId);
     if (index === -1) {
       throw new NotFoundException(`Hidden item ${targetId} not found`);
     }
     const [removed] = this.hiddenItems.splice(index, 1);
+    await this.persistState();
     return {
       success: true,
       action: 'unhidden',
@@ -1009,7 +1102,7 @@ export class EcosystemDataService {
     return collection;
   }
 
-  createCollection(name: string) {
+  async createCollection(name: string) {
     const collection: SavedCollectionRecord = {
       id: `col${this.collections.length + 1}`,
       name,
@@ -1017,10 +1110,11 @@ export class EcosystemDataService {
       privacy: 'private',
     };
     this.collections.unshift(collection);
+    await this.persistState();
     return collection;
   }
 
-  addItemToCollection(collectionId: string, itemId: string) {
+  async addItemToCollection(collectionId: string, itemId: string) {
     const collection = this.collections.find((item) => item.id === collectionId);
     if (!collection) {
       throw new NotFoundException(`Collection ${collectionId} not found`);
@@ -1028,10 +1122,14 @@ export class EcosystemDataService {
     if (!collection.itemIds.includes(itemId)) {
       collection.itemIds.push(itemId);
     }
+    await this.persistState();
     return collection;
   }
 
-  updateCollection(id: string, patch: { name?: string; privacy?: string; itemId?: string }) {
+  async updateCollection(
+    id: string,
+    patch: { name?: string; privacy?: string; itemId?: string },
+  ) {
     const collection = this.collections.find((item) => item.id === id);
     if (!collection) {
       throw new NotFoundException(`Collection ${id} not found`);
@@ -1045,15 +1143,17 @@ export class EcosystemDataService {
     if (patch.itemId && !collection.itemIds.includes(patch.itemId)) {
       collection.itemIds.push(patch.itemId);
     }
+    await this.persistState();
     return collection;
   }
 
-  deleteCollection(id: string) {
+  async deleteCollection(id: string) {
     const index = this.collections.findIndex((item) => item.id === id);
     if (index === -1) {
       throw new NotFoundException(`Collection ${id} not found`);
     }
     const [removed] = this.collections.splice(index, 1);
+    await this.persistState();
     return {
       success: true,
       removed,
@@ -1072,7 +1172,7 @@ export class EcosystemDataService {
     return page;
   }
 
-  createPage(input: {
+  async createPage(input: {
     name: string;
     about: string;
     category: string;
@@ -1102,10 +1202,11 @@ export class EcosystemDataService {
       highlights: ['Welcome'],
     };
     this.pages.unshift(page);
+    await this.persistState();
     return page;
   }
 
-  togglePageFollow(id: string) {
+  async togglePageFollow(id: string) {
     const page = this.getPage(id);
     page.following = !page.following;
     page.followersCount = Math.max(
@@ -1113,6 +1214,7 @@ export class EcosystemDataService {
       (page.followersCount ?? 0) + (page.following ? 1 : -1),
     );
     page.actionButtonLabel = page.following ? 'Following' : 'Follow';
+    await this.persistState();
     return page;
   }
 
@@ -1125,6 +1227,141 @@ export class EcosystemDataService {
     if (!community) {
       throw new NotFoundException(`Community ${id} not found`);
     }
+    return community;
+  }
+
+  getTaggedPostSummaries(userId: string) {
+    return this.taggedPostSummariesByUser[userId] ?? [];
+  }
+
+  getMentionHistory(userId: string) {
+    return this.mentionHistoryByUser[userId] ?? [];
+  }
+
+  async joinCommunity(id: string, userId = 'u1', userName = 'Maya Quinn') {
+    const community = this.getCommunity(id);
+    if (!community.joined) {
+      community.joined = true;
+      community.memberCount += 1;
+    }
+
+    const existingMember = community.members.find((member) => member.id === userId);
+    if (!existingMember) {
+      community.members.unshift({
+        id: userId,
+        name: userName,
+        role: 'member',
+        accentColor: community.avatarColor,
+        topContributor: false,
+        following: false,
+      });
+    }
+
+    await this.persistState();
+    return {
+      community,
+      joined: true,
+      memberCount: community.memberCount,
+    };
+  }
+
+  async leaveCommunity(id: string, userId = 'u1') {
+    const community = this.getCommunity(id);
+    if (community.joined) {
+      community.joined = false;
+      community.memberCount = Math.max(0, community.memberCount - 1);
+    }
+
+    const memberIndex = community.members.findIndex((member) => member.id === userId);
+    if (memberIndex >= 0) {
+      community.members.splice(memberIndex, 1);
+    }
+
+    await this.persistState();
+    return {
+      community,
+      joined: false,
+      memberCount: community.memberCount,
+    };
+  }
+
+  async createCommunity(input: CommunityMutationInput) {
+    const community: CommunityRecord = {
+      id: `com${this.communities.length + 1}`,
+      name: input.name,
+      description: input.description,
+      privacy: input.privacy ?? 'public',
+      memberCount: 1,
+      coverColors: input.coverColors?.length ? input.coverColors : [0xff1e40af, 0xff2bb0a1],
+      avatarColor: input.avatarColor ?? 0xff2563eb,
+      tags: input.tags ?? [],
+      rules: input.rules ?? ['Be respectful', 'No spam'],
+      createdLabel: 'Created just now',
+      category: input.category ?? 'General',
+      location: input.location ?? 'Global',
+      links: input.links ?? [],
+      contactInfo: input.contactInfo ?? 'community@optizenqor.app',
+      posts: [],
+      events: [],
+      members: [
+        {
+          id: input.ownerId ?? 'u1',
+          name: input.ownerName ?? 'Maya Quinn',
+          role: 'admin',
+          accentColor: input.avatarColor ?? 0xff2563eb,
+          topContributor: true,
+          following: false,
+        },
+      ],
+      recentActivity: ['Community created just now'],
+      pinnedPosts: [],
+      announcements: [],
+      trendingPosts: [],
+      joined: true,
+      approvalRequired: input.approvalRequired ?? false,
+      allowEvents: input.allowEvents ?? true,
+      allowLive: input.allowLive ?? true,
+      allowPolls: input.allowPolls ?? true,
+      allowMarketplace: input.allowMarketplace ?? false,
+      allowChatRoom: input.allowChatRoom ?? true,
+      notificationLevel: input.notificationLevel ?? 'all',
+    };
+    this.communities.unshift(community);
+    await this.persistState();
+    return community;
+  }
+
+  async updateCommunity(id: string, patch: Partial<CommunityMutationInput>) {
+    const community = this.getCommunity(id);
+    if (patch.name !== undefined) community.name = patch.name;
+    if (patch.description !== undefined) community.description = patch.description;
+    if (patch.privacy !== undefined) community.privacy = patch.privacy;
+    if (patch.category !== undefined) community.category = patch.category;
+    if (patch.location !== undefined) community.location = patch.location;
+    if (patch.tags !== undefined) community.tags = patch.tags;
+    if (patch.rules !== undefined) community.rules = patch.rules;
+    if (patch.links !== undefined) community.links = patch.links;
+    if (patch.contactInfo !== undefined) community.contactInfo = patch.contactInfo;
+    if (patch.coverColors !== undefined && patch.coverColors.length > 0) {
+      community.coverColors = patch.coverColors;
+    }
+    if (patch.avatarColor !== undefined) community.avatarColor = patch.avatarColor;
+    if (patch.approvalRequired !== undefined) {
+      community.approvalRequired = patch.approvalRequired;
+    }
+    if (patch.allowEvents !== undefined) community.allowEvents = patch.allowEvents;
+    if (patch.allowLive !== undefined) community.allowLive = patch.allowLive;
+    if (patch.allowPolls !== undefined) community.allowPolls = patch.allowPolls;
+    if (patch.allowMarketplace !== undefined) {
+      community.allowMarketplace = patch.allowMarketplace;
+    }
+    if (patch.allowChatRoom !== undefined) {
+      community.allowChatRoom = patch.allowChatRoom;
+    }
+    if (patch.notificationLevel !== undefined) {
+      community.notificationLevel = patch.notificationLevel;
+    }
+    await this.persistState();
     return community;
   }
 
@@ -1158,7 +1395,7 @@ export class EcosystemDataService {
     };
   }
 
-  createJob(input: {
+  async createJob(input: {
     title: string;
     company: string;
     location: string;
@@ -1195,11 +1432,23 @@ export class EcosystemDataService {
       deadlineLabel: 'Add deadline',
     };
     this.jobs.unshift(job);
+    await this.persistState();
     return job;
   }
 
-  applyForJob(jobId: string, applicantName: string) {
+  async applyForJob(jobId: string, applicantName: string) {
     const job = this.getJob(jobId);
+    const application = {
+      id: `a${this.jobApplications.length + 1}`,
+      jobId,
+      applicantName,
+      status: 'pending',
+      appliedDate: new Date().toISOString().slice(0, 10),
+      timeline: ['Application submitted'],
+    };
+    this.jobApplications.unshift(application);
+    job.applied = true;
+    await this.persistState();
     return {
       success: true,
       applicantName,
@@ -1207,6 +1456,7 @@ export class EcosystemDataService {
       jobTitle: job.title,
       status: 'pending',
       submittedAt: new Date().toISOString(),
+      application,
     };
   }
 
@@ -1284,6 +1534,7 @@ export class EcosystemDataService {
       },
     };
     this.notificationInbox.unshift(notification);
+    void this.persistState();
     return notification;
   }
 
@@ -1310,7 +1561,7 @@ export class EcosystemDataService {
     return this.tickets;
   }
 
-  createTicket(subject: string, category: string) {
+  async createTicket(subject: string, category: string) {
     const ticket: SupportTicketRecord = {
       id: `tkt${this.tickets.length + 1}`,
       subject,
@@ -1319,6 +1570,7 @@ export class EcosystemDataService {
       createdAt: new Date().toISOString(),
     };
     this.tickets.unshift(ticket);
+    await this.persistState();
     return ticket;
   }
 
@@ -1362,7 +1614,10 @@ export class EcosystemDataService {
     return this.getLiveStream('live1');
   }
 
-  addLiveStreamComment(id: string, input: { username: string; message: string; avatarUrl?: string }) {
+  async addLiveStreamComment(
+    id: string,
+    input: { username: string; message: string; avatarUrl?: string },
+  ) {
     const liveStream = this.getLiveStream(id);
     liveStream.comments ??= [];
     const comment = {
@@ -1373,10 +1628,11 @@ export class EcosystemDataService {
       verified: false,
     };
     liveStream.comments.push(comment);
+    await this.persistState();
     return comment;
   }
 
-  addLiveStreamReaction(id: string, type: 'like' | 'love' | 'wow') {
+  async addLiveStreamReaction(id: string, type: 'like' | 'love' | 'wow') {
     const liveStream = this.getLiveStream(id);
     liveStream.reactions ??= [];
     const reaction = {
@@ -1384,6 +1640,7 @@ export class EcosystemDataService {
       type,
     };
     liveStream.reactions.push(reaction);
+    await this.persistState();
     return reaction;
   }
 
@@ -1431,5 +1688,27 @@ export class EcosystemDataService {
         ],
       },
     };
+  }
+
+  private replaceArray<T>(target: T[], next?: T[]) {
+    if (!next) {
+      return;
+    }
+    target.splice(0, target.length, ...next);
+  }
+
+  private async persistState() {
+    await this.stateSnapshots.save('ecosystem_data_state', {
+      bookmarks: this.bookmarks,
+      hiddenItems: this.hiddenItems,
+      collections: this.collections,
+      pages: this.pages,
+      communities: this.communities,
+      jobs: this.jobs,
+      jobApplications: this.jobApplications,
+      notificationInbox: this.notificationInbox,
+      tickets: this.tickets,
+      liveStreams: this.liveStreams,
+    });
   }
 }

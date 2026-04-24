@@ -43,8 +43,8 @@ export class ReelsController {
   }
 
   @Post()
-  createReel(@Body() body: CreateReelDto) {
-    const reel = this.platformData.createReel({
+  async createReel(@Body() body: CreateReelDto) {
+    const reel = await this.platformData.createReel({
       authorId: body.authorId,
       caption: body.caption,
       audioName: body.audioName,
@@ -65,8 +65,8 @@ export class ReelsController {
   }
 
   @Patch(':id')
-  updateReel(@Param('id') id: string, @Body() body: UpdateReelDto) {
-    const reel = this.platformData.updateReel(id, body);
+  async updateReel(@Param('id') id: string, @Body() body: UpdateReelDto) {
+    const reel = await this.platformData.updateReel(id, body);
     return {
       success: true,
       message: 'Reel updated successfully.',

@@ -1,12 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { EcosystemDataService } from './ecosystem-data.service';
 import { PlatformDataService } from './platform-data.service';
+import { StateSnapshotService } from '../services/state-snapshot.service';
 
 @Injectable()
-export class ExtendedDataService {
+export class ExtendedDataService implements OnModuleInit {
   constructor(
     private readonly platformData: PlatformDataService,
     private readonly ecosystemData: EcosystemDataService,
+    private readonly stateSnapshots: StateSnapshotService,
   ) {}
 
   private readonly onboardingSlides = [
@@ -285,6 +287,29 @@ export class ExtendedDataService {
     },
   ];
 
+  private readonly storyViewers: Array<{
+    storyId: string;
+    userId: string;
+    viewedAt: string;
+  }> = [
+    {
+      storyId: 's1',
+      userId: 'u3',
+      viewedAt: '2026-04-24T11:00:00.000Z',
+    },
+    {
+      storyId: 's1',
+      userId: 'u4',
+      viewedAt: '2026-04-24T11:14:00.000Z',
+    },
+  ];
+
+  private readonly archiveState = {
+    posts: ['p1'],
+    stories: ['s1'],
+    reels: ['r1'],
+  };
+
   private reelComments: Array<{
     id: string;
     reelId: string;
@@ -479,6 +504,33 @@ export class ExtendedDataService {
     ],
   };
 
+  async onModuleInit() {
+    const snapshot = await this.stateSnapshots.load<any>('extended_data_state');
+
+    if (!snapshot) {
+      return;
+    }
+
+    Object.assign(this.onboardingState, snapshot.onboardingState ?? {});
+    this.otpStore = snapshot.otpStore ?? this.otpStore;
+    this.drafts = snapshot.drafts ?? this.drafts;
+    this.uploads = snapshot.uploads ?? this.uploads;
+    this.postDetails = snapshot.postDetails ?? this.postDetails;
+    this.postComments = snapshot.postComments ?? this.postComments;
+    this.storyComments = snapshot.storyComments ?? this.storyComments;
+    this.storyReactions = snapshot.storyReactions ?? this.storyReactions;
+    this.replaceArray(this.storyViewers, snapshot.storyViewers);
+    Object.assign(this.archiveState, snapshot.archiveState ?? {});
+    this.reelComments = snapshot.reelComments ?? this.reelComments;
+    this.reelReactions = snapshot.reelReactions ?? this.reelReactions;
+    this.conversationPreferences =
+      snapshot.conversationPreferences ?? this.conversationPreferences;
+    this.notificationPreferences =
+      snapshot.notificationPreferences ?? this.notificationPreferences;
+    this.legalState = snapshot.legalState ?? this.legalState;
+    this.securityState = snapshot.securityState ?? this.securityState;
+  }
+
   getBootstrap() {
     return this.appBootstrap;
   }
@@ -491,10 +543,11 @@ export class ExtendedDataService {
     return this.onboardingState;
   }
 
-  completeOnboarding(selectedInterests: string[]) {
+  async completeOnboarding(selectedInterests: string[]) {
     this.onboardingState.completed = true;
     this.onboardingState.firstLaunch = false;
     this.onboardingState.selectedInterests = selectedInterests;
+    await this.persistState();
     return this.onboardingState;
   }
 
@@ -502,7 +555,7 @@ export class ExtendedDataService {
     return this.interests;
   }
 
-  sendOtp(destination: string, channel: 'email' | 'phone') {
+  async sendOtp(destination: string, channel: 'email' | 'phone') {
     this.otpStore = {
       destination,
       otp: '123456',
@@ -510,37 +563,43 @@ export class ExtendedDataService {
       verified: false,
       status: `sent_${channel}`,
     };
-    return {
+    const response = {
       success: true,
       destination,
       channel,
       cooldownSeconds: this.otpStore.cooldownSeconds,
       verificationStatus: 'sent',
     };
+    await this.persistState();
+    return response;
   }
 
-  resendOtp(destination: string) {
+  async resendOtp(destination: string) {
     this.otpStore.destination = destination;
     this.otpStore.cooldownSeconds = 45;
     this.otpStore.verified = false;
     this.otpStore.status = 'resent';
-    return {
+    const response = {
       success: true,
       destination,
       cooldownSeconds: this.otpStore.cooldownSeconds,
       verificationStatus: 'resent',
     };
+    await this.persistState();
+    return response;
   }
 
-  verifyOtp(code: string) {
+  async verifyOtp(code: string) {
     const ok = code === this.otpStore.otp;
     this.otpStore.verified = ok;
     this.otpStore.status = ok ? 'verified' : 'invalid';
-    return {
+    const response = {
       success: ok,
       destination: this.otpStore.destination,
       verificationStatus: this.otpStore.status,
     };
+    await this.persistState();
+    return response;
   }
 
   getDrafts() {
@@ -553,7 +612,7 @@ export class ExtendedDataService {
     return draft;
   }
 
-  createDraft(title: string, type: string) {
+  async createDraft(title: string, type: string) {
     const draft = {
       id: `draft${this.drafts.length + 1}`,
       title,
@@ -568,20 +627,23 @@ export class ExtendedDataService {
       editHistory: ['Created now'],
     };
     this.drafts.unshift(draft);
+    await this.persistState();
     return draft;
   }
 
-  updateDraft(id: string, patch: Record<string, unknown>) {
+  async updateDraft(id: string, patch: Record<string, unknown>) {
     const draft = this.drafts.find((item) => item.id === id);
     if (!draft) throw new NotFoundException(`Draft ${id} not found`);
     Object.assign(draft, patch);
+    await this.persistState();
     return draft;
   }
 
-  deleteDraft(id: string) {
+  async deleteDraft(id: string) {
     const index = this.drafts.findIndex((item) => item.id === id);
     if (index === -1) throw new NotFoundException(`Draft ${id} not found`);
     const [removed] = this.drafts.splice(index, 1);
+    await this.persistState();
     return { success: true, removed };
   }
 
@@ -593,7 +655,7 @@ export class ExtendedDataService {
     return this.uploads;
   }
 
-  registerUpload(input: {
+  async registerUpload(input: {
     fileName: string;
     progress: number;
     status: string;
@@ -617,6 +679,7 @@ export class ExtendedDataService {
       provider: input.provider ?? null,
     };
     this.uploads.unshift(upload);
+    await this.persistState();
     return upload;
   }
 
@@ -626,12 +689,13 @@ export class ExtendedDataService {
     return upload;
   }
 
-  updateUpload(id: string, action: 'retry' | 'cancel' | 'pause') {
+  async updateUpload(id: string, action: 'retry' | 'cancel' | 'pause') {
     const upload = this.uploads.find((item) => item.id === id);
     if (!upload) throw new NotFoundException(`Upload ${id} not found`);
     if (action === 'retry') upload.status = 'uploading';
     if (action === 'cancel') upload.status = 'failed';
     if (action === 'pause') upload.status = 'paused';
+    await this.persistState();
     return upload;
   }
 
@@ -802,7 +866,7 @@ export class ExtendedDataService {
     return this.storyComments.filter((item) => item.storyId === storyId);
   }
 
-  createStoryComment(storyId: string, userId: string, comment: string) {
+  async createStoryComment(storyId: string, userId: string, comment: string) {
     const next = {
       id: `sc${this.storyComments.length + 1}`,
       storyId,
@@ -811,6 +875,7 @@ export class ExtendedDataService {
       createdAt: new Date().toISOString(),
     };
     this.storyComments.push(next);
+    await this.persistState();
     return next;
   }
 
@@ -818,13 +883,31 @@ export class ExtendedDataService {
     return this.storyReactions.filter((item) => item.storyId === storyId);
   }
 
-  reactToStory(storyId: string, userId: string, reaction: string) {
+  getStoryViewers(storyId: string) {
+    this.platformData.getStory(storyId);
+    return this.storyViewers
+      .filter((item) => item.storyId === storyId)
+      .map((item) => {
+        const user = this.platformData.getUser(item.userId);
+        return {
+          id: user.id,
+          name: user.name,
+          username: user.username,
+          avatar: user.avatar,
+          avatarUrl: user.avatar,
+          viewedAt: item.viewedAt,
+        };
+      });
+  }
+
+  async reactToStory(storyId: string, userId: string, reaction: string) {
     const existing = this.storyReactions.find(
       (item) => item.storyId === storyId && item.userId === userId,
     );
     if (existing) {
       existing.reaction = reaction;
       existing.createdAt = new Date().toISOString();
+      await this.persistState();
       return existing;
     }
     const next = {
@@ -834,6 +917,7 @@ export class ExtendedDataService {
       createdAt: new Date().toISOString(),
     };
     this.storyReactions.push(next);
+    await this.persistState();
     return next;
   }
 
@@ -841,7 +925,7 @@ export class ExtendedDataService {
     return this.reelComments.filter((item) => item.reelId === reelId);
   }
 
-  createReelComment(reelId: string, userId: string, comment: string) {
+  async createReelComment(reelId: string, userId: string, comment: string) {
     const next = {
       id: `rc${this.reelComments.length + 1}`,
       reelId,
@@ -850,6 +934,7 @@ export class ExtendedDataService {
       createdAt: new Date().toISOString(),
     };
     this.reelComments.push(next);
+    await this.persistState();
     return next;
   }
 
@@ -857,13 +942,14 @@ export class ExtendedDataService {
     return this.reelReactions.filter((item) => item.reelId === reelId);
   }
 
-  reactToReel(reelId: string, userId: string, reaction: string) {
+  async reactToReel(reelId: string, userId: string, reaction: string) {
     const existing = this.reelReactions.find(
       (item) => item.reelId === reelId && item.userId === userId,
     );
     if (existing) {
       existing.reaction = reaction;
       existing.createdAt = new Date().toISOString();
+      await this.persistState();
       return existing;
     }
     const next = {
@@ -873,6 +959,7 @@ export class ExtendedDataService {
       createdAt: new Date().toISOString(),
     };
     this.reelReactions.push(next);
+    await this.persistState();
     return next;
   }
 
@@ -903,10 +990,15 @@ export class ExtendedDataService {
     return this.conversationPreferences;
   }
 
-  updateConversationPreference(threadId: string, key: string, value: boolean | string | null) {
+  async updateConversationPreference(
+    threadId: string,
+    key: string,
+    value: boolean | string | null,
+  ) {
     const pref = this.conversationPreferences.find((item) => item.threadId === threadId);
     if (!pref) throw new NotFoundException(`Conversation ${threadId} not found`);
     (pref as Record<string, unknown>)[key] = value;
+    await this.persistState();
     return pref;
   }
 
@@ -914,8 +1006,9 @@ export class ExtendedDataService {
     return this.notificationPreferences;
   }
 
-  updateNotificationPreferences(patch: Record<string, unknown>) {
+  async updateNotificationPreferences(patch: Record<string, unknown>) {
     Object.assign(this.notificationPreferences, patch);
+    await this.persistState();
     return this.notificationPreferences;
   }
 
@@ -939,42 +1032,89 @@ export class ExtendedDataService {
     return this.legalState;
   }
 
-  updateLegalConsents(patch: Record<string, boolean>) {
+  async updateLegalConsents(patch: Record<string, boolean>) {
     Object.assign(this.legalState, patch);
     this.legalState.acceptedAt = new Date().toISOString();
+    await this.persistState();
     return this.legalState;
   }
 
-  requestAccountDeletion(reason?: string) {
-    return {
+  async requestAccountDeletion(reason?: string) {
+    const response = {
       success: true,
       requestedAt: new Date().toISOString(),
       status: 'queued',
       reason: reason ?? 'not_provided',
     };
+    await this.persistState();
+    return response;
   }
 
-  requestDataExport(format?: string) {
-    return {
+  async requestDataExport(format?: string) {
+    const response = {
       success: true,
       requestedAt: new Date().toISOString(),
-      status: 'processing',
+      status: 'queued',
       format: format ?? 'json',
     };
+    await this.persistState();
+    return response;
+  }
+
+  getArchivedPostIds() {
+    return [...this.archiveState.posts];
+  }
+
+  getArchivedStoryIds() {
+    return [...this.archiveState.stories];
+  }
+
+  getArchivedReelIds() {
+    return [...this.archiveState.reels];
   }
 
   getSecurityState() {
     return this.securityState;
   }
 
-  logoutAllSessions() {
+  async logoutAllSessions() {
     this.securityState.sessions = this.securityState.sessions.map((session) => ({
       ...session,
       active: session.isCurrent,
     }));
-    return {
+    const response = {
       success: true,
       revokedSessions: this.securityState.sessions.filter((item) => !item.isCurrent).length,
     };
+    await this.persistState();
+    return response;
+  }
+
+  private replaceArray<T>(target: T[], next?: T[]) {
+    if (!next) {
+      return;
+    }
+    target.splice(0, target.length, ...next);
+  }
+
+  private async persistState() {
+    await this.stateSnapshots.save('extended_data_state', {
+      onboardingState: this.onboardingState,
+      otpStore: this.otpStore,
+      drafts: this.drafts,
+      uploads: this.uploads,
+      postDetails: this.postDetails,
+      postComments: this.postComments,
+      storyComments: this.storyComments,
+      storyReactions: this.storyReactions,
+      storyViewers: this.storyViewers,
+      archiveState: this.archiveState,
+      reelComments: this.reelComments,
+      reelReactions: this.reelReactions,
+      conversationPreferences: this.conversationPreferences,
+      notificationPreferences: this.notificationPreferences,
+      legalState: this.legalState,
+      securityState: this.securityState,
+    });
   }
 }

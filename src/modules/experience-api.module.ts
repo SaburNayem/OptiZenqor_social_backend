@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AccountSwitchingController } from '../controllers/account-switching.controller';
+import { ArchiveController } from '../controllers/archive.controller';
 import { ActivitySessionsController } from '../controllers/activity-sessions.controller';
 import { BlockController } from '../controllers/block.controller';
 import { BookmarksController } from '../controllers/bookmarks.controller';
@@ -37,6 +38,7 @@ import { AppUpdateFlowController } from '../controllers/app-update-flow.controll
     AccountSwitchingController,
     ActivitySessionsController,
     AppUpdateFlowController,
+    ArchiveController,
     BlockController,
     BookmarksController,
     DeepLinkHandlerController,

@@ -20,9 +20,40 @@ export class UsersController {
   }
 
   @Get(':id')
-  async getUser(@Param('id') id: string) {
+  async getUser(
+    @Param('id') id: string,
+    @Query('viewerId') viewerId?: string,
+    @Query('userId') userId?: string,
+    @Query('actorId') actorId?: string,
+    @Headers('authorization') authorization?: string,
+  ) {
     const user = await this.coreDatabase.getUser(id);
-    return this.wrapUserResponse('User fetched successfully.', user);
+    const resolvedActorId = await this.resolveOptionalActorId(
+      [viewerId, userId, actorId],
+      authorization,
+    );
+    const followState = resolvedActorId
+      ? await this.coreDatabase.getFollowState(id, resolvedActorId)
+      : undefined;
+    return this.wrapUserResponse('User fetched successfully.', user, followState);
+  }
+
+  @Get(':id/follow-state')
+  async getFollowState(
+    @Param('id') id: string,
+    @Query('viewerId') viewerId?: string,
+    @Query('userId') userId?: string,
+    @Query('actorId') actorId?: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const followState = await this.coreDatabase.getFollowState(
+      id,
+      await this.resolveRequiredActorId([viewerId, userId, actorId], authorization),
+    );
+    return this.wrapFollowStateResponse(
+      'Follow state fetched successfully.',
+      followState,
+    );
   }
 
   @Get(':id/followers')
@@ -113,6 +144,29 @@ export class UsersController {
     return user?.id ?? 'u1';
   }
 
+  private async resolveOptionalActorId(
+    candidates: Array<string | undefined>,
+    authorization?: string,
+  ) {
+    for (const candidate of candidates) {
+      const normalized = candidate?.trim();
+      if (normalized) {
+        return normalized;
+      }
+    }
+
+    const token = authorization?.replace(/^Bearer\s+/i, '');
+    const user = await this.coreDatabase.resolveUserFromAccessToken(token);
+    return user?.id ?? null;
+  }
+
+  private async resolveRequiredActorId(
+    candidates: Array<string | undefined>,
+    authorization?: string,
+  ) {
+    return (await this.resolveOptionalActorId(candidates, authorization)) ?? 'u1';
+  }
+
   private wrapListResponse(message: string, items: unknown[]) {
     return {
       success: true,
@@ -124,14 +178,20 @@ export class UsersController {
     };
   }
 
-  private wrapUserResponse(message: string, user: Awaited<ReturnType<CoreDatabaseService['getUser']>>) {
+  private wrapUserResponse(
+    message: string,
+    user: Awaited<ReturnType<CoreDatabaseService['getUser']>>,
+    followState?: Awaited<ReturnType<CoreDatabaseService['getFollowState']>>,
+  ) {
+    const followPayload = followState ? this.decorateFollowState(followState) : {};
+    const userPayload = { ...user, ...followPayload };
     return {
       success: true,
       message,
-      ...user,
-      user,
-      profile: user,
-      data: user,
+      ...userPayload,
+      user: userPayload,
+      profile: userPayload,
+      data: userPayload,
     };
   }
 
@@ -147,13 +207,50 @@ export class UsersController {
       targetId,
       followerId,
       isFollowing,
+      following: isFollowing,
+      followed: isFollowing,
       hasPendingRequest: false,
+      pending: false,
+      requested: false,
+      requestPending: false,
       data: {
         targetId,
         followerId,
         isFollowing,
+        following: isFollowing,
+        followed: isFollowing,
         hasPendingRequest: false,
+        pending: false,
+        requested: false,
+        requestPending: false,
       },
+    };
+  }
+
+  private wrapFollowStateResponse(
+    message: string,
+    followState: Awaited<ReturnType<CoreDatabaseService['getFollowState']>>,
+  ) {
+    const payload = this.decorateFollowState(followState);
+    return {
+      success: true,
+      message,
+      ...payload,
+      data: payload,
+      result: payload,
+    };
+  }
+
+  private decorateFollowState(
+    followState: Awaited<ReturnType<CoreDatabaseService['getFollowState']>>,
+  ) {
+    return {
+      ...followState,
+      following: followState.isFollowing,
+      followed: followState.isFollowing,
+      pending: followState.hasPendingRequest,
+      requested: followState.hasPendingRequest,
+      requestPending: followState.hasPendingRequest,
     };
   }
 }

@@ -1,7 +1,8 @@
-import { BadRequestException, Body, Controller, Get, Patch, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ExtendedDataService } from '../data/extended-data.service';
 import { ResendOtpDto, SendOtpDto, VerifyOtpDto } from '../dto/api.dto';
+import { PlatformDataService } from '../data/platform-data.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { MailService } from '../services/mail.service';
 import { RealtimeStateService } from '../services/realtime-state.service';
@@ -13,6 +14,7 @@ export class AccountOpsController {
     private readonly extendedData: ExtendedDataService,
     private readonly realtimeState: RealtimeStateService,
     private readonly coreDatabase: CoreDatabaseService,
+    private readonly platformData: PlatformDataService,
     private readonly mailService: MailService,
   ) {}
 
@@ -22,7 +24,7 @@ export class AccountOpsController {
       return this.sendEmailOtp(body.destination, 'sent');
     }
 
-    const result = this.extendedData.sendOtp(body.destination, body.channel);
+    const result = await this.extendedData.sendOtp(body.destination, body.channel);
     return {
       ...result,
       message: 'OTP sent successfully.',
@@ -36,7 +38,7 @@ export class AccountOpsController {
       return this.sendEmailOtp(body.destination, 'resent');
     }
 
-    const result = this.extendedData.resendOtp(body.destination);
+    const result = await this.extendedData.resendOtp(body.destination);
     return {
       ...result,
       message: 'OTP resent successfully.',
@@ -77,7 +79,7 @@ export class AccountOpsController {
       };
     }
 
-    const result = this.extendedData.verifyOtp(body.code);
+    const result = await this.extendedData.verifyOtp(body.code);
     return {
       ...result,
       message: result.success ? 'OTP verified successfully.' : 'Invalid OTP code.',
@@ -146,16 +148,30 @@ export class AccountOpsController {
   }
 
   @Post('legal/data-export')
-  requestDataExport(@Body() body: { format?: string; userId?: string }) {
-    const exportRequest = this.extendedData.requestDataExport(body.format);
+  async requestDataExport(
+    @Body() body: { format?: string; userId?: string },
+    @Headers('authorization') authorization?: string,
+  ) {
+    const exportRequest = await this.extendedData.requestDataExport(body.format);
+    const userId = await this.resolveExportUserId(body.userId, authorization);
+    const user = await this.coreDatabase.getUser(userId);
+    const posts = await this.coreDatabase.getPosts(userId);
+    const reels = this.platformData.getReels(userId);
+    const summary = {
+      username: user.username,
+      posts: posts.length,
+      reels: reels.length,
+      followers: user.followers,
+      following: user.following,
+      verificationStatus: user.verificationStatus,
+    };
+
     return {
       ...exportRequest,
-      message: 'Data export requested successfully.',
-      userId: body.userId ?? null,
-      data: {
-        ...exportRequest,
-        userId: body.userId ?? null,
-      },
+      message: 'Export requested',
+      userId,
+      data: summary,
+      result: summary,
     };
   }
 
@@ -207,5 +223,16 @@ export class AccountOpsController {
 
   private looksLikeEmail(destination: string) {
     return destination.includes('@');
+  }
+
+  private async resolveExportUserId(userId?: string, authorization?: string) {
+    const normalizedUserId = userId?.trim();
+    if (normalizedUserId) {
+      return normalizedUserId;
+    }
+
+    const token = authorization?.replace(/^Bearer\s+/i, '');
+    const user = await this.coreDatabase.resolveUserFromAccessToken(token);
+    return user?.id ?? 'u1';
   }
 }
