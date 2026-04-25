@@ -1,6 +1,7 @@
 node_modules
 dist
 .env
+.vercel
 temp_mobile_repo
 temp_dashboard_repo
 tsconfig.tsbuildinfo
