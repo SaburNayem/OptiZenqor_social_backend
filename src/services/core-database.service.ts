@@ -187,6 +187,15 @@ export class CoreDatabaseService implements OnModuleInit {
     return row;
   }
 
+  async findUserByEmailOptional(email: string) {
+    const { rows } = await this.database.query<UserRow>(
+      `select * from app_users where lower(email) = lower($1) limit 1`,
+      [email],
+    );
+    const row = rows[0];
+    return row ? this.mapUser(row) : null;
+  }
+
   async createUser(input: {
     name: string;
     username: string;
@@ -1016,6 +1025,72 @@ export class CoreDatabaseService implements OnModuleInit {
     return this.listThreadMessages(threadId);
   }
 
+  async ensureDirectThread(userAId: string, userBId: string) {
+    const participantIds = [...new Set([userAId, userBId].map((value) => value.trim()))].sort();
+    if (participantIds.length !== 2) {
+      throw new ConflictException('Direct threads require two distinct participants.');
+    }
+
+    const [userA, userB] = await Promise.all([
+      this.getUser(participantIds[0]),
+      this.getUser(participantIds[1]),
+    ]);
+
+    const { rows } = await this.database.query<ThreadRow>(
+      `select t.*
+       from chat_threads t
+       join (
+         select thread_id
+         from chat_thread_participants
+         where user_id = any($1::text[])
+         group by thread_id
+         having count(distinct user_id) = 2
+       ) matched on matched.thread_id = t.id
+       where (
+         select count(*)
+         from chat_thread_participants tp
+         where tp.thread_id = t.id
+       ) = 2
+       order by t.created_at desc
+       limit 1`,
+      [participantIds],
+    );
+
+    const existing = rows[0];
+    if (existing) {
+      return this.buildThreadPayload(existing, {
+        includeParticipantIds: true,
+        includeParticipants: true,
+        includeMessages: true,
+      });
+    }
+
+    const threadId = `t${Date.now()}`;
+    const createdAt = new Date().toISOString();
+    await this.database.query(
+      `insert into chat_threads (id, title, participants_label, flag, summary, created_at)
+       values ($1,$2,$3,$4,$5,$6)`,
+      [
+        threadId,
+        `${userA.name} & ${userB.name}`,
+        '2 members',
+        null,
+        'Direct story reply conversation.',
+        createdAt,
+      ],
+    );
+
+    for (const participantId of participantIds) {
+      await this.database.query(
+        `insert into chat_thread_participants (thread_id, user_id, created_at)
+         values ($1,$2,$3)`,
+        [threadId, participantId, createdAt],
+      );
+    }
+
+    return this.getThread(threadId);
+  }
+
   async createMessage(
     threadId: string,
     senderId: string,
@@ -1757,6 +1832,20 @@ export class CoreDatabaseService implements OnModuleInit {
       [username],
     );
     return Boolean(result.rows[0]);
+  }
+
+  async assertUsernameAvailable(username: string, excludeUserId?: string) {
+    const { rows } = await this.database.query<QueryResultRow & { id: string }>(
+      excludeUserId
+        ? `select id from app_users where username = $1 and id <> $2 limit 1`
+        : `select id from app_users where username = $1 limit 1`,
+      excludeUserId ? [username, excludeUserId] : [username],
+    );
+    if (rows[0]) {
+      throw new ConflictException(
+        'Username already exists. Please choose another username.',
+      );
+    }
   }
 
   private async issueTokens(userId: string) {

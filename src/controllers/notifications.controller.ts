@@ -65,6 +65,7 @@ export class NotificationsController {
   }
 
   @Patch(':id/read')
+  @Post(':id/read')
   async markRead(@Param('id') id: string, @Body() body: MarkNotificationReadDto) {
     const notification = await this.coreDatabase.markNotificationRead(id, body.userId);
     return {

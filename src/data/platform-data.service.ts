@@ -62,11 +62,31 @@ export interface StoryRecord {
   userId: string;
   text?: string;
   media: string;
+  mediaItems?: string[];
   seen: boolean;
   isLocalFile: boolean;
   music?: string;
   backgroundColors: number[];
   textColorValue: number;
+  sticker?: string | null;
+  effectName?: string | null;
+  mentionUsername?: string | null;
+  linkLabel?: string | null;
+  linkUrl?: string | null;
+  privacy?: string;
+  collageLayout?: string | null;
+  textOffsetDx?: number;
+  textOffsetDy?: number;
+  textScale?: number;
+  mediaTransforms?: Array<{
+    offsetDx?: number;
+    offsetDy?: number;
+    scale?: number;
+    zIndex?: number;
+    widthFactor?: number;
+    heightFactor?: number;
+    borderRadius?: number;
+  }>;
   createdAt: string;
 }
 
@@ -208,111 +228,9 @@ export class PlatformDataService implements OnModuleInit {
     private readonly stateSnapshots: StateSnapshotService,
   ) {}
 
-  private readonly users: UserRecord[] = [
-    {
-      id: 'u1',
-      name: 'Maya Quinn',
-      username: 'mayaquinn',
-      email: 'maya@optizenqor.app',
-      avatar: 'https://placehold.co/120x120',
-      bio: 'Creator building social products that feel fast, calm, and human.',
-      role: 'Creator',
-      verification: 'Verified',
-      status: 'Active',
-      followers: 82300,
-      following: 421,
-      walletSummary: '$1,280 pending payout',
-      health: 'No active flags. Reel engagement rising 18%.',
-      reports: '2 resolved, 0 open',
-      lastActive: '2m ago',
-      emailVerified: true,
-      blocked: false,
-    },
-    {
-      id: 'u2',
-      name: 'Nexa Studio',
-      username: 'nexa.studio',
-      email: 'studio@nexa.app',
-      avatar: 'https://placehold.co/120x120',
-      bio: 'Business account for campaigns, brand drops, and marketplace launches.',
-      role: 'Business',
-      verification: 'Verified',
-      status: 'Active',
-      followers: 15400,
-      following: 184,
-      walletSummary: '$940 ad credit',
-      health: 'Campaign delivery normal. No sanctions.',
-      reports: '1 open report on ad caption',
-      lastActive: '10m ago',
-      emailVerified: true,
-      blocked: false,
-    },
-    {
-      id: 'u3',
-      name: 'Rafi Ahmed',
-      username: 'rafiahmed',
-      email: 'rafi@optizenqor.app',
-      avatar: 'https://placehold.co/120x120',
-      bio: 'General user exploring stories, events, and chats.',
-      role: 'User',
-      verification: 'Pending',
-      status: 'Review',
-      followers: 9700,
-      following: 283,
-      walletSummary: 'No monetization enabled',
-      health: 'Login from new device. Security note added.',
-      reports: '0 open reports',
-      lastActive: '36m ago',
-      emailVerified: true,
-      blocked: false,
-    },
-    {
-      id: 'u4',
-      name: 'Luna Crafts',
-      username: 'luna.crafts',
-      email: 'luna@crafts.shop',
-      avatar: 'https://placehold.co/120x120',
-      bio: 'Seller storefront for handmade drops and seasonal collections.',
-      role: 'Seller',
-      verification: 'Verified',
-      status: 'Active',
-      followers: 21400,
-      following: 129,
-      walletSummary: '$2,410 available',
-      health: 'Storefront healthy. One refund loop under review.',
-      reports: '1 commerce-related ticket',
-      lastActive: '5m ago',
-      emailVerified: true,
-      blocked: false,
-    },
-    {
-      id: 'u5',
-      name: 'Arif Talent Hub',
-      username: 'arif.talent',
-      email: 'ops@talenthub.io',
-      avatar: 'https://placehold.co/120x120',
-      bio: 'Recruiting and hiring account with community job posts.',
-      role: 'Recruiter',
-      verification: 'Eligible',
-      status: 'Suspended',
-      followers: 6400,
-      following: 92,
-      walletSummary: '$120 boost credit',
-      health: 'Temporarily restricted pending verification document check.',
-      reports: '3 impersonation-related reports',
-      lastActive: '1h ago',
-      emailVerified: true,
-      blocked: false,
-    },
-  ];
+  private readonly users: UserRecord[] = [];
 
-  private readonly userPasswords = new Map<string, string>([
-    ['maya@optizenqor.app', '123456'],
-    ['studio@nexa.app', '123456'],
-    ['rafi@optizenqor.app', '123456'],
-    ['luna@crafts.shop', '123456'],
-    ['ops@talenthub.io', '123456'],
-  ]);
+  private readonly userPasswords = new Map<string, string>();
 
   private readonly userSessions = new Map<
     string,
@@ -324,347 +242,31 @@ export class PlatformDataService implements OnModuleInit {
     { userId: string; accessToken: string; createdAt: string }
   >();
 
-  private readonly followRelations = new Set<string>(['u1:u4', 'u3:u1']);
+  private readonly followRelations = new Set<string>();
   private readonly blockRelations: BlockRelationRecord[] = [];
-  private readonly postReactions: PostReactionRecord[] = [
-    {
-      postId: 'p1',
-      userId: 'u2',
-      reaction: 'like',
-      createdAt: '2026-04-19T14:50:00.000Z',
-    },
-    {
-      postId: 'p1',
-      userId: 'u4',
-      reaction: 'fire',
-      createdAt: '2026-04-19T15:12:00.000Z',
-    },
-  ];
+  private readonly postReactions: PostReactionRecord[] = [];
 
-  private readonly posts: PostRecord[] = [
-    {
-      id: 'p1',
-      authorId: 'u1',
-      caption: 'Building social products that feel fast, calm, and human.',
-      media: ['https://placehold.co/800x600'],
-      tags: ['product', 'design', 'social'],
-      likes: 2300,
-      comments: 148,
-      shares: 54,
-      views: 9200,
-      status: 'Visible',
-      type: 'post',
-      createdAt: '2026-04-19T14:40:00.000Z',
-    },
-    {
-      id: 'p2',
-      authorId: 'u2',
-      caption: 'Which launch card style performs best?',
-      media: ['https://placehold.co/800x600'],
-      tags: ['launch', 'brand'],
-      likes: 1800,
-      comments: 82,
-      shares: 41,
-      views: 7600,
-      status: 'Featured',
-      type: 'post',
-      createdAt: '2026-04-19T12:20:00.000Z',
-    },
-  ];
+  private readonly posts: PostRecord[] = [];
 
-  private readonly stories: StoryRecord[] = [
-    {
-      id: 's1',
-      userId: 'u1',
-      media: '',
-      text: 'Behind the scenes from Dhaka creator hub.',
-      seen: false,
-      isLocalFile: false,
-      music: 'Ambient Rise',
-      backgroundColors: [0xff1e40af, 0xff2bb0a1],
-      textColorValue: 0xffffffff,
-      createdAt: '2026-04-19T13:50:00.000Z',
-    },
-    {
-      id: 's2',
-      userId: 'u4',
-      media: '',
-      text: 'Only 3 hours until storefront unlock.',
-      seen: true,
-      isLocalFile: false,
-      backgroundColors: [0xff0f172a, 0xfff97316],
-      textColorValue: 0xffffffff,
-      createdAt: '2026-04-19T11:00:00.000Z',
-    },
-  ];
+  private readonly stories: StoryRecord[] = [];
 
-  private readonly reels: ReelRecord[] = [
-    {
-      id: 'r1',
-      authorId: 'u1',
-      caption: 'Hook in 2 seconds, transition in 5.',
-      audioName: 'Creator Motion Pack',
-      thumbnail: 'https://placehold.co/600x900',
-      videoUrl: 'https://example.com/reels/r1.mp4',
-      likes: 8200,
-      comments: 415,
-      shares: 182,
-      viewCount: 230000,
-      coverUrl: 'https://placehold.co/600x900/orange',
-      textOverlays: ['Hook in 2 seconds', 'Transition in 5'],
-      subtitleEnabled: true,
-      trimInfo: '00:02-00:14',
-      remixEnabled: true,
-      isDraft: false,
-      createdAt: '2026-04-19T15:10:00.000Z',
-    },
-    {
-      id: 'r2',
-      authorId: 'u4',
-      caption: 'Weekend collection now live.',
-      audioName: 'Store Drop',
-      thumbnail: 'https://placehold.co/600x900',
-      videoUrl: 'https://example.com/reels/r2.mp4',
-      likes: 3100,
-      comments: 94,
-      shares: 39,
-      viewCount: 84000,
-      coverUrl: 'https://placehold.co/600x900/blue',
-      textOverlays: ['Weekend collection now live'],
-      subtitleEnabled: false,
-      remixEnabled: false,
-      isDraft: true,
-      createdAt: '2026-04-19T10:30:00.000Z',
-    },
-  ];
+  private readonly reels: ReelRecord[] = [];
 
-  private readonly threads: ThreadRecord[] = [
-    {
-      id: 't1',
-      title: 'Creator Collab Group',
-      participantIds: ['u1', 'u2', 'u3'],
-      participantsLabel: '6 members',
-      flag: 'Abuse report',
-      summary: 'Two users escalated a creator collaboration dispute.',
-    },
-    {
-      id: 't2',
-      title: 'Buyer and Seller Support',
-      participantIds: ['u3', 'u4'],
-      participantsLabel: '2 members',
-      flag: 'Refund conflict',
-      summary: 'Buyer accuses seller of false shipment update.',
-    },
-  ];
+  private readonly threads: ThreadRecord[] = [];
 
-  private readonly messages: MessageRecord[] = [
-    {
-      id: 'm1',
-      threadId: 't1',
-      senderId: 'u1',
-      text: 'Please remove the clip before reposting it.',
-      read: true,
-      timestamp: '2026-04-19T15:00:00.000Z',
-      attachments: [],
-      replyToMessageId: null,
-      deliveryState: 'read',
-      kind: 'text',
-      mediaPath: null,
-    },
-    {
-      id: 'm2',
-      threadId: 't1',
-      senderId: 'u3',
-      text: 'I can use whatever I want.',
-      read: false,
-      timestamp: '2026-04-19T15:01:00.000Z',
-      attachments: [],
-      replyToMessageId: null,
-      deliveryState: 'delivered',
-      kind: 'text',
-      mediaPath: null,
-    },
-    {
-      id: 'm3',
-      threadId: 't2',
-      senderId: 'u3',
-      text: 'Tracking says delivered but I received nothing.',
-      read: true,
-      timestamp: '2026-04-19T14:00:00.000Z',
-      attachments: [],
-      replyToMessageId: null,
-      deliveryState: 'read',
-      kind: 'text',
-      mediaPath: null,
-    },
-  ];
+  private readonly messages: MessageRecord[] = [];
 
-  private readonly events: EventRecord[] = [
-    {
-      id: 'e1',
-      title: 'Creator Meetup Dhaka',
-      organizer: 'OptiZenqor Creators',
-      date: '2026-04-25',
-      time: '18:00',
-      location: 'Dhaka',
-      status: 'Featured',
-      participants: 120,
-      price: 0,
-      rsvped: true,
-      saved: true,
-      mediaGallery: ['https://placehold.co/800x500', 'https://placehold.co/800x500?text=meetup'],
-      hostToolsSummary: 'Host tools enabled for guest approvals and stage slots.',
-    },
-    {
-      id: 'e2',
-      title: 'Seller Spring Drop Live',
-      organizer: 'Luna Crafts',
-      date: '2026-04-27',
-      time: '20:00',
-      location: 'Remote',
-      status: 'Approved',
-      participants: 340,
-      price: 10,
-      rsvped: false,
-      saved: true,
-      mediaGallery: ['https://placehold.co/800x500?text=seller'],
-      hostToolsSummary: 'Host tools enabled for ticket check-in and promo scheduling.',
-    },
-    {
-      id: 'e3',
-      title: 'Product Hiring Mixer',
-      organizer: 'Arif Talent Hub',
-      date: '2026-05-01',
-      time: '19:30',
-      location: 'Virtual',
-      status: 'Review',
-      participants: 94,
-      price: 0,
-      rsvped: false,
-      saved: false,
-      mediaGallery: ['https://placehold.co/800x500?text=hiring'],
-      hostToolsSummary: 'Host tools pending review approval.',
-    },
-  ];
+  private readonly events: EventRecord[] = [];
 
-  private readonly products: ProductRecord[] = [
-    {
-      id: 'prd1',
-      title: 'Studio Lamp Drop',
-      description: 'Weekend collection now live with warm neutral finish.',
-      price: 149.99,
-      category: 'Home',
-      subcategory: 'Lighting',
-      sellerId: 'u4',
-      sellerName: 'Luna Crafts',
-      location: 'Dhaka',
-      images: ['https://placehold.co/600x400'],
-      condition: 'New',
-      listingStatus: 'Active',
-      reviewStatus: 'Approved',
-      views: 1482,
-      watchers: 82,
-      chats: 17,
-    },
-    {
-      id: 'prd2',
-      title: 'Creator Desk Setup Pack',
-      description: 'Creator gear bundle for streaming and editing.',
-      price: 299.99,
-      category: 'Electronics',
-      subcategory: 'Accessories',
-      sellerId: 'u2',
-      sellerName: 'Nexa Studio',
-      location: 'Remote',
-      images: ['https://placehold.co/600x400'],
-      condition: 'Like New',
-      listingStatus: 'Pending review',
-      reviewStatus: 'Under moderation',
-      views: 944,
-      watchers: 49,
-      chats: 8,
-    },
-  ];
+  private readonly products: ProductRecord[] = [];
 
-  private readonly walletTransactions: WalletTransactionRecord[] = [
-    {
-      id: 'txn-1002',
-      userId: 'u1',
-      title: 'Payout',
-      amount: 480,
-      channel: 'Bank',
-      status: 'Pending',
-      createdAt: '2026-04-19T14:30:00.000Z',
-    },
-    {
-      id: 'txn-1003',
-      userId: 'u4',
-      title: 'Sale income',
-      amount: 320,
-      channel: 'Wallet',
-      status: 'Success',
-      createdAt: '2026-04-19T12:10:00.000Z',
-    },
-  ];
+  private readonly walletTransactions: WalletTransactionRecord[] = [];
 
-  private readonly subscriptions: SubscriptionRecord[] = [
-    {
-      userId: 'u1',
-      userName: 'Maya Quinn',
-      planName: 'Creator Pro',
-      startDate: '2026-04-01',
-      renewalDate: '2026-05-01',
-      billingType: 'Auto renew',
-      status: 'Active',
-    },
-    {
-      userId: 'u2',
-      userName: 'Nexa Studio',
-      planName: 'Business Plus',
-      startDate: '2026-04-10',
-      renewalDate: '2026-05-10',
-      billingType: 'Manual',
-      status: 'Active',
-    },
-  ];
+  private readonly subscriptions: SubscriptionRecord[] = [];
 
-  private readonly plans: PlanRecord[] = [
-    {
-      id: 'plan-1',
-      name: 'Creator Pro',
-      price: 14.99,
-      interval: 'Monthly',
-      features: ['Insights', 'Payouts', 'Badge'],
-      status: 'Active',
-    },
-    {
-      id: 'plan-2',
-      name: 'Business Plus',
-      price: 29.99,
-      interval: 'Monthly',
-      features: ['Ads', 'Pages', 'Analytics'],
-      status: 'Active',
-    },
-  ];
+  private readonly plans: PlanRecord[] = [];
 
-  private readonly campaigns: NotificationCampaignRecord[] = [
-    {
-      id: 'cmp-1',
-      name: 'Weekend creator challenge',
-      audience: 'Creators',
-      schedule: '2026-04-20T03:00:00.000Z',
-      status: 'Draft',
-    },
-    {
-      id: 'cmp-2',
-      name: 'Security alert update',
-      audience: 'All users',
-      schedule: '2026-04-19T08:00:00.000Z',
-      status: 'Sent',
-      delivered: '12.1K',
-      openRate: '64%',
-    },
-  ];
+  private readonly campaigns: NotificationCampaignRecord[] = [];
 
   async onModuleInit() {
     const snapshot = await this.stateSnapshots.load<{
@@ -1249,10 +851,7 @@ export class PlatformDataService implements OnModuleInit {
     const stories = userId
       ? this.stories.filter((story) => story.userId === userId)
       : this.stories;
-    return stories.map((story) => ({
-      ...story,
-      author: this.getUser(story.userId),
-    }));
+    return stories.map((story) => this.mapStory(story));
   }
 
   getStory(id: string) {
@@ -1260,10 +859,7 @@ export class PlatformDataService implements OnModuleInit {
     if (!story) {
       throw new NotFoundException(`Story ${id} not found`);
     }
-    return {
-      ...story,
-      author: this.getUser(story.userId),
-    };
+    return this.mapStory(story);
   }
 
   async createStory(
@@ -1272,27 +868,56 @@ export class PlatformDataService implements OnModuleInit {
       | 'userId'
       | 'text'
       | 'media'
+      | 'mediaItems'
       | 'music'
       | 'isLocalFile'
       | 'backgroundColors'
       | 'textColorValue'
+      | 'sticker'
+      | 'effectName'
+      | 'mentionUsername'
+      | 'linkLabel'
+      | 'linkUrl'
+      | 'privacy'
+      | 'collageLayout'
+      | 'textOffsetDx'
+      | 'textOffsetDy'
+      | 'textScale'
+      | 'mediaTransforms'
     >,
   ) {
+    this.getUser(input.userId);
+    const mediaItems = this.normalizeMediaItems(input.media, input.mediaItems);
     const story: StoryRecord = {
       id: `s${this.stories.length + 1}`,
       userId: input.userId,
       text: input.text,
-      media: input.media,
+      media: input.media || mediaItems[0] || '',
+      mediaItems,
       seen: false,
       isLocalFile: input.isLocalFile,
       music: input.music,
       backgroundColors: input.backgroundColors,
       textColorValue: input.textColorValue,
+      sticker: input.sticker ?? null,
+      effectName: input.effectName ?? null,
+      mentionUsername: input.mentionUsername ?? null,
+      linkLabel: input.linkLabel ?? null,
+      linkUrl: input.linkUrl ?? null,
+      privacy: input.privacy ?? 'public',
+      collageLayout: input.collageLayout ?? null,
+      textOffsetDx: input.textOffsetDx ?? 0,
+      textOffsetDy: input.textOffsetDy ?? 0,
+      textScale: input.textScale ?? 1,
+      mediaTransforms: this.normalizeMediaTransforms(
+        input.mediaTransforms,
+        mediaItems.length,
+      ),
       createdAt: new Date().toISOString(),
     };
     this.stories.unshift(story);
     await this.persistState();
-    return story;
+    return this.mapStory(story);
   }
 
   async updateStory(
@@ -1302,11 +927,23 @@ export class PlatformDataService implements OnModuleInit {
         StoryRecord,
         | 'text'
         | 'media'
+        | 'mediaItems'
         | 'seen'
         | 'music'
         | 'isLocalFile'
         | 'backgroundColors'
         | 'textColorValue'
+        | 'sticker'
+        | 'effectName'
+        | 'mentionUsername'
+        | 'linkLabel'
+        | 'linkUrl'
+        | 'privacy'
+        | 'collageLayout'
+        | 'textOffsetDx'
+        | 'textOffsetDy'
+        | 'textScale'
+        | 'mediaTransforms'
       >
     >,
   ) {
@@ -1315,11 +952,20 @@ export class PlatformDataService implements OnModuleInit {
       throw new NotFoundException(`Story ${id} not found`);
     }
     Object.assign(story, patch);
+    story.mediaItems = this.normalizeMediaItems(story.media, story.mediaItems);
+    story.media = story.media || story.mediaItems[0] || '';
+    story.backgroundColors = story.backgroundColors ?? [0xff1e40af, 0xff2bb0a1];
+    story.textColorValue = story.textColorValue ?? 0xffffffff;
+    story.privacy = story.privacy ?? 'public';
+    story.textOffsetDx = story.textOffsetDx ?? 0;
+    story.textOffsetDy = story.textOffsetDy ?? 0;
+    story.textScale = story.textScale ?? 1;
+    story.mediaTransforms = this.normalizeMediaTransforms(
+      story.mediaTransforms,
+      story.mediaItems.length,
+    );
     await this.persistState();
-    return {
-      ...story,
-      author: this.getUser(story.userId),
-    };
+    return this.mapStory(story);
   }
 
   async deleteStory(id: string) {
@@ -1802,5 +1448,60 @@ export class PlatformDataService implements OnModuleInit {
       products: this.products,
       campaigns: this.campaigns,
     });
+  }
+
+  private mapStory(story: StoryRecord) {
+    const mediaItems = this.normalizeMediaItems(story.media, story.mediaItems);
+    return {
+      id: story.id,
+      userId: story.userId,
+      author: this.toUserPreview(this.getUser(story.userId)),
+      media: story.media || mediaItems[0] || '',
+      mediaItems,
+      isLocalFile: story.isLocalFile,
+      text: story.text ?? '',
+      music: story.music ?? null,
+      backgroundColors: story.backgroundColors ?? [],
+      textColorValue: story.textColorValue ?? 0xffffffff,
+      sticker: story.sticker ?? null,
+      effectName: story.effectName ?? null,
+      mentionUsername: story.mentionUsername ?? null,
+      linkLabel: story.linkLabel ?? null,
+      linkUrl: story.linkUrl ?? null,
+      privacy: story.privacy ?? 'public',
+      collageLayout: story.collageLayout ?? null,
+      textOffsetDx: story.textOffsetDx ?? 0,
+      textOffsetDy: story.textOffsetDy ?? 0,
+      textScale: story.textScale ?? 1,
+      mediaTransforms: this.normalizeMediaTransforms(
+        story.mediaTransforms,
+        mediaItems.length,
+      ),
+      seen: story.seen,
+      createdAt: story.createdAt,
+    };
+  }
+
+  private normalizeMediaItems(media?: string, mediaItems?: string[]) {
+    const values = [...(mediaItems ?? []), ...(media ? [media] : [])]
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return [...new Set(values)];
+  }
+
+  private normalizeMediaTransforms(
+    transforms: StoryRecord['mediaTransforms'],
+    mediaCount: number,
+  ) {
+    const size = Math.max(mediaCount, transforms?.length ?? 0);
+    return Array.from({ length: size }, (_, index) => ({
+      offsetDx: transforms?.[index]?.offsetDx ?? 0,
+      offsetDy: transforms?.[index]?.offsetDy ?? 0,
+      scale: transforms?.[index]?.scale ?? 1,
+      zIndex: transforms?.[index]?.zIndex ?? index,
+      widthFactor: transforms?.[index]?.widthFactor ?? 1,
+      heightFactor: transforms?.[index]?.heightFactor ?? 1,
+      borderRadius: transforms?.[index]?.borderRadius ?? 0,
+    }));
   }
 }

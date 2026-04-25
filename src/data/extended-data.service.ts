@@ -106,11 +106,11 @@ export class ExtendedDataService implements OnModuleInit {
   };
 
   private otpStore = {
-    destination: 'maya@optizenqor.app',
-    otp: '123456',
+    destination: '',
+    otp: '',
     cooldownSeconds: 45,
     verified: false,
-    status: 'pending',
+    status: 'idle',
   };
 
   private drafts: Array<{
@@ -125,34 +125,7 @@ export class ExtendedDataService implements OnModuleInit {
     altText: string | null;
     versionHistory: string[];
     editHistory: string[];
-  }> = [
-    {
-      id: 'draft1',
-      title: 'Creator meetup teaser',
-      type: 'story',
-      scheduledAt: null,
-      audience: 'Everyone',
-      location: 'Dhaka',
-      taggedPeople: ['mayaquinn'],
-      coAuthors: [],
-      altText: 'Creator meetup teaser card',
-      versionHistory: ['v1'],
-      editHistory: ['Created today'],
-    },
-    {
-      id: 'draft2',
-      title: 'Weekly launch note',
-      type: 'post',
-      scheduledAt: '2026-04-20T08:00:00.000Z',
-      audience: 'Followers',
-      location: null,
-      taggedPeople: ['nexa.studio'],
-      coAuthors: [],
-      altText: null,
-      versionHistory: ['v1', 'v2'],
-      editHistory: ['Edited caption', 'Added hashtag'],
-    },
-  ];
+  }> = [];
 
   private uploads: Array<{
     id: string;
@@ -165,47 +138,24 @@ export class ExtendedDataService implements OnModuleInit {
     secureUrl?: string | null;
     publicId?: string | null;
     provider?: string | null;
-  }> = [
-    {
-      id: 'up1',
-      fileName: 'reel-launch-cut.mp4',
-      progress: 0.42,
-      status: 'uploading',
-      mimeType: 'video/mp4',
-      size: 14820034,
-    },
-    {
-      id: 'up2',
-      fileName: 'creator-teaser.png',
-      progress: 1,
-      status: 'completed',
-      mimeType: 'image/png',
-      size: 842344,
-      url: 'https://placehold.co/1280x720',
-      secureUrl: 'https://placehold.co/1280x720',
-      publicId: 'optizenqor/uploads/creator-teaser',
-      provider: 'cloudinary',
-    },
-  ];
+  }> = [];
 
-  private postDetails = [
-    {
-      id: 'p1',
-      authorId: 'u1',
-      caption: 'Building social products that feel fast, calm, and human.',
-      media: ['https://placehold.co/800x600'],
-      likes: 2300,
-      comments: 2,
-      createdAt: '2026-04-19T14:40:00.000Z',
-      audience: 'Everyone',
-      engagementSummary: {
-        likes: 2300,
-        comments: 2,
-        shares: 54,
-        bookmarks: 84,
-      },
-    },
-  ];
+  private postDetails: Array<{
+    id: string;
+    authorId: string;
+    caption: string;
+    media: string[];
+    likes: number;
+    comments: number;
+    createdAt: string;
+    audience: string;
+    engagementSummary: {
+      likes: number;
+      comments: number;
+      shares: number;
+      bookmarks: number;
+    };
+  }> = [];
 
   private postComments: Array<{
     id: string;
@@ -222,40 +172,7 @@ export class ExtendedDataService implements OnModuleInit {
     reactions: Record<string, number>;
     reactedBy: Record<string, string>;
     mentions: string[];
-  }> = [
-    {
-      id: 'pc1',
-      postId: 'p1',
-      authorId: 'u4',
-      author: 'Luna Crafts',
-      message: 'This rollout feels very polished.',
-      replyTo: null,
-      createdAt: '2026-04-19T15:00:00.000Z',
-      likeCount: 12,
-      isLikedByMe: true,
-      isReported: false,
-      isEdited: false,
-      reactions: { like: 8, fire: 4 },
-      reactedBy: { u1: 'like', u2: 'fire' },
-      mentions: [],
-    },
-    {
-      id: 'pc2',
-      postId: 'p1',
-      authorId: 'u3',
-      author: 'Rafi Ahmed',
-      message: 'Would love to see the admin side too.',
-      replyTo: 'pc1',
-      createdAt: '2026-04-19T15:03:00.000Z',
-      likeCount: 3,
-      isLikedByMe: false,
-      isReported: false,
-      isEdited: false,
-      reactions: { like: 3 },
-      reactedBy: { u1: 'like' },
-      mentions: ['mayaquinn'],
-    },
-  ];
+  }> = [];
 
   private storyComments: Array<{
     id: string;
@@ -263,51 +180,25 @@ export class ExtendedDataService implements OnModuleInit {
     userId: string;
     comment: string;
     createdAt: string;
-  }> = [
-    {
-      id: 'sc1',
-      storyId: 's1',
-      userId: 'u4',
-      comment: 'Love this gradient story.',
-      createdAt: '2026-04-19T14:05:00.000Z',
-    },
-  ];
+  }> = [];
 
   private storyReactions: Array<{
     storyId: string;
     userId: string;
     reaction: string;
     createdAt: string;
-  }> = [
-    {
-      storyId: 's1',
-      userId: 'u2',
-      reaction: 'fire',
-      createdAt: '2026-04-19T14:06:00.000Z',
-    },
-  ];
+  }> = [];
 
-  private readonly storyViewers: Array<{
+  private storyViewers: Array<{
     storyId: string;
     userId: string;
     viewedAt: string;
-  }> = [
-    {
-      storyId: 's1',
-      userId: 'u3',
-      viewedAt: '2026-04-24T11:00:00.000Z',
-    },
-    {
-      storyId: 's1',
-      userId: 'u4',
-      viewedAt: '2026-04-24T11:14:00.000Z',
-    },
-  ];
+  }> = [];
 
   private readonly archiveState = {
-    posts: ['p1'],
-    stories: ['s1'],
-    reels: ['r1'],
+    posts: [] as string[],
+    stories: [] as string[],
+    reels: [] as string[],
   };
 
   private reelComments: Array<{
@@ -316,29 +207,14 @@ export class ExtendedDataService implements OnModuleInit {
     userId: string;
     comment: string;
     createdAt: string;
-  }> = [
-    {
-      id: 'rc1',
-      reelId: 'r1',
-      userId: 'u3',
-      comment: 'The pacing here is excellent.',
-      createdAt: '2026-04-19T15:20:00.000Z',
-    },
-  ];
+  }> = [];
 
   private reelReactions: Array<{
     reelId: string;
     userId: string;
     reaction: string;
     createdAt: string;
-  }> = [
-    {
-      reelId: 'r1',
-      userId: 'u4',
-      reaction: 'like',
-      createdAt: '2026-04-19T15:21:00.000Z',
-    },
-  ];
+  }> = [];
 
   private recommendationState = {
     suggestedUsers: [
@@ -863,10 +739,26 @@ export class ExtendedDataService implements OnModuleInit {
   }
 
   getStoryComments(storyId: string) {
-    return this.storyComments.filter((item) => item.storyId === storyId);
+    this.platformData.getStory(storyId);
+    return this.storyComments
+      .filter((item) => item.storyId === storyId)
+      .map((item) => {
+        const user = this.platformData.getUser(item.userId);
+        return {
+          ...item,
+          author: {
+            id: user.id,
+            name: user.name,
+            username: user.username,
+            avatar: user.avatar,
+          },
+        };
+      });
   }
 
   async createStoryComment(storyId: string, userId: string, comment: string) {
+    const story = this.platformData.getStory(storyId);
+    const actor = this.platformData.getUser(userId);
     const next = {
       id: `sc${this.storyComments.length + 1}`,
       storyId,
@@ -875,12 +767,37 @@ export class ExtendedDataService implements OnModuleInit {
       createdAt: new Date().toISOString(),
     };
     this.storyComments.push(next);
+    if (story.userId !== userId) {
+      this.ecosystemData.pushNotification({
+        recipientId: story.userId,
+        title: `${actor.name} replied to your story`,
+        body: comment,
+        routeName: `/stories/${storyId}`,
+        entityId: next.id,
+        type: 'social',
+        metadata: { storyId, actorId: userId, entityType: 'story' },
+      });
+    }
     await this.persistState();
-    return next;
+    return this.getStoryComments(storyId).find((item) => item.id === next.id) ?? next;
   }
 
   getStoryReactions(storyId: string) {
-    return this.storyReactions.filter((item) => item.storyId === storyId);
+    this.platformData.getStory(storyId);
+    return this.storyReactions
+      .filter((item) => item.storyId === storyId)
+      .map((item) => {
+        const user = this.platformData.getUser(item.userId);
+        return {
+          ...item,
+          user: {
+            id: user.id,
+            name: user.name,
+            username: user.username,
+            avatar: user.avatar,
+          },
+        };
+      });
   }
 
   getStoryViewers(storyId: string) {
@@ -901,6 +818,8 @@ export class ExtendedDataService implements OnModuleInit {
   }
 
   async reactToStory(storyId: string, userId: string, reaction: string) {
+    const story = this.platformData.getStory(storyId);
+    const actor = this.platformData.getUser(userId);
     const existing = this.storyReactions.find(
       (item) => item.storyId === storyId && item.userId === userId,
     );
@@ -908,7 +827,7 @@ export class ExtendedDataService implements OnModuleInit {
       existing.reaction = reaction;
       existing.createdAt = new Date().toISOString();
       await this.persistState();
-      return existing;
+      return this.getStoryReactions(storyId).find((item) => item.userId === userId) ?? existing;
     }
     const next = {
       storyId,
@@ -917,8 +836,55 @@ export class ExtendedDataService implements OnModuleInit {
       createdAt: new Date().toISOString(),
     };
     this.storyReactions.push(next);
+    if (story.userId !== userId) {
+      this.ecosystemData.pushNotification({
+        recipientId: story.userId,
+        title: `${actor.name} reacted to your story`,
+        body: `${actor.username} left a ${reaction} reaction.`,
+        routeName: `/stories/${storyId}`,
+        entityId: storyId,
+        type: 'social',
+        metadata: { storyId, reaction, actorId: userId, entityType: 'story' },
+      });
+    }
     await this.persistState();
-    return next;
+    return this.getStoryReactions(storyId).find((item) => item.userId === userId) ?? next;
+  }
+
+  async recordStoryView(storyId: string, userId: string) {
+    const story = this.platformData.getStory(storyId);
+    this.platformData.getUser(userId);
+
+    const existing = this.storyViewers.find(
+      (item) => item.storyId === storyId && item.userId === userId,
+    );
+    const viewedAt = new Date().toISOString();
+
+    if (existing) {
+      existing.viewedAt = viewedAt;
+    } else {
+      this.storyViewers.push({ storyId, userId, viewedAt });
+    }
+
+    if (story.userId !== userId) {
+      await this.persistState();
+      return {
+        success: true,
+        storyId,
+        userId,
+        viewedAt,
+        viewerCount: this.getStoryViewers(storyId).length,
+      };
+    }
+
+    await this.persistState();
+    return {
+      success: true,
+      storyId,
+      userId,
+      viewedAt,
+      viewerCount: this.getStoryViewers(storyId).length,
+    };
   }
 
   getReelComments(reelId: string) {

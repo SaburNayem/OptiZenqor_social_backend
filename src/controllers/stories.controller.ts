@@ -5,9 +5,12 @@ import { PlatformDataService } from '../data/platform-data.service';
 import {
   CreateStoryDto,
   StoryCommentDto,
+  StoryReplyDto,
   StoryReactionDto,
+  StoryViewDto,
   UpdateStoryDto,
 } from '../dto/api.dto';
+import { CoreDatabaseService } from '../services/core-database.service';
 
 @ApiTags('stories')
 @Controller('stories')
@@ -15,6 +18,7 @@ export class StoriesController {
   constructor(
     private readonly platformData: PlatformDataService,
     private readonly extendedData: ExtendedDataService,
+    private readonly coreDatabase: CoreDatabaseService,
   ) {}
 
   @Get()
@@ -47,6 +51,7 @@ export class StoriesController {
       ...story,
       comments: this.extendedData.getStoryComments(id),
       reactions: this.extendedData.getStoryReactions(id),
+      viewers: this.extendedData.getStoryViewers(id),
     };
     return {
       success: true,
@@ -63,10 +68,22 @@ export class StoriesController {
       userId: body.userId,
       text: body.text,
       media: body.media ?? '',
+      mediaItems: body.mediaItems ?? [],
       music: body.music,
       isLocalFile: body.isLocalFile ?? false,
       backgroundColors: body.backgroundColors ?? [0xff1e40af, 0xff2bb0a1],
       textColorValue: body.textColorValue ?? 0xffffffff,
+      sticker: body.sticker,
+      effectName: body.effectName,
+      mentionUsername: body.mentionUsername,
+      linkLabel: body.linkLabel,
+      linkUrl: body.linkUrl,
+      privacy: body.privacy ?? 'public',
+      collageLayout: body.collageLayout,
+      textOffsetDx: body.textOffsetDx ?? 0,
+      textOffsetDy: body.textOffsetDy ?? 0,
+      textScale: body.textScale ?? 1,
+      mediaTransforms: body.mediaTransforms,
     });
   }
 
@@ -93,6 +110,37 @@ export class StoriesController {
   @Post(':id/reactions')
   reactToStory(@Param('id') id: string, @Body() body: StoryReactionDto) {
     return this.extendedData.reactToStory(id, body.userId, body.reaction);
+  }
+
+  @Post(':id/view')
+  recordStoryView(@Param('id') id: string, @Body() body: StoryViewDto) {
+    return this.extendedData.recordStoryView(id, body.userId);
+  }
+
+  @Post(':id/reply')
+  async replyToStory(@Param('id') id: string, @Body() body: StoryReplyDto) {
+    const story = this.platformData.getStory(id);
+    const recipientUserId = body.recipientUserId?.trim() || story.userId;
+    const thread = await this.coreDatabase.ensureDirectThread(body.userId, recipientUserId);
+    const text = body.message?.trim() || body.text?.trim() || '';
+    const message = await this.coreDatabase.createMessage(thread.id, body.userId, text, {
+      attachments: body.attachments,
+      kind: body.kind,
+      mediaPath: body.mediaPath,
+    });
+
+    return {
+      success: true,
+      message: 'Story reply sent successfully.',
+      data: {
+        storyId: id,
+        threadId: thread.id,
+        message,
+      },
+      storyId: id,
+      threadId: thread.id,
+      reply: message,
+    };
   }
 
   @Delete(':id')

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Get,
   Headers,
@@ -113,10 +114,51 @@ export class AuthController {
       throw new BadRequestException('confirmPassword must match password.');
     }
 
+    const normalizedEmail = body.email.trim().toLowerCase();
+    const normalizedUsername = body.username.trim();
+    const existingUser = await this.coreDatabase.findUserByEmailOptional(normalizedEmail);
+
+    if (existingUser) {
+      if (existingUser.emailVerified) {
+        throw new ConflictException(
+          'An account with this email already exists. Please log in instead.',
+        );
+      }
+
+      await this.coreDatabase.assertUsernameAvailable(normalizedUsername, existingUser.id);
+      const code = this.generateVerificationCode();
+      await this.coreDatabase.storeAuthCode(
+        existingUser.email,
+        'verify_email',
+        code,
+        new Date(Date.now() + 10 * 60 * 1000),
+      );
+      const delivery = await this.mailService.sendVerificationEmail(existingUser.email, code);
+
+      return {
+        success: true,
+        message:
+          'This email is already registered but not verified yet. A new 6-digit verification code has been sent.',
+        alreadyRegistered: true,
+        requiresVerification: true,
+        emailVerified: false,
+        data: {
+          userId: existingUser.id,
+          email: existingUser.email,
+          verification: {
+            required: true,
+            email: existingUser.email,
+            verificationExpiresInMinutes: 10,
+            delivery,
+          },
+        },
+      };
+    }
+
     const user = await this.coreDatabase.createUser({
       name: body.name.trim(),
-      username: body.username.trim(),
-      email: body.email.trim(),
+      username: normalizedUsername,
+      email: normalizedEmail,
       password: body.password,
       role: body.role,
       bio: body.bio?.trim(),

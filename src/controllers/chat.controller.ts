@@ -107,6 +107,7 @@ export class ChatController {
   }
 
   @Patch('threads/:id/read')
+  @Post('threads/:id/read')
   async markRead(@Param('id') id: string, @Body() body: { userId: string }) {
     const result = await this.coreDatabase.markThreadMessagesRead(id, body.userId);
     return {

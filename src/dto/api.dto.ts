@@ -9,6 +9,43 @@ import {
   IsString,
 } from 'class-validator';
 
+export class StoryMediaTransformDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  offsetDx?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  offsetDy?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  scale?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  zIndex?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  widthFactor?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  heightFactor?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  borderRadius?: number;
+}
+
 export class CreatePostDto {
   @ApiProperty()
   @IsString()
@@ -150,6 +187,12 @@ export class CreateStoryDto {
   @IsString()
   media?: string;
 
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mediaItems?: string[];
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -169,6 +212,62 @@ export class CreateStoryDto {
   @IsOptional()
   @IsNumber()
   textColorValue?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sticker?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  effectName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  mentionUsername?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  linkLabel?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  linkUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  privacy?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collageLayout?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  textOffsetDx?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  textOffsetDy?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  textScale?: number;
+
+  @ApiPropertyOptional({ type: [StoryMediaTransformDto] })
+  @IsOptional()
+  @IsArray()
+  @IsObject({ each: true })
+  mediaTransforms?: StoryMediaTransformDto[];
 }
 
 export class UpdateStoryDto {
@@ -181,6 +280,12 @@ export class UpdateStoryDto {
   @IsOptional()
   @IsString()
   media?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mediaItems?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -206,6 +311,62 @@ export class UpdateStoryDto {
   @IsOptional()
   @IsNumber()
   textColorValue?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sticker?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  effectName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  mentionUsername?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  linkLabel?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  linkUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  privacy?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collageLayout?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  textOffsetDx?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  textOffsetDy?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  textScale?: number;
+
+  @ApiPropertyOptional({ type: [StoryMediaTransformDto] })
+  @IsOptional()
+  @IsArray()
+  @IsObject({ each: true })
+  mediaTransforms?: StoryMediaTransformDto[];
 }
 
 export class StoryCommentDto {
@@ -242,6 +403,49 @@ export class StoryReactionDto {
   @ApiProperty()
   @IsString()
   reaction!: string;
+}
+
+export class StoryViewDto {
+  @ApiProperty()
+  @IsString()
+  userId!: string;
+}
+
+export class StoryReplyDto {
+  @ApiProperty()
+  @IsString()
+  userId!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  recipientUserId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  message?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  text?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  attachments?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  mediaPath?: string;
+
+  @ApiPropertyOptional({ enum: ['text', 'image', 'video', 'audio', 'file'] })
+  @IsOptional()
+  @IsIn(['text', 'image', 'video', 'audio', 'file'])
+  kind?: 'text' | 'image' | 'video' | 'audio' | 'file';
 }
 
 export class CreateReelDto {
