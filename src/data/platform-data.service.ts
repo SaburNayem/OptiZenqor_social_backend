@@ -88,6 +88,7 @@ export interface StoryRecord {
     borderRadius?: number;
   }>;
   createdAt: string;
+  expiresAt?: string;
 }
 
 export interface ReelRecord {
@@ -848,6 +849,7 @@ export class PlatformDataService implements OnModuleInit {
   }
 
   getStories(userId?: string) {
+    this.pruneExpiredStories();
     const stories = userId
       ? this.stories.filter((story) => story.userId === userId)
       : this.stories;
@@ -855,6 +857,7 @@ export class PlatformDataService implements OnModuleInit {
   }
 
   getStory(id: string) {
+    this.pruneExpiredStories();
     const story = this.stories.find((item) => item.id === id);
     if (!story) {
       throw new NotFoundException(`Story ${id} not found`);
@@ -886,8 +889,8 @@ export class PlatformDataService implements OnModuleInit {
       | 'mediaTransforms'
     >,
   ) {
-    this.getUser(input.userId);
     const mediaItems = this.normalizeMediaItems(input.media, input.mediaItems);
+    const createdAt = new Date();
     const story: StoryRecord = {
       id: `s${this.stories.length + 1}`,
       userId: input.userId,
@@ -913,7 +916,8 @@ export class PlatformDataService implements OnModuleInit {
         input.mediaTransforms,
         mediaItems.length,
       ),
-      createdAt: new Date().toISOString(),
+      createdAt: createdAt.toISOString(),
+      expiresAt: new Date(createdAt.getTime() + this.storyLifetimeMs).toISOString(),
     };
     this.stories.unshift(story);
     await this.persistState();
@@ -1450,12 +1454,32 @@ export class PlatformDataService implements OnModuleInit {
     });
   }
 
+  private readonly storyLifetimeMs = 24 * 60 * 60 * 1000;
+
+  private pruneExpiredStories() {
+    const now = Date.now();
+    const activeStories = this.stories.filter((story) => {
+      const expiresAt =
+        story.expiresAt ??
+        new Date(new Date(story.createdAt).getTime() + this.storyLifetimeMs).toISOString();
+      return new Date(expiresAt).getTime() > now;
+    });
+    if (activeStories.length === this.stories.length) {
+      return;
+    }
+    this.stories.splice(0, this.stories.length, ...activeStories);
+    void this.persistState();
+  }
+
   private mapStory(story: StoryRecord) {
     const mediaItems = this.normalizeMediaItems(story.media, story.mediaItems);
+    const expiresAt =
+      story.expiresAt ??
+      new Date(new Date(story.createdAt).getTime() + this.storyLifetimeMs).toISOString();
     return {
       id: story.id,
       userId: story.userId,
-      author: this.toUserPreview(this.getUser(story.userId)),
+      author: this.getUserPreview(story.userId),
       media: story.media || mediaItems[0] || '',
       mediaItems,
       isLocalFile: story.isLocalFile,
@@ -1479,6 +1503,7 @@ export class PlatformDataService implements OnModuleInit {
       ),
       seen: story.seen,
       createdAt: story.createdAt,
+      expiresAt,
     };
   }
 
@@ -1503,5 +1528,20 @@ export class PlatformDataService implements OnModuleInit {
       heightFactor: transforms?.[index]?.heightFactor ?? 1,
       borderRadius: transforms?.[index]?.borderRadius ?? 0,
     }));
+  }
+
+  private getUserPreview(userId: string) {
+    const user = this.users.find((item) => item.id === userId);
+    if (user) {
+      return this.toUserPreview(user);
+    }
+    return {
+      id: userId,
+      name: 'Story author',
+      username: userId,
+      avatar: 'https://placehold.co/120x120',
+      role: 'User',
+      verification: 'Not Requested',
+    };
   }
 }

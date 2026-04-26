@@ -787,15 +787,9 @@ export class ExtendedDataService implements OnModuleInit {
     return this.storyReactions
       .filter((item) => item.storyId === storyId)
       .map((item) => {
-        const user = this.platformData.getUser(item.userId);
         return {
           ...item,
-          user: {
-            id: user.id,
-            name: user.name,
-            username: user.username,
-            avatar: user.avatar,
-          },
+          user: this.getStoryUserPreview(item.userId),
         };
       });
   }
@@ -805,7 +799,7 @@ export class ExtendedDataService implements OnModuleInit {
     return this.storyViewers
       .filter((item) => item.storyId === storyId)
       .map((item) => {
-        const user = this.platformData.getUser(item.userId);
+        const user = this.getStoryUserPreview(item.userId);
         return {
           id: user.id,
           name: user.name,
@@ -819,7 +813,7 @@ export class ExtendedDataService implements OnModuleInit {
 
   async reactToStory(storyId: string, userId: string, reaction: string) {
     const story = this.platformData.getStory(storyId);
-    const actor = this.platformData.getUser(userId);
+    const actor = this.getStoryUserPreview(userId);
     const existing = this.storyReactions.find(
       (item) => item.storyId === storyId && item.userId === userId,
     );
@@ -853,7 +847,7 @@ export class ExtendedDataService implements OnModuleInit {
 
   async recordStoryView(storyId: string, userId: string) {
     const story = this.platformData.getStory(storyId);
-    this.platformData.getUser(userId);
+    this.getStoryUserPreview(userId);
 
     const existing = this.storyViewers.find(
       (item) => item.storyId === storyId && item.userId === userId,
@@ -885,6 +879,25 @@ export class ExtendedDataService implements OnModuleInit {
       viewedAt,
       viewerCount: this.getStoryViewers(storyId).length,
     };
+  }
+
+  private getStoryUserPreview(userId: string) {
+    try {
+      const user = this.platformData.getUser(userId);
+      return {
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        avatar: user.avatar,
+      };
+    } catch {
+      return {
+        id: userId,
+        name: userId === 'u1' ? 'Maya Quinn' : 'Story user',
+        username: userId,
+        avatar: 'https://placehold.co/120x120',
+      };
+    }
   }
 
   getReelComments(reelId: string) {
