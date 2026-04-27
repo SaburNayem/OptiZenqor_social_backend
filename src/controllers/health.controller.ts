@@ -1,9 +1,13 @@
 import { Controller, Get, Res } from '@nestjs/common';
 import { DatabaseService } from '../services/database.service';
+import { CloudinaryUploadService } from '../services/cloudinary-upload.service';
 
 @Controller()
 export class HealthController {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly cloudinaryUploadService: CloudinaryUploadService,
+  ) {}
 
   @Get()
   root(@Res() res: { redirect: (url: string) => unknown }) {
@@ -17,6 +21,9 @@ export class HealthController {
       service: 'socity-backend',
       timestamp: new Date().toISOString(),
       database: this.databaseService.getHealth(),
+      uploads: {
+        cloudinaryConfigured: this.cloudinaryUploadService.isConfigured(),
+      },
     };
   }
 

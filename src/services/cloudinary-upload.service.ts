@@ -15,6 +15,14 @@ interface UploadOptions {
 
 @Injectable()
 export class CloudinaryUploadService {
+  isConfigured() {
+    return Boolean(
+      process.env.CLOUDINARY_CLOUD_NAME &&
+        process.env.CLOUDINARY_API_KEY &&
+        process.env.CLOUDINARY_API_SECRET,
+    );
+  }
+
   async uploadBuffer(fileBuffer: Buffer, options: UploadOptions = {}) {
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
     const apiKey = process.env.CLOUDINARY_API_KEY;
