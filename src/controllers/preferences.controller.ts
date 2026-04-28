@@ -5,6 +5,7 @@ import { AppExtensionsDataService } from '../data/app-extensions-data.service';
 import { SettingsDataService } from '../data/settings-data.service';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('preferences')
 @Controller()
@@ -22,10 +23,14 @@ export class PreferencesController {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
     const item = this.settingsData.getItem('advanced-privacy-controls');
     return {
-      ...item,
+      success: true,
+      message: 'Advanced privacy controls fetched successfully.',
       data: {
-        ...item.data,
-        privacy: await this.accountStateDatabase.getPrivacySnapshot(user.id),
+        ...item,
+        data: {
+          ...item.data,
+          privacy: await this.accountStateDatabase.getPrivacySnapshot(user.id),
+        },
       },
     };
   }
@@ -38,34 +43,46 @@ export class PreferencesController {
       Promise.resolve(this.settingsData.getItem('safety-privacy')),
       this.accountStateDatabase.getBlockedUsers(user.id),
     ]);
-    return {
+    return successResponse('Safety and privacy fetched successfully.', {
       ...item,
       data: {
         ...item.data,
         privacy: await this.accountStateDatabase.getPrivacySnapshot(user.id),
         blockedCount: blocked.length,
       },
-    };
+    });
   }
 
   @Get('accessibility-support')
   getAccessibilitySupport() {
-    return this.appExtensionsData.getAccessibilitySupport();
+    return successResponse(
+      'Accessibility support fetched successfully.',
+      this.appExtensionsData.getAccessibilitySupport(),
+    );
   }
 
   @Get('explore-recommendation')
   getExploreRecommendations() {
-    return this.appExtensionsData.getExploreRecommendations();
+    return successResponse(
+      'Explore recommendations fetched successfully.',
+      this.appExtensionsData.getExploreRecommendations(),
+    );
   }
 
   @Get('push-notification-preferences')
   getPushNotificationPreferences() {
-    return this.appExtensionsData.getPushNotificationPreferences();
+    return successResponse(
+      'Push notification preferences fetched successfully.',
+      this.appExtensionsData.getPushNotificationPreferences(),
+    );
   }
 
   @Get('legal-compliance')
   getLegalCompliance() {
-    return this.appExtensionsData.getLegalCompliance();
+    return successResponse(
+      'Legal compliance fetched successfully.',
+      this.appExtensionsData.getLegalCompliance(),
+    );
   }
 
   @Get('blocked-muted-accounts')
@@ -81,18 +98,11 @@ export class PreferencesController {
     );
     const blocked = await this.accountStateDatabase.getBlockedUsers(user.id);
     const blockedMuted = this.appExtensionsData.getBlockedMutedAccounts();
-    return {
-      success: true,
+    return successResponse('Blocked and muted accounts fetched successfully.', {
       blocked,
       muted: blockedMuted.mutedAccounts,
       blockedAccounts: blocked,
       ...blockedMuted,
-      data: {
-        blocked,
-        muted: blockedMuted.mutedAccounts,
-        blockedAccounts: blocked,
-        ...blockedMuted,
-      },
-    };
+    });
   }
 }

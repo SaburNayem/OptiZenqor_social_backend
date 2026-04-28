@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { SettingsDataService } from '../data/settings-data.service';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('settings')
 @Controller('settings')
@@ -17,33 +18,42 @@ export class SettingsController {
 
   @Get()
   getSettingsSections() {
-    return this.settingsData.getSections();
+    return successResponse('Settings sections fetched successfully.', this.settingsData.getSections());
   }
 
   @Get('sections')
   getSettingsSectionsAlias() {
-    return this.settingsData.getSections();
+    return successResponse('Settings sections fetched successfully.', this.settingsData.getSections());
   }
 
   @Get('items')
   getSettingsItems() {
-    return this.settingsData.getItems();
+    return successResponse('Settings items fetched successfully.', this.settingsData.getItems());
   }
 
   @Get('state')
   async getSettingsState(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return this.accountStateDatabase.getSettingsState(user.id);
+    return successResponse(
+      'Settings state fetched successfully.',
+      await this.accountStateDatabase.getSettingsState(user.id),
+    );
   }
 
   @Get('items/:itemKey')
   getSettingsItem(@Param('itemKey') itemKey: string) {
-    return this.settingsData.getItem(itemKey);
+    return successResponse(
+      'Settings item fetched successfully.',
+      this.settingsData.getItem(itemKey),
+    );
   }
 
   @Get(':sectionKey')
   getSettingsSection(@Param('sectionKey') sectionKey: string) {
-    return this.settingsData.getRouteEntry(`/settings/${sectionKey}`);
+    return successResponse(
+      'Settings section fetched successfully.',
+      this.settingsData.getRouteEntry(`/settings/${sectionKey}`),
+    );
   }
 
   @Patch('items/:itemKey')
@@ -51,7 +61,10 @@ export class SettingsController {
     @Param('itemKey') itemKey: string,
     @Body() body: Record<string, unknown>,
   ) {
-    return this.settingsData.updateItem(itemKey, body);
+    return successResponse(
+      'Settings item updated successfully.',
+      this.settingsData.updateItem(itemKey, body),
+    );
   }
 
   @Patch('state')
@@ -60,7 +73,10 @@ export class SettingsController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return this.accountStateDatabase.updateSettingsState(user.id, body);
+    return successResponse(
+      'Settings state updated successfully.',
+      await this.accountStateDatabase.updateSettingsState(user.id, body),
+    );
   }
 
   @Patch(':sectionKey')
@@ -68,6 +84,9 @@ export class SettingsController {
     @Param('sectionKey') sectionKey: string,
     @Body() body: Record<string, unknown>,
   ) {
-    return this.settingsData.updateRouteEntry(`/settings/${sectionKey}`, body);
+    return successResponse(
+      'Settings section updated successfully.',
+      this.settingsData.updateRouteEntry(`/settings/${sectionKey}`, body),
+    );
   }
 }

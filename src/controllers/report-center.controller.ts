@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { SubmitReportDto } from '../dto/api.dto';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('report-center')
 @Controller('report-center')
@@ -17,7 +18,10 @@ export class ReportCenterController {
   @Get()
   async getReportCenter(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return this.accountStateDatabase.getReportCenter(user.id);
+    return successResponse(
+      'Reports fetched successfully.',
+      await this.accountStateDatabase.getReportCenter(user.id),
+    );
   }
 
   @Post()
@@ -31,13 +35,16 @@ export class ReportCenterController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return this.accountStateDatabase.submitReport({
-      reporterUserId: user.id,
-      reason: body.reason,
-      details: body.details,
-      targetUserId: body.targetUserId,
-      targetEntityId: body.targetEntityId,
-      targetEntityType: body.targetEntityType,
-    });
+    return successResponse(
+      'Report submitted successfully.',
+      await this.accountStateDatabase.submitReport({
+        reporterUserId: user.id,
+        reason: body.reason,
+        details: body.details,
+        targetUserId: body.targetUserId,
+        targetEntityId: body.targetEntityId,
+        targetEntityType: body.targetEntityType,
+      }),
+    );
   }
 }

@@ -4,6 +4,7 @@ import { EcosystemDataService } from '../data/ecosystem-data.service';
 import { FollowUserDto, UpdateUserDto } from '../dto/api.dto';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { listResponse, successResponse } from '../utils/api-response.util';
 
 @ApiTags('profiles')
 @Controller()
@@ -86,28 +87,22 @@ export class ProfilesController {
     const user = await this.coreDatabase.getUser(
       await this.resolveTargetId(id, authorization),
     );
-    return {
-      success: true,
-      message: 'Editable profile state fetched successfully.',
+    return successResponse('Editable profile state fetched successfully.', {
       user,
       profile: user,
-      data: {
-        user,
-        profile: user,
-        editableFields: [
-          'name',
-          'username',
-          'bio',
-          'avatar',
-          'avatarUrl',
-          'coverImageUrl',
-          'website',
-          'location',
-        ],
-        helpText:
-          'Update your profile basics, then save to refresh your public profile.',
-      },
-    };
+      editableFields: [
+        'name',
+        'username',
+        'bio',
+        'avatar',
+        'avatarUrl',
+        'coverImageUrl',
+        'website',
+        'location',
+      ],
+      helpText:
+        'Update your profile basics, then save to refresh your public profile.',
+    });
   }
 
   @Patch('user-profile/edit')
@@ -120,16 +115,10 @@ export class ProfilesController {
       id,
       this.normalizeProfilePatch(body),
     );
-    return {
-      success: true,
-      message: 'Profile updated successfully.',
+    return successResponse('Profile updated successfully.', {
       user,
       profile: user,
-      data: {
-        user,
-        profile: user,
-      },
-    };
+    });
   }
 
   @Get('user-profile')
@@ -209,16 +198,10 @@ export class ProfilesController {
         authorization,
       ),
     );
-    const payload = this.decorateFollowState(followState);
-    return {
-      success: true,
-      message: 'Mutual connections fetched successfully.',
-      ...payload,
-      data: payload.mutuals,
-      items: payload.mutuals,
-      results: payload.mutuals,
-      count: payload.mutuals.length,
-    };
+    return this.wrapFollowStateResponse(
+      'Mutual connections fetched successfully.',
+      followState,
+    );
   }
 
   @Patch('follow-unfollow/:id/follow')
@@ -253,25 +236,34 @@ export class ProfilesController {
   @Get('creator-dashboard')
   async getCreatorDashboard(@Headers('authorization') authorization?: string) {
     const viewerId = (await this.resolveViewerId(authorization)) ?? 'u1';
-    return {
+    return successResponse('Creator dashboard fetched successfully.', {
       ...this.ecosystemData.getProfessionalProfiles().creatorTools,
       analytics: await this.accountStateDatabase.getCreatorAnalytics(viewerId),
-    };
+    });
   }
 
   @Get('business-profile')
   getBusinessProfile() {
-    return this.ecosystemData.getProfessionalProfiles().businessProfile;
+    return successResponse(
+      'Business profile fetched successfully.',
+      this.ecosystemData.getProfessionalProfiles().businessProfile,
+    );
   }
 
   @Get('seller-profile')
   getSellerProfile() {
-    return this.ecosystemData.getProfessionalProfiles().sellerProfile;
+    return successResponse(
+      'Seller profile fetched successfully.',
+      this.ecosystemData.getProfessionalProfiles().sellerProfile,
+    );
   }
 
   @Get('recruiter-profile')
   getRecruiterProfile() {
-    return this.ecosystemData.getProfessionalProfiles().recruiterProfile;
+    return successResponse(
+      'Recruiter profile fetched successfully.',
+      this.ecosystemData.getProfessionalProfiles().recruiterProfile,
+    );
   }
 
   private async resolveTargetId(id?: string, authorization?: string) {
@@ -325,29 +317,15 @@ export class ProfilesController {
     message: string,
     payload: Awaited<ReturnType<ProfilesController['buildProfilePayload']>>,
   ) {
-    return {
-      success: true,
-      message,
-      ...payload.user,
+    return successResponse(message, {
+      ...payload,
       user: payload.user,
       profile: payload.user,
-      data: {
-        ...payload,
-        user: payload.user,
-        profile: payload.user,
-      },
-    };
+    });
   }
 
   private wrapListResponse(message: string, items: unknown[]) {
-    return {
-      success: true,
-      message,
-      data: items,
-      items,
-      results: items,
-      count: items.length,
-    };
+    return listResponse(message, items);
   }
 
   private wrapFollowResponse(
@@ -356,9 +334,7 @@ export class ProfilesController {
     followerId: string,
     isFollowing: boolean,
   ) {
-    return {
-      success: true,
-      message,
+    return successResponse(message, {
       targetId,
       followerId,
       isFollowing,
@@ -368,18 +344,18 @@ export class ProfilesController {
       pending: false,
       requested: false,
       requestPending: false,
-      data: {
-        targetId,
-        followerId,
-        isFollowing,
-        following: isFollowing,
-        followed: isFollowing,
-        hasPendingRequest: false,
-        pending: false,
-        requested: false,
-        requestPending: false,
-      },
-    };
+    });
+  }
+
+  private wrapFollowStateResponse(
+    message: string,
+    followState: Awaited<ReturnType<CoreDatabaseService['getFollowState']>>,
+  ) {
+    const payload = this.decorateFollowState(followState);
+    return successResponse(message, payload, {
+      targetId: payload.targetId,
+      actorId: payload.actorId,
+    });
   }
 
   private decorateFollowState(

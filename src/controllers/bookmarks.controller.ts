@@ -14,6 +14,7 @@ import { AddBookmarkDto } from '../dto/api.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('bookmarks')
 @Controller('bookmarks')
@@ -28,7 +29,10 @@ export class BookmarksController {
   @Get()
   async getBookmarks(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return this.accountStateDatabase.getBookmarks(user.id);
+    return successResponse(
+      'Bookmarks fetched successfully.',
+      await this.accountStateDatabase.getBookmarks(user.id),
+    );
   }
 
   @Get(':id')
@@ -37,7 +41,10 @@ export class BookmarksController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return this.accountStateDatabase.getBookmark(user.id, id);
+    return successResponse(
+      'Bookmark fetched successfully.',
+      await this.accountStateDatabase.getBookmark(user.id, id),
+    );
   }
 
   @Post()
@@ -46,11 +53,14 @@ export class BookmarksController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return this.accountStateDatabase.addBookmark(user.id, {
-      entityId: body.id,
-      title: body.title,
-      type: body.type,
-    });
+    return successResponse(
+      'Bookmark added successfully.',
+      await this.accountStateDatabase.addBookmark(user.id, {
+        entityId: body.id,
+        title: body.title,
+        type: body.type,
+      }),
+    );
   }
 
   @Post('posts/:postId')
@@ -60,11 +70,14 @@ export class BookmarksController {
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
     const post = this.platformData.getPost(postId);
-    return this.accountStateDatabase.addBookmark(user.id, {
-      entityId: post.id,
-      title: post.caption,
-      type: 'post',
-    });
+    return successResponse(
+      'Bookmark added successfully.',
+      await this.accountStateDatabase.addBookmark(user.id, {
+        entityId: post.id,
+        title: post.caption,
+        type: 'post',
+      }),
+    );
   }
 
   @Delete(':id')
@@ -73,6 +86,9 @@ export class BookmarksController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return this.accountStateDatabase.removeBookmark(user.id, id);
+    return successResponse(
+      'Bookmark removed successfully.',
+      await this.accountStateDatabase.removeBookmark(user.id, id),
+    );
   }
 }

@@ -14,6 +14,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BlockUserDto } from '../dto/api.dto';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('block')
 @Controller('block')
@@ -34,7 +35,10 @@ export class BlockController {
       authorization,
       actorId,
     );
-    return this.accountStateDatabase.getBlockedUsers(user.id);
+    return successResponse(
+      'Blocked users fetched successfully.',
+      await this.accountStateDatabase.getBlockedUsers(user.id),
+    );
   }
 
   @Get(':targetId')
@@ -48,7 +52,10 @@ export class BlockController {
       authorization,
       actorId,
     );
-    return this.accountStateDatabase.getBlockedUser(user.id, targetId);
+    return successResponse(
+      'Blocked user fetched successfully.',
+      await this.accountStateDatabase.getBlockedUser(user.id, targetId),
+    );
   }
 
   @Post()
@@ -60,7 +67,10 @@ export class BlockController {
       authorization,
       body.actorId,
     );
-    return this.accountStateDatabase.blockUser(user.id, body.targetId, body.reason);
+    return successResponse(
+      'User blocked successfully.',
+      await this.accountStateDatabase.blockUser(user.id, body.targetId, body.reason),
+    );
   }
 
   @Delete(':targetId')
@@ -75,6 +85,9 @@ export class BlockController {
       authorization,
       actorIdFromQuery ?? body?.actorId,
     );
-    return this.accountStateDatabase.unblockUser(user.id, targetId);
+    return successResponse(
+      'User unblocked successfully.',
+      await this.accountStateDatabase.unblockUser(user.id, targetId),
+    );
   }
 }

@@ -15,6 +15,7 @@ import { CreateDraftDto, UpdateUploadDto } from '../dto/api.dto';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { UploadsDatabaseService } from '../services/uploads-database.service';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('creator-flow')
 @Controller()
@@ -29,7 +30,10 @@ export class CreatorFlowController {
   @Get('drafts')
   async getDrafts(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return this.accountStateDatabase.getDrafts(user.id);
+    return successResponse(
+      'Drafts fetched successfully.',
+      await this.accountStateDatabase.getDrafts(user.id),
+    );
   }
 
   @Get('posts/drafts')
@@ -43,7 +47,10 @@ export class CreatorFlowController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return this.accountStateDatabase.getDraft(user.id, id);
+    return successResponse(
+      'Draft fetched successfully.',
+      await this.accountStateDatabase.getDraft(user.id, id),
+    );
   }
 
   @Post('drafts')
@@ -52,10 +59,13 @@ export class CreatorFlowController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return this.accountStateDatabase.createDraft(user.id, {
-      title: body.title,
-      type: body.type,
-    });
+    return successResponse(
+      'Draft created successfully.',
+      await this.accountStateDatabase.createDraft(user.id, {
+        title: body.title,
+        type: body.type,
+      }),
+    );
   }
 
   @Patch('drafts/:id')
@@ -65,7 +75,10 @@ export class CreatorFlowController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return this.accountStateDatabase.updateDraft(user.id, id, body);
+    return successResponse(
+      'Draft updated successfully.',
+      await this.accountStateDatabase.updateDraft(user.id, id, body),
+    );
   }
 
   @Delete('drafts/:id')
@@ -74,13 +87,19 @@ export class CreatorFlowController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return this.accountStateDatabase.deleteDraft(user.id, id);
+    return successResponse(
+      'Draft deleted successfully.',
+      await this.accountStateDatabase.deleteDraft(user.id, id),
+    );
   }
 
   @Get('scheduling')
   async getScheduling(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return this.accountStateDatabase.getScheduledDrafts(user.id);
+    return successResponse(
+      'Scheduled drafts fetched successfully.',
+      await this.accountStateDatabase.getScheduledDrafts(user.id),
+    );
   }
 
   @Get('posts/scheduled')
@@ -91,25 +110,35 @@ export class CreatorFlowController {
   @Get('drafts-scheduling')
   async getDraftsScheduling(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return {
+    return successResponse('Draft and scheduling state fetched successfully.', {
       drafts: await this.accountStateDatabase.getDrafts(user.id),
       scheduled: await this.accountStateDatabase.getScheduledDrafts(user.id),
       uploads: await this.uploadsDatabase.getUploads(user.id),
-    };
+    });
   }
 
   @Get('upload-manager')
-  getUploads() {
-    return this.uploadsDatabase.getUploads();
+  async getUploads(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Uploads fetched successfully.',
+      await this.uploadsDatabase.getUploads(user.id),
+    );
   }
 
   @Get('upload-manager/:id')
-  getUpload(@Param('id') id: string) {
-    return this.uploadsDatabase.getUpload(id);
+  async getUpload(@Param('id') id: string) {
+    return successResponse(
+      'Upload fetched successfully.',
+      await this.uploadsDatabase.getUpload(id),
+    );
   }
 
   @Patch('upload-manager/:id')
-  updateUpload(@Param('id') id: string, @Body() body: UpdateUploadDto) {
-    return this.uploadsDatabase.updateUploadStatus(id, body.action);
+  async updateUpload(@Param('id') id: string, @Body() body: UpdateUploadDto) {
+    return successResponse(
+      'Upload updated successfully.',
+      await this.uploadsDatabase.updateUploadStatus(id, body.action),
+    );
   }
 }
