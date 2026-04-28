@@ -7,7 +7,7 @@ import {
 import { CoreDatabaseService } from '../services/core-database.service';
 
 @Injectable()
-export class JwtAuthGuard implements CanActivate {
+export class SessionAuthGuard implements CanActivate {
   constructor(private readonly coreDatabase: CoreDatabaseService) {}
 
   async canActivate(context: ExecutionContext) {

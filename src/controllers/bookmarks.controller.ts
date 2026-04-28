@@ -11,14 +11,14 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import { PlatformDataService } from '../data/platform-data.service';
 import { AddBookmarkDto } from '../dto/api.dto';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('bookmarks')
 @Controller('bookmarks')
-@UseGuards(JwtAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class BookmarksController {
   constructor(
     private readonly accountStateDatabase: AccountStateDatabaseService,

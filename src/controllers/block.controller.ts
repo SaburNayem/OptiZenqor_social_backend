@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { BlockUserDto } from '../dto/api.dto';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
@@ -18,7 +18,7 @@ import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('block')
 @Controller('block')
-@UseGuards(JwtAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class BlockController {
   constructor(
     private readonly accountStateDatabase: AccountStateDatabaseService,

@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Headers, Param, Patch, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { SettingsDataService } from '../data/settings-data.service';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
@@ -8,7 +8,7 @@ import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('settings')
 @Controller('settings')
-@UseGuards(JwtAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class SettingsController {
   constructor(
     private readonly settingsData: SettingsDataService,

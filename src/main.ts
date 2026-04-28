@@ -26,7 +26,7 @@ function parseCorsOrigins() {
 }
 
 function assertStartupEnv() {
-  const requiredInProduction = ['DATABASE_URL', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET'];
+  const requiredInProduction = ['DATABASE_URL'];
   const missing = requiredInProduction.filter((key) => !process.env[key]?.trim());
   if ((process.env.NODE_ENV ?? '').trim().toLowerCase() === 'production' && missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
@@ -91,9 +91,9 @@ async function bootstrap() {
       {
         type: 'http',
         scheme: 'bearer',
-        bearerFormat: 'JWT',
+        bearerFormat: 'session-token',
         description:
-          'User bearer JWT. Get it from /auth/login.',
+          'Opaque bearer session token. Get it from /auth/login.',
       },
       'user-bearer',
     )
@@ -101,7 +101,7 @@ async function bootstrap() {
       {
         type: 'http',
         scheme: 'bearer',
-        bearerFormat: 'JWT',
+        bearerFormat: 'session-token',
         description:
           'Admin bearer token. Get it from /admin/auth/login. Demo admin password is admin123.',
       },

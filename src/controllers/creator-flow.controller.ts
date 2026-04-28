@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { CreateDraftDto, UpdateUploadDto } from '../dto/api.dto';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
@@ -19,7 +19,7 @@ import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('creator-flow')
 @Controller()
-@UseGuards(JwtAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class CreatorFlowController {
   constructor(
     private readonly accountStateDatabase: AccountStateDatabaseService,

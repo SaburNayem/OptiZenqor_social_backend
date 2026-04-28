@@ -1,6 +1,6 @@
 import { Controller, Get, Headers, Query, UseGuards } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { AppExtensionsDataService } from '../data/app-extensions-data.service';
 import { SettingsDataService } from '../data/settings-data.service';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
@@ -18,7 +18,7 @@ export class PreferencesController {
   ) {}
 
   @Get('advanced-privacy-controls')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(SessionAuthGuard)
   async getAdvancedPrivacyControls(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
     const item = this.settingsData.getItem('advanced-privacy-controls');
@@ -36,7 +36,7 @@ export class PreferencesController {
   }
 
   @Get('safety-privacy')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(SessionAuthGuard)
   async getSafetyPrivacy(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
     const [item, blocked] = await Promise.all([
@@ -87,7 +87,7 @@ export class PreferencesController {
 
   @Get('blocked-muted-accounts')
   @ApiQuery({ name: 'actorId', required: false })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(SessionAuthGuard)
   async getBlockedMutedAccounts(
     @Query('actorId') actorId?: string,
     @Headers('authorization') authorization?: string,

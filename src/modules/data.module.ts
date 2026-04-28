@@ -5,8 +5,7 @@ import { EcosystemDataService } from '../data/ecosystem-data.service';
 import { ExtendedDataService } from '../data/extended-data.service';
 import { PlatformDataService } from '../data/platform-data.service';
 import { SettingsDataService } from '../data/settings-data.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { CloudinaryUploadService } from '../services/cloudinary-upload.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { DatabaseService } from '../services/database.service';
@@ -27,8 +26,7 @@ import { UploadsDatabaseService } from '../services/uploads-database.service';
     AdminOpsDataService,
     AppExtensionsDataService,
     SettingsDataService,
-    JwtAuthGuard,
-    RolesGuard,
+    SessionAuthGuard,
     CloudinaryUploadService,
     DatabaseService,
     CoreDatabaseService,
@@ -47,8 +45,7 @@ import { UploadsDatabaseService } from '../services/uploads-database.service';
     AdminOpsDataService,
     AppExtensionsDataService,
     SettingsDataService,
-    JwtAuthGuard,
-    RolesGuard,
+    SessionAuthGuard,
     CloudinaryUploadService,
     DatabaseService,
     CoreDatabaseService,

@@ -198,4 +198,4 @@ For the full route contract with request examples, use Swagger and the curl refe
 - This first backend pass uses in-memory seeded data, so it is frontend-ready for integration and demos but not yet persistent.
 - Socket.IO realtime is available at namespace `/realtime` for presence, typing, chat message events, and call signaling.
 - WebRTC helper config is available through `/calls/rtc-config`, with active call session APIs under `/calls/sessions`.
-- The next production step would be moving these flows from seeded in-memory state to database-backed services and JWT-guarded sockets.
+- The next production step is finishing the migration from seeded in-memory flows to database-backed services and session-authenticated sockets.
