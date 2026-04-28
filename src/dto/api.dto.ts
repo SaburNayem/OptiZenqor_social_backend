@@ -228,6 +228,12 @@ export class CreateStoryDto {
   @IsString()
   mentionUsername?: string;
 
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mentionUsernames?: string[];
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -242,6 +248,11 @@ export class CreateStoryDto {
   @IsOptional()
   @IsString()
   privacy?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -327,6 +338,12 @@ export class UpdateStoryDto {
   @IsString()
   mentionUsername?: string;
 
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mentionUsernames?: string[];
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -341,6 +358,11 @@ export class UpdateStoryDto {
   @IsOptional()
   @IsString()
   privacy?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

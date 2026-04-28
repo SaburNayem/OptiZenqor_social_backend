@@ -71,9 +71,11 @@ export interface StoryRecord {
   sticker?: string | null;
   effectName?: string | null;
   mentionUsername?: string | null;
+  mentionUsernames?: string[];
   linkLabel?: string | null;
   linkUrl?: string | null;
   privacy?: string;
+  location?: string | null;
   collageLayout?: string | null;
   textOffsetDx?: number;
   textOffsetDy?: number;
@@ -879,9 +881,11 @@ export class PlatformDataService implements OnModuleInit {
       | 'sticker'
       | 'effectName'
       | 'mentionUsername'
+      | 'mentionUsernames'
       | 'linkLabel'
       | 'linkUrl'
       | 'privacy'
+      | 'location'
       | 'collageLayout'
       | 'textOffsetDx'
       | 'textOffsetDy'
@@ -890,6 +894,10 @@ export class PlatformDataService implements OnModuleInit {
     >,
   ) {
     const mediaItems = this.normalizeMediaItems(input.media, input.mediaItems);
+    const mentionUsernames = this.normalizeStoryMentions(
+      input.mentionUsernames,
+      input.mentionUsername,
+    );
     const createdAt = new Date();
     const story: StoryRecord = {
       id: `s${this.stories.length + 1}`,
@@ -904,10 +912,12 @@ export class PlatformDataService implements OnModuleInit {
       textColorValue: input.textColorValue,
       sticker: input.sticker ?? null,
       effectName: input.effectName ?? null,
-      mentionUsername: input.mentionUsername ?? null,
+      mentionUsername: mentionUsernames[0] ?? input.mentionUsername ?? null,
+      mentionUsernames,
       linkLabel: input.linkLabel ?? null,
       linkUrl: input.linkUrl ?? null,
       privacy: input.privacy ?? 'public',
+      location: input.location?.trim() || null,
       collageLayout: input.collageLayout ?? null,
       textOffsetDx: input.textOffsetDx ?? 0,
       textOffsetDy: input.textOffsetDy ?? 0,
@@ -940,9 +950,11 @@ export class PlatformDataService implements OnModuleInit {
         | 'sticker'
         | 'effectName'
         | 'mentionUsername'
+        | 'mentionUsernames'
         | 'linkLabel'
         | 'linkUrl'
         | 'privacy'
+        | 'location'
         | 'collageLayout'
         | 'textOffsetDx'
         | 'textOffsetDy'
@@ -956,6 +968,17 @@ export class PlatformDataService implements OnModuleInit {
       throw new NotFoundException(`Story ${id} not found`);
     }
     Object.assign(story, patch);
+    if (patch.mentionUsernames !== undefined || patch.mentionUsername !== undefined) {
+      const mentionUsernames = this.normalizeStoryMentions(
+        patch.mentionUsernames,
+        patch.mentionUsername,
+      );
+      story.mentionUsernames = mentionUsernames;
+      story.mentionUsername = mentionUsernames[0] ?? null;
+    }
+    if (patch.location !== undefined) {
+      story.location = patch.location?.trim() || null;
+    }
     story.mediaItems = this.normalizeMediaItems(story.media, story.mediaItems);
     story.media = story.media || story.mediaItems[0] || '';
     story.backgroundColors = story.backgroundColors ?? [0xff1e40af, 0xff2bb0a1];
@@ -1473,6 +1496,10 @@ export class PlatformDataService implements OnModuleInit {
 
   private mapStory(story: StoryRecord) {
     const mediaItems = this.normalizeMediaItems(story.media, story.mediaItems);
+    const mentionUsernames = this.normalizeStoryMentions(
+      story.mentionUsernames,
+      story.mentionUsername,
+    );
     const expiresAt =
       story.expiresAt ??
       new Date(new Date(story.createdAt).getTime() + this.storyLifetimeMs).toISOString();
@@ -1489,10 +1516,12 @@ export class PlatformDataService implements OnModuleInit {
       textColorValue: story.textColorValue ?? 0xffffffff,
       sticker: story.sticker ?? null,
       effectName: story.effectName ?? null,
-      mentionUsername: story.mentionUsername ?? null,
+      mentionUsername: mentionUsernames[0] ?? null,
+      mentionUsernames,
       linkLabel: story.linkLabel ?? null,
       linkUrl: story.linkUrl ?? null,
       privacy: story.privacy ?? 'public',
+      location: story.location ?? null,
       collageLayout: story.collageLayout ?? null,
       textOffsetDx: story.textOffsetDx ?? 0,
       textOffsetDy: story.textOffsetDy ?? 0,
@@ -1509,6 +1538,13 @@ export class PlatformDataService implements OnModuleInit {
 
   private normalizeMediaItems(media?: string, mediaItems?: string[]) {
     const values = [...(mediaItems ?? []), ...(media ? [media] : [])]
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return [...new Set(values)];
+  }
+
+  private normalizeStoryMentions(mentionUsernames?: string[], mentionUsername?: string | null) {
+    const values = [...(mentionUsernames ?? []), ...(mentionUsername ? [mentionUsername] : [])]
       .map((item) => item.trim())
       .filter(Boolean);
     return [...new Set(values)];
