@@ -18,10 +18,10 @@ export class AdminController {
   }
 
   @Get('content')
-  getContent() {
+  async getContent() {
     return {
       posts: this.platformData.getPosts(),
-      stories: this.platformData.getStories(),
+      stories: await this.platformData.getStories(),
       reels: this.platformData.getReels(),
     };
   }

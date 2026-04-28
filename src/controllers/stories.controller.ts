@@ -192,8 +192,8 @@ export class StoriesController {
     const buddyIds = await this.coreDatabase
       .getBuddyIds(viewerId)
       .catch((): string[] => []);
-    return this.platformData
-      .getStories()
-      .filter((story) => story.userId === viewerId || buddyIds.includes(story.userId));
+    return (await this.platformData.getStories()).filter(
+      (story) => story.userId === viewerId || buddyIds.includes(story.userId),
+    );
   }
 }

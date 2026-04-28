@@ -850,7 +850,8 @@ export class PlatformDataService implements OnModuleInit {
     };
   }
 
-  getStories(userId?: string) {
+  async getStories(userId?: string) {
+    await this.syncStoriesFromSnapshot();
     this.pruneExpiredStories();
     const stories = userId
       ? this.stories.filter((story) => story.userId === userId)
@@ -893,6 +894,7 @@ export class PlatformDataService implements OnModuleInit {
       | 'mediaTransforms'
     >,
   ) {
+    await this.syncStoriesFromSnapshot();
     const mediaItems = this.normalizeMediaItems(input.media, input.mediaItems);
     const mentionUsernames = this.normalizeStoryMentions(
       input.mentionUsernames,
@@ -900,7 +902,7 @@ export class PlatformDataService implements OnModuleInit {
     );
     const createdAt = new Date();
     const story: StoryRecord = {
-      id: `s${this.stories.length + 1}`,
+      id: `s_${createdAt.getTime()}_${randomUUID().slice(0, 8)}`,
       userId: input.userId,
       text: input.text,
       media: input.media || mediaItems[0] || '',
@@ -963,6 +965,7 @@ export class PlatformDataService implements OnModuleInit {
       >
     >,
   ) {
+    await this.syncStoriesFromSnapshot();
     const story = this.stories.find((item) => item.id === id);
     if (!story) {
       throw new NotFoundException(`Story ${id} not found`);
@@ -996,6 +999,7 @@ export class PlatformDataService implements OnModuleInit {
   }
 
   async deleteStory(id: string) {
+    await this.syncStoriesFromSnapshot();
     const index = this.stories.findIndex((item) => item.id === id);
     if (index === -1) {
       throw new NotFoundException(`Story ${id} not found`);
@@ -1475,6 +1479,13 @@ export class PlatformDataService implements OnModuleInit {
       products: this.products,
       campaigns: this.campaigns,
     });
+  }
+
+  private async syncStoriesFromSnapshot() {
+    const snapshot = await this.stateSnapshots.load<{
+      stories?: StoryRecord[];
+    }>('platform_data_state');
+    this.replaceArray(this.stories, snapshot?.stories);
   }
 
   private readonly storyLifetimeMs = 24 * 60 * 60 * 1000;
