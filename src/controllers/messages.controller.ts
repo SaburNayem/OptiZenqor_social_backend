@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { CreateMessageDto } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
@@ -19,12 +19,23 @@ export class MessagesController {
   }
 
   @Post(':id')
-  async createMessage(@Param('id') id: string, @Body() body: CreateMessageDto) {
-    return this.coreDatabase.createMessage(id, body.senderId, body.text, {
+  async createMessage(
+    @Param('id') id: string,
+    @Body() body: CreateMessageDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const senderId = await this.resolveSenderId(body.senderId, authorization);
+    return this.coreDatabase.createMessage(id, senderId, body.text, {
       attachments: body.attachments,
       replyToMessageId: body.replyToMessageId,
       kind: body.kind,
       mediaPath: body.mediaPath,
     });
+  }
+
+  private async resolveSenderId(senderId?: string, authorization?: string) {
+    const token = authorization?.replace(/^Bearer\s+/i, '');
+    const user = await this.coreDatabase.resolveUserFromAccessToken(token);
+    return user?.id ?? senderId ?? 'u1';
   }
 }

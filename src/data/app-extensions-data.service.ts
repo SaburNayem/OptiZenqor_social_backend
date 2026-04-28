@@ -1,71 +1,45 @@
 import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { StateSnapshotService } from '../services/state-snapshot.service';
 
+type PollEntry = {
+  id: string;
+  title: string;
+  question: string;
+  options: string[];
+  votes: number[];
+  type: string;
+  statusLabel: string;
+  audienceLabel: string;
+  endsInLabel: string;
+  responseCount: number;
+  accentHex: number;
+};
+
 @Injectable()
 export class AppExtensionsDataService implements OnModuleInit {
   constructor(private readonly stateSnapshots: StateSnapshotService) {}
 
-  private linkedAccounts = [
-    {
-      id: 'u1',
-      name: 'Maya Quinn',
-      handle: '@mayaquinn',
-      roleLabel: 'Creator',
-      isVerified: true,
-    },
-    {
-      id: 'u2',
-      name: 'Nexa Studio',
-      handle: '@nexa.studio',
-      roleLabel: 'Business',
-      isVerified: true,
-    },
-    {
-      id: 'u3',
-      name: 'Rafi Ahmed',
-      handle: '@rafiahmed',
-      roleLabel: 'Personal',
-      isVerified: false,
-    },
-  ];
+  private linkedAccounts: Array<{
+    id: string;
+    name: string;
+    handle: string;
+    roleLabel: string;
+    isVerified: boolean;
+  }> = [];
 
-  private activeAccountId = 'u1';
+  private activeAccountId = '';
 
-  private activitySessions = [
-    {
-      id: 's1',
-      device: 'Pixel Emulator',
-      location: 'Dhaka, BD',
-      platform: 'Android',
-      lastActive: 'Active now',
-      active: true,
-      isCurrent: true,
-    },
-    {
-      id: 's2',
-      device: 'MacBook Pro',
-      location: 'Dhaka, BD',
-      platform: 'Web',
-      lastActive: '2 hours ago',
-      active: true,
-      isCurrent: false,
-    },
-    {
-      id: 's3',
-      device: 'iPhone 15 Pro',
-      location: 'Singapore',
-      platform: 'iOS',
-      lastActive: 'Yesterday',
-      active: false,
-      isCurrent: false,
-    },
-  ];
+  private activitySessions: Array<{
+    id: string;
+    device: string;
+    location: string;
+    platform: string;
+    lastActive: string;
+    active: boolean;
+    isCurrent: boolean;
+  }> = [];
 
-  private loginHistory = [
-    'Login success from Pixel Emulator',
-    'Password changed from MacBook Pro',
-    'New device approved: iPhone 15 Pro',
-  ];
+  private loginHistory: string[] = [];
 
   private verificationRequest = {
     status: 'notRequested',
@@ -77,12 +51,12 @@ export class AppExtensionsDataService implements OnModuleInit {
 
   private reportCenter = {
     reasons: ['Spam', 'Harassment', 'Violence', 'False information'],
-    history: [{ reason: 'Spam', status: 'Submitted' }],
+    history: [] as Array<{ reason: string; status: string }>,
   };
 
   private deepLinkState = {
     supportedPrefixes: ['optizenqor://', 'https://optizenqor.app/'],
-    recentLinks: ['optizenqor://posts/p1', 'https://optizenqor.app/reels/r1'],
+    recentLinks: [] as string[],
   };
 
   private appUpdate = {
@@ -92,11 +66,8 @@ export class AppExtensionsDataService implements OnModuleInit {
   };
 
   private offlineSync = {
-    isOffline: true,
-    queue: [
-      { title: 'Like on post #923', pending: true },
-      { title: 'Draft save', pending: true },
-    ],
+    isOffline: false,
+    queue: [] as Array<{ title: string; pending: boolean }>,
   };
 
   private localizationSupport = {
@@ -115,55 +86,9 @@ export class AppExtensionsDataService implements OnModuleInit {
     isRetrying: false,
   };
 
-  private activePolls = [
-    {
-      id: 'poll_1',
-      title: 'Weekly content direction',
-      question: 'What would you like to see next on my profile?',
-      options: ['Behind-the-scenes reels', 'Career growth tips', 'Design breakdowns'],
-      votes: [42, 28, 36],
-      type: 'poll',
-      statusLabel: 'Live now',
-      audienceLabel: 'Followers only',
-      endsInLabel: 'Ends in 18 hours',
-      responseCount: 106,
-      accentHex: 0xff0ea5e9,
-    },
-    {
-      id: 'survey_1',
-      title: 'Community feedback survey',
-      question: 'Which area of the app still needs the most improvement?',
-      options: [
-        'Profile customization',
-        'Messaging reliability',
-        'Content discovery',
-        'Creator monetization',
-      ],
-      votes: [18, 11, 22, 15],
-      type: 'survey',
-      statusLabel: 'Collecting answers',
-      audienceLabel: 'Public',
-      endsInLabel: 'Ends in 3 days',
-      responseCount: 66,
-      accentHex: 0xff14b8a6,
-    },
-  ];
+  private activePolls: PollEntry[] = [];
 
-  private draftPolls = [
-    {
-      id: 'draft_1',
-      title: 'Brand collab interest check',
-      question: 'Would you want early access to brand collab calls?',
-      options: ['Yes, send invites', 'Maybe later', 'Not interested'],
-      votes: [0, 0, 0],
-      type: 'poll',
-      statusLabel: 'Draft',
-      audienceLabel: 'Close friends',
-      endsInLabel: 'Not scheduled',
-      responseCount: 0,
-      accentHex: 0xfff59e0b,
-    },
-  ];
+  private draftPolls: PollEntry[] = [];
 
   private readonly pollTemplates = [
     'Feature feedback',
@@ -209,23 +134,11 @@ export class AppExtensionsDataService implements OnModuleInit {
     { title: 'Screen reader hints', enabled: true },
   ];
 
-  private readonly exploreRecommendations = [
-    {
-      title: 'Creator education',
-      subtitle: 'Because you watch design breakdowns and creator workflow posts.',
-      type: 'topic',
-    },
-    {
-      title: 'Dhaka product jobs',
-      subtitle: 'Recommended from your saved jobs, follows, and community activity.',
-      type: 'job',
-    },
-    {
-      title: 'Marketplace studio gear',
-      subtitle: 'Suggested from your recent storefront and reel engagement.',
-      type: 'product',
-    },
-  ];
+  private readonly exploreRecommendations: Array<{
+    title: string;
+    subtitle: string;
+    type: string;
+  }> = [];
 
   private legalCompliance = {
     termsAccepted: true,
@@ -238,25 +151,9 @@ export class AppExtensionsDataService implements OnModuleInit {
     ],
   };
 
-  private readonly mutedAccounts = [
-    {
-      id: 'u2',
-      name: 'Nexa Studio',
-      handle: '@nexa.studio',
-      status: 'muted',
-      avatarUrl: 'https://placehold.co/64x64',
-    },
-  ];
+  private readonly mutedAccounts: Array<Record<string, string>> = [];
 
-  private readonly restrictedAccounts = [
-    {
-      id: 'u5',
-      name: 'Arif Talent Hub',
-      handle: '@arif.talent',
-      status: 'restricted',
-      avatarUrl: 'https://placehold.co/64x64',
-    },
-  ];
+  private readonly restrictedAccounts: Array<Record<string, string>> = [];
 
   private pushNotificationPreferences = [
     { title: 'Likes', enabled: true },
@@ -267,84 +164,41 @@ export class AppExtensionsDataService implements OnModuleInit {
     { title: 'Live alerts', enabled: false },
   ];
 
-  private readonly mediaViewerItems = [
-    {
-      id: 'media_p1_1',
-      url: 'https://placehold.co/800x600',
-      type: 'image',
-      sourceType: 'post',
-      sourceId: 'p1',
-    },
-    {
-      id: 'media_r1_1',
-      url: 'https://example.com/reels/r1.mp4',
-      type: 'video',
-      sourceType: 'reel',
-      sourceId: 'r1',
-    },
-    {
-      id: 'media_s1_1',
-      url: 'https://placehold.co/720x1280?text=story',
-      type: 'image',
-      sourceType: 'story',
-      sourceId: 's1',
-    },
-  ];
+  private readonly mediaViewerItems: Array<{
+    id: string;
+    url: string;
+    type: string;
+    sourceType: string;
+    sourceId: string;
+  }> = [];
 
   private marketplaceWorkspace = {
-    savedItemIds: ['prd1', 'prd2'],
-    followedSellerIds: ['u4', 'u2'],
-    savedSearches: ['sony camera', 'creator desk'],
-    recentSearches: ['lighting setup', 'remote design audit'],
-    trendingSearches: ['creator bundle', 'studio lamp', 'office chair'],
-    notifications: [
-      'Price dropped 8% on Studio Lamp Drop',
-      'Seller replied to your delivery question',
-      'Your saved search matched a new product listing',
-    ],
+    savedItemIds: [] as string[],
+    followedSellerIds: [] as string[],
+    savedSearches: [] as string[],
+    recentSearches: [] as string[],
+    trendingSearches: [] as string[],
+    notifications: [] as string[],
     blockedKeywords: ['counterfeit', 'stolen', 'weapons'],
-    chatMessages: [
-      {
-        id: 'mkt-chat-1',
-        senderName: 'Luna Crafts',
-        text: 'Yes, this lamp ships tomorrow morning.',
-        timestamp: '2026-04-21T08:35:00.000Z',
-        productTitle: 'Studio Lamp Drop',
-      },
-      {
-        id: 'mkt-chat-2',
-        senderName: 'You',
-        text: 'Can you hold it until evening?',
-        timestamp: '2026-04-21T09:10:00.000Z',
-      },
-    ],
-    offerHistory: [
-      {
-        actor: 'You',
-        action: 'Offered',
-        amount: 135,
-        timestamp: '2026-04-21T09:14:00.000Z',
-      },
-      {
-        actor: 'Luna Crafts',
-        action: 'Countered',
-        amount: 142,
-        timestamp: '2026-04-21T09:16:00.000Z',
-      },
-    ],
-    orders: [
-      {
-        id: 'ord-1',
-        productId: 'prd1',
-        productTitle: 'Studio Lamp Drop',
-        amount: 149.99,
-        status: 'Pending',
-        address: 'House 14, Road 7, Dhanmondi, Dhaka',
-        deliveryMethod: 'Home delivery',
-        paymentMethod: 'Cash on delivery',
-        createdAt: '2026-04-20T11:10:00.000Z',
-      },
-    ],
+    chatMessages: [] as Array<{
+      id?: string;
+      senderName?: string;
+      text?: string;
+      timestamp?: string;
+      productTitle?: string;
+    }>,
+    offerHistory: [] as Array<Record<string, unknown>>,
+    orders: [] as Array<{
+      id?: string;
+      productId?: string;
+      productTitle?: string;
+      amount?: number;
+      status?: string;
+      address?: string;
+      deliveryMethod?: string;
+      paymentMethod?: string;
+      createdAt?: string;
+    }>,
   };
 
   private supportMail = {

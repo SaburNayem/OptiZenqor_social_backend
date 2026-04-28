@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { makeId } from '../common/id.util';
 import { EcosystemDataService } from './ecosystem-data.service';
 import { PlatformDataService } from './platform-data.service';
 import { StateSnapshotService } from '../services/state-snapshot.service';
@@ -76,9 +77,9 @@ export class ExtendedDataService implements OnModuleInit {
   private readonly onboardingState = {
     completed: false,
     firstLaunch: true,
-    selectedInterests: ['Creator Economy', 'Marketplace'],
-    suggestedPeople: ['mayaquinn', 'luna.crafts'],
-    suggestedPages: ['OptiZenqor Creators', 'Nexa Studio'],
+    selectedInterests: [] as string[],
+    suggestedPeople: [] as string[],
+    suggestedPages: [] as string[],
   };
 
   private readonly interests = [
@@ -217,55 +218,31 @@ export class ExtendedDataService implements OnModuleInit {
   }> = [];
 
   private recommendationState = {
-    suggestedUsers: [
-      { id: 'u2', username: 'nexa.studio', reason: 'Popular in your interests' },
-      { id: 'u4', username: 'luna.crafts', reason: 'High engagement seller profile' },
-    ],
-    suggestedPages: [
-      { id: 'page1', name: 'OptiZenqor Creators', reason: 'You follow creator content' },
-    ],
-    trendingTags: ['#creator', '#dhaka', '#hiring'],
-    discoverRecommendations: [
-      { type: 'community', id: 'com1', title: 'Dhaka Creator Hub' },
-      { type: 'job', id: 'job1', title: 'Product Designer' },
-    ],
+    suggestedUsers: [] as Array<{ id: string; username: string; reason: string }>,
+    suggestedPages: [] as Array<{ id: string; name: string; reason: string }>,
+    trendingTags: [] as string[],
+    discoverRecommendations: [] as Array<{ type: string; id: string; title: string }>,
     feedSignals: {
-      follows: 42,
-      bookmarks: 18,
-      dwellTimeScore: 0.81,
-      freshnessWeight: 0.72,
+      follows: 0,
+      bookmarks: 0,
+      dwellTimeScore: 0,
+      freshnessWeight: 0,
     },
   };
 
   private presenceState = {
-    users: [
-      { userId: 'u1', online: true, lastSeen: 'now', typingInThreadId: 't1' },
-      { userId: 'u4', online: false, lastSeen: '12m ago', typingInThreadId: null },
-    ],
-    receipts: [
-      { threadId: 't1', messageId: 'm2', delivered: true, read: false },
-      { threadId: 't2', messageId: 'm3', delivered: true, read: true },
-    ],
+    users: [] as Array<{ userId: string; online: boolean; lastSeen: string; typingInThreadId: string | null }>,
+    receipts: [] as Array<{ threadId: string; messageId: string; delivered: boolean; read: boolean }>,
   };
 
-  private conversationPreferences = [
-    {
-      threadId: 't1',
-      archived: false,
-      muted: false,
-      pinned: true,
-      unread: true,
-      clearedAt: null,
-    },
-    {
-      threadId: 't2',
-      archived: false,
-      muted: true,
-      pinned: false,
-      unread: false,
-      clearedAt: null,
-    },
-  ];
+  private conversationPreferences: Array<{
+    threadId: string;
+    archived: boolean;
+    muted: boolean;
+    pinned: boolean;
+    unread: boolean;
+    clearedAt: string | null;
+  }> = [];
 
   private notificationPreferences = {
     pushCategories: [
@@ -297,41 +274,27 @@ export class ExtendedDataService implements OnModuleInit {
       { reason: 'Unsafe content', status: 'active' },
     ],
     moderationReasons: ['hide_post', 'mute_user', 'restrict_chat', 'suspend_account'],
-    blockedUsers: [
-      { id: 'rb1', name: 'Muted Profile', handle: '@muted.profile', status: 'blocked', avatarUrl: 'https://placehold.co/64x64' },
-    ],
-    hiddenPosts: ['p-hidden-1', 'p-hidden-2'],
+    blockedUsers: [] as Array<{ id: string; name: string; handle: string; status: string; avatarUrl: string }>,
+    hiddenPosts: [] as string[],
     mutedEntities: {
-      users: ['@nova.support'],
-      pages: ['Low Quality Deals'],
-      chats: ['t2'],
+      users: [] as string[],
+      pages: [] as string[],
+      chats: [] as string[],
     },
   };
 
   private supportChat = {
-    threadId: 'support-1',
-    messages: [
-      { id: 'sm1', sender: 'support', text: 'How can we help you today?', createdAt: '2026-04-19T10:00:00.000Z' },
-      { id: 'sm2', sender: 'user', text: 'My payout is still pending.', createdAt: '2026-04-19T10:01:00.000Z' },
-    ],
+    threadId: '',
+    messages: [] as Array<{ id: string; sender: string; text: string; createdAt: string }>,
   };
 
   private walletLedger = {
-    available: 2410,
-    pending: 1280,
-    ledgerEntries: [
-      { id: 'led1', type: 'sale_credit', amount: 320, status: 'settled', createdAt: '2026-04-19T12:10:00.000Z' },
-      { id: 'led2', type: 'withdrawal_hold', amount: -480, status: 'pending', createdAt: '2026-04-19T14:30:00.000Z' },
-    ],
-    withdrawalRequests: [
-      { id: 'wd1', amount: 480, channel: 'Bank Transfer', status: 'pending' },
-    ],
-    deposits: [
-      { id: 'dep1', amount: 210, source: 'Top up', status: 'success' },
-    ],
-    refunds: [
-      { id: 'ref1', amount: 45, reason: 'Marketplace refund', status: 'review' },
-    ],
+    available: 0,
+    pending: 0,
+    ledgerEntries: [] as Array<{ id: string; type: string; amount: number; status: string; createdAt: string }>,
+    withdrawalRequests: [] as Array<{ id: string; amount: number; channel: string; status: string }>,
+    deposits: [] as Array<{ id: string; amount: number; source: string; status: string }>,
+    refunds: [] as Array<{ id: string; amount: number; reason: string; status: string }>,
   };
 
   private masterData = {
@@ -354,30 +317,17 @@ export class ExtendedDataService implements OnModuleInit {
   };
 
   private legalState = {
-    termsAccepted: true,
-    privacyAccepted: true,
-    guidelinesAccepted: true,
-    acceptedAt: '2026-04-01T09:00:00.000Z',
-    consentLogs: [
-      { type: 'terms', accepted: true, acceptedAt: '2026-04-01T09:00:00.000Z' },
-      { type: 'privacy', accepted: true, acceptedAt: '2026-04-01T09:00:00.000Z' },
-      { type: 'guidelines', accepted: true, acceptedAt: '2026-04-01T09:00:00.000Z' },
-    ],
+    termsAccepted: false,
+    privacyAccepted: false,
+    guidelinesAccepted: false,
+    acceptedAt: null as string | null,
+    consentLogs: [] as Array<{ type: string; accepted: boolean; acceptedAt: string }>,
   };
 
   private securityState = {
-    sessions: [
-      { id: 's1', device: 'Windows PC', location: 'Dhaka', platform: 'Web', lastActive: '2m ago', active: true, isCurrent: true },
-      { id: 's2', device: 'iPhone 15', location: 'Dhaka', platform: 'iOS', lastActive: '1d ago', active: true, isCurrent: false },
-    ],
-    loginHistory: [
-      { id: 'lh1', device: 'Windows PC', location: 'Dhaka', timestamp: '2026-04-19T14:00:00.000Z', suspicious: false },
-      { id: 'lh2', device: 'Unknown Browser', location: 'Singapore', timestamp: '2026-04-18T22:00:00.000Z', suspicious: true },
-    ],
-    trustedDevices: [
-      { id: 'td1', name: 'Windows PC', addedAt: '2026-04-01T08:00:00.000Z' },
-      { id: 'td2', name: 'iPhone 15', addedAt: '2026-04-02T10:30:00.000Z' },
-    ],
+    sessions: [] as Array<{ id: string; device: string; location: string; platform: string; lastActive: string; active: boolean; isCurrent: boolean }>,
+    loginHistory: [] as Array<{ id: string; device: string; location: string; timestamp: string; suspicious: boolean }>,
+    trustedDevices: [] as Array<{ id: string; name: string; addedAt: string }>,
   };
 
   async onModuleInit() {
@@ -543,7 +493,7 @@ export class ExtendedDataService implements OnModuleInit {
     provider?: string | null;
   }) {
     const upload = {
-      id: `up${this.uploads.length + 1}`,
+      id: makeId('upload'),
       fileName: input.fileName,
       progress: input.progress,
       status: input.status,
@@ -609,7 +559,7 @@ export class ExtendedDataService implements OnModuleInit {
     }
 
     const comment = {
-      id: `pc${this.postComments.length + 1}`,
+      id: makeId('comment'),
       postId,
       authorId,
       author: authorUser?.name ?? author,
@@ -760,7 +710,7 @@ export class ExtendedDataService implements OnModuleInit {
     const story = this.platformData.getStory(storyId);
     const actor = this.platformData.getUser(userId);
     const next = {
-      id: `sc${this.storyComments.length + 1}`,
+      id: makeId('comment'),
       storyId,
       userId,
       comment,
@@ -906,7 +856,7 @@ export class ExtendedDataService implements OnModuleInit {
 
   async createReelComment(reelId: string, userId: string, comment: string) {
     const next = {
-      id: `rc${this.reelComments.length + 1}`,
+      id: makeId('comment'),
       reelId,
       userId,
       comment,

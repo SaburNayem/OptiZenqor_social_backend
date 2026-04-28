@@ -748,7 +748,7 @@ export class CoreDatabaseService implements OnModuleInit {
       return this.acceptBuddyRequest(inversePending.rows[0].id, requesterId);
     }
 
-    const id = `br_${Date.now()}`;
+    const id = makeId('buddy_request');
     const createdAt = new Date().toISOString();
     await this.database.query(
       `insert into app_buddy_requests (
@@ -780,7 +780,7 @@ export class CoreDatabaseService implements OnModuleInit {
     }
 
     const pair = this.normalizeBuddyPair(request.requester_id, request.target_id);
-    const relationId = `bud_${Date.now()}`;
+    const relationId = makeId('buddy_relation');
     const respondedAt = new Date().toISOString();
     await this.database.query(
       `update app_buddy_requests
@@ -1080,7 +1080,7 @@ export class CoreDatabaseService implements OnModuleInit {
       await this.getCommentRow(options.replyTo, postId);
     }
 
-    const id = `pc${Date.now()}`;
+    const id = makeId('comment');
     await this.database.query(
       `insert into app_post_comments (
         id, post_id, author_id, author, message, reply_to, created_at, like_count,
@@ -1288,7 +1288,7 @@ export class CoreDatabaseService implements OnModuleInit {
       });
     }
 
-    const threadId = `t${Date.now()}`;
+    const threadId = makeId('conversation');
     const createdAt = new Date().toISOString();
     await this.database.query(
       `insert into chat_threads (id, title, participants_label, flag, summary, created_at)
@@ -1343,7 +1343,7 @@ export class CoreDatabaseService implements OnModuleInit {
     const thread = await this.getThread(threadId);
     const participantIds = thread.participantIds ?? (await this.getThreadParticipantIds(threadId));
     await this.getUser(senderId);
-    const id = `m${Date.now()}`;
+    const id = makeId('message');
     await this.database.query(
       `insert into chat_messages (
         id, thread_id, sender_id, text, read, timestamp, attachments,
@@ -1453,7 +1453,7 @@ export class CoreDatabaseService implements OnModuleInit {
     entityType?: string;
     metadata?: Record<string, unknown>;
   }) {
-    const id = `n${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    const id = makeId('notification');
     const metadata = {
       ...(input.metadata ?? {}),
       ...(input.actorName ? { actorName: input.actorName } : {}),
@@ -1562,6 +1562,18 @@ export class CoreDatabaseService implements OnModuleInit {
       );
     `);
     await this.database.query(`
+      do $$
+      begin
+        if not exists (
+          select 1 from pg_constraint where conname = 'app_users_id_format'
+        ) then
+          alter table app_users
+          add constraint app_users_id_format
+          check (id ~ '^user_[a-zA-Z0-9]+$');
+        end if;
+      end $$;
+    `);
+    await this.database.query(`
       alter table app_users
       add column if not exists interests jsonb not null default '[]'::jsonb;
     `);
@@ -1635,6 +1647,18 @@ export class CoreDatabaseService implements OnModuleInit {
       );
     `);
     await this.database.query(`
+      do $$
+      begin
+        if not exists (
+          select 1 from pg_constraint where conname = 'app_buddy_requests_id_format'
+        ) then
+          alter table app_buddy_requests
+          add constraint app_buddy_requests_id_format
+          check (id ~ '^buddy_request_[a-zA-Z0-9]+$');
+        end if;
+      end $$;
+    `);
+    await this.database.query(`
       create table if not exists app_buddy_relations (
         id text primary key,
         user_a_id text not null references app_users(id) on delete cascade,
@@ -1642,6 +1666,18 @@ export class CoreDatabaseService implements OnModuleInit {
         created_at timestamptz not null,
         unique (user_a_id, user_b_id)
       );
+    `);
+    await this.database.query(`
+      do $$
+      begin
+        if not exists (
+          select 1 from pg_constraint where conname = 'app_buddy_relations_id_format'
+        ) then
+          alter table app_buddy_relations
+          add constraint app_buddy_relations_id_format
+          check (id ~ '^buddy_relation_[a-zA-Z0-9]+$');
+        end if;
+      end $$;
     `);
     await this.database.query(`
       create table if not exists app_posts (
@@ -1658,6 +1694,18 @@ export class CoreDatabaseService implements OnModuleInit {
         type text not null,
         created_at timestamptz not null
       );
+    `);
+    await this.database.query(`
+      do $$
+      begin
+        if not exists (
+          select 1 from pg_constraint where conname = 'app_posts_id_format'
+        ) then
+          alter table app_posts
+          add constraint app_posts_id_format
+          check (id ~ '^post_[a-zA-Z0-9]+$');
+        end if;
+      end $$;
     `);
     await this.database.query(`
       create table if not exists app_post_reactions (
@@ -1685,6 +1733,18 @@ export class CoreDatabaseService implements OnModuleInit {
       );
     `);
     await this.database.query(`
+      do $$
+      begin
+        if not exists (
+          select 1 from pg_constraint where conname = 'app_post_comments_id_format'
+        ) then
+          alter table app_post_comments
+          add constraint app_post_comments_id_format
+          check (id ~ '^comment_[a-zA-Z0-9]+$');
+        end if;
+      end $$;
+    `);
+    await this.database.query(`
       create table if not exists app_post_comment_reactions (
         comment_id text not null references app_post_comments(id) on delete cascade,
         user_id text not null references app_users(id) on delete cascade,
@@ -1702,6 +1762,18 @@ export class CoreDatabaseService implements OnModuleInit {
         summary text not null,
         created_at timestamptz not null default now()
       );
+    `);
+    await this.database.query(`
+      do $$
+      begin
+        if not exists (
+          select 1 from pg_constraint where conname = 'chat_threads_id_format'
+        ) then
+          alter table chat_threads
+          add constraint chat_threads_id_format
+          check (id ~ '^conversation_[a-zA-Z0-9]+$');
+        end if;
+      end $$;
     `);
     await this.database.query(`
       create table if not exists chat_thread_participants (
@@ -1727,6 +1799,18 @@ export class CoreDatabaseService implements OnModuleInit {
       );
     `);
     await this.database.query(`
+      do $$
+      begin
+        if not exists (
+          select 1 from pg_constraint where conname = 'chat_messages_id_format'
+        ) then
+          alter table chat_messages
+          add constraint chat_messages_id_format
+          check (id ~ '^message_[a-zA-Z0-9]+$');
+        end if;
+      end $$;
+    `);
+    await this.database.query(`
       create table if not exists app_notifications (
         id text primary key,
         recipient_id text not null references app_users(id) on delete cascade,
@@ -1739,6 +1823,18 @@ export class CoreDatabaseService implements OnModuleInit {
         entity_id text null,
         metadata jsonb not null default '{}'::jsonb
       );
+    `);
+    await this.database.query(`
+      do $$
+      begin
+        if not exists (
+          select 1 from pg_constraint where conname = 'app_notifications_id_format'
+        ) then
+          alter table app_notifications
+          add constraint app_notifications_id_format
+          check (id ~ '^notification_[a-zA-Z0-9]+$');
+        end if;
+      end $$;
     `);
   }
 

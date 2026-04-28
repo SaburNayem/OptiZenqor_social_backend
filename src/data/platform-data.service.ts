@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { randomBytes, randomUUID } from 'crypto';
+import { makeId } from '../common/id.util';
 import { EcosystemDataService } from './ecosystem-data.service';
 import { StateSnapshotService } from '../services/state-snapshot.service';
 
@@ -405,7 +406,7 @@ export class PlatformDataService implements OnModuleInit {
         username = `${baseUsername}${Math.floor(Math.random() * 1000)}`;
       }
       user = {
-        id: `u${this.users.length + 1}`,
+        id: makeId('user'),
         name: input.name,
         username,
         email: input.email,
@@ -497,7 +498,7 @@ export class PlatformDataService implements OnModuleInit {
     }
 
     const user: UserRecord = {
-      id: `u${this.users.length + 1}`,
+      id: makeId('user'),
       name: input.name,
       username: input.username,
       email: input.email,
@@ -733,7 +734,7 @@ export class PlatformDataService implements OnModuleInit {
 
   createPost(input: Pick<PostRecord, 'authorId' | 'caption' | 'media' | 'tags'>) {
     const post: PostRecord = {
-      id: `p${this.posts.length + 1}`,
+      id: makeId('post'),
       authorId: input.authorId,
       caption: input.caption,
       media: input.media,
@@ -902,7 +903,7 @@ export class PlatformDataService implements OnModuleInit {
     );
     const createdAt = new Date();
     const story: StoryRecord = {
-      id: `s_${createdAt.getTime()}_${randomUUID().slice(0, 8)}`,
+      id: makeId('story'),
       userId: input.userId,
       text: input.text,
       media: input.media || mediaItems[0] || '',
@@ -1050,7 +1051,7 @@ export class PlatformDataService implements OnModuleInit {
     >,
   ) {
     const reel: ReelRecord = {
-      id: `r${this.reels.length + 1}`,
+      id: makeId('reel'),
       authorId: input.authorId,
       caption: input.caption,
       audioName: input.audioName,
@@ -1162,7 +1163,7 @@ export class PlatformDataService implements OnModuleInit {
     const thread = this.getThread(threadId);
     this.getUser(senderId);
     const message: MessageRecord = {
-      id: `m${this.messages.length + 1}`,
+      id: makeId('message'),
       threadId,
       senderId,
       text,
@@ -1303,7 +1304,7 @@ export class PlatformDataService implements OnModuleInit {
     >,
   ) {
     const product: ProductRecord = {
-      id: `prd${this.products.length + 1}`,
+      id: makeId('product'),
       ...input,
       listingStatus: 'Pending review',
       reviewStatus: 'Queued',

@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
-import { randomUUID } from 'crypto';
+import { QueryResultRow } from 'pg';
+import { makeId } from '../common/id.util';
 import { CoreDatabaseService } from './core-database.service';
+import { DatabaseService } from './database.service';
 import { StateSnapshotService } from './state-snapshot.service';
 
 type CallMode = 'voice' | 'video';
@@ -15,6 +17,7 @@ interface CallParticipantRecord {
 }
 
 interface CallSignalRecord {
+  id?: string;
   fromUserId: string;
   toUserId?: string;
   type: string;
@@ -38,10 +41,43 @@ interface CallSessionRecord {
   signals: CallSignalRecord[];
 }
 
+type CallSessionRow = QueryResultRow & {
+  id: string;
+  room_name: string;
+  thread_id: string | null;
+  initiator_id: string;
+  recipient_ids: string[];
+  mode: CallMode;
+  status: CallStatus;
+  started_at: string | Date;
+  ended_at: string | Date | null;
+  ended_by: string | null;
+  reason: string | null;
+};
+
+type CallParticipantRow = QueryResultRow & {
+  session_id: string;
+  user_id: string;
+  state: ParticipantState;
+  joined_at: string | Date | null;
+  left_at: string | Date | null;
+};
+
+type CallSignalRow = QueryResultRow & {
+  id: string;
+  session_id: string;
+  from_user_id: string;
+  to_user_id: string | null;
+  type: string;
+  payload: Record<string, unknown>;
+  created_at: string | Date;
+};
+
 @Injectable()
 export class RealtimeStateService implements OnModuleInit {
   constructor(
     private readonly coreDatabase: CoreDatabaseService,
+    private readonly database: DatabaseService,
     private readonly stateSnapshots: StateSnapshotService,
   ) {}
 
@@ -51,19 +87,16 @@ export class RealtimeStateService implements OnModuleInit {
   private readonly threadTyping = new Map<string, Set<string>>();
   private readonly callSessions = new Map<string, CallSessionRecord>();
   private readonly lastSeen = new Map<string, string>();
+  private useDatabase = false;
 
   async onModuleInit() {
-    const snapshot = await this.stateSnapshots.load<CallSessionRecord[]>(
-      'realtime_call_sessions',
-    );
-    if (!snapshot) {
+    this.useDatabase = this.database.getHealth().enabled;
+    if (this.useDatabase) {
+      await this.ensureSchema();
+      await this.loadCallSessionsFromDatabase();
       return;
     }
-
-    this.callSessions.clear();
-    for (const session of snapshot) {
-      this.callSessions.set(session.id, session);
-    }
+    await this.loadCallSessionsFromSnapshots();
   }
 
   async authenticateClient(accessToken?: string, fallbackUserId?: string) {
@@ -222,8 +255,8 @@ export class RealtimeStateService implements OnModuleInit {
           : [];
 
     const session: CallSessionRecord = {
-      id: `call_session_${randomUUID().replace(/-/g, '')}`,
-      roomName: `call:${Date.now()}`,
+      id: makeId('call_session'),
+      roomName: `call:${makeId('session')}`,
       threadId: input.threadId,
       initiatorId: input.initiatorId,
       recipientIds: recipients,
@@ -268,12 +301,14 @@ export class RealtimeStateService implements OnModuleInit {
       });
     }
 
-    await this.persistState();
+    await this.saveCallSession(session);
     return session;
   }
 
   getCallSessions() {
-    return [...this.callSessions.values()];
+    return [...this.callSessions.values()].sort((left, right) =>
+      right.startedAt.localeCompare(left.startedAt),
+    );
   }
 
   getCallSession(id: string) {
@@ -301,7 +336,7 @@ export class RealtimeStateService implements OnModuleInit {
       });
     }
     session.status = 'ongoing';
-    await this.persistState();
+    await this.saveCallSession(session);
     return session;
   }
 
@@ -312,7 +347,7 @@ export class RealtimeStateService implements OnModuleInit {
       participant.state = 'left';
       participant.leftAt = new Date().toISOString();
     }
-    await this.persistState();
+    await this.saveCallSession(session);
     return session;
   }
 
@@ -329,6 +364,7 @@ export class RealtimeStateService implements OnModuleInit {
       await this.coreDatabase.getUser(input.toUserId);
     }
     const signal: CallSignalRecord = {
+      id: makeId('call_signal'),
       fromUserId: input.fromUserId,
       toUserId: input.toUserId,
       type: input.type,
@@ -336,7 +372,7 @@ export class RealtimeStateService implements OnModuleInit {
       createdAt: new Date().toISOString(),
     };
     session.signals.push(signal);
-    await this.persistState();
+    await this.saveCallSignal(input.sessionId, signal);
     return signal;
   }
 
@@ -346,7 +382,7 @@ export class RealtimeStateService implements OnModuleInit {
     session.endedAt = new Date().toISOString();
     session.endedBy = endedBy;
     session.reason = reason ?? 'completed';
-    void this.persistState();
+    void this.saveCallSession(session);
     return session;
   }
 
@@ -389,10 +425,202 @@ export class RealtimeStateService implements OnModuleInit {
     };
   }
 
-  private async persistState() {
-    await this.stateSnapshots.save(
+  private async ensureSchema() {
+    await this.database.query(`
+      create table if not exists app_call_sessions (
+        id text primary key,
+        room_name text not null,
+        thread_id text null references chat_threads(id) on delete set null,
+        initiator_id text not null references app_users(id) on delete cascade,
+        recipient_ids jsonb not null default '[]'::jsonb,
+        mode text not null,
+        status text not null,
+        started_at timestamptz not null,
+        ended_at timestamptz null,
+        ended_by text null references app_users(id) on delete set null,
+        reason text null
+      );
+    `);
+    await this.database.query(`
+      create table if not exists app_call_session_participants (
+        session_id text not null references app_call_sessions(id) on delete cascade,
+        user_id text not null references app_users(id) on delete cascade,
+        state text not null,
+        joined_at timestamptz null,
+        left_at timestamptz null,
+        primary key (session_id, user_id)
+      );
+    `);
+    await this.database.query(`
+      create table if not exists app_call_session_signals (
+        id text primary key,
+        session_id text not null references app_call_sessions(id) on delete cascade,
+        from_user_id text not null references app_users(id) on delete cascade,
+        to_user_id text null references app_users(id) on delete set null,
+        type text not null,
+        payload jsonb not null default '{}'::jsonb,
+        created_at timestamptz not null
+      );
+    `);
+  }
+
+  private async loadCallSessionsFromSnapshots() {
+    const snapshot = await this.stateSnapshots.load<CallSessionRecord[]>(
       'realtime_call_sessions',
-      [...this.callSessions.values()],
     );
+    if (!snapshot) {
+      return;
+    }
+    this.callSessions.clear();
+    for (const session of snapshot) {
+      this.callSessions.set(session.id, session);
+    }
+  }
+
+  private async loadCallSessionsFromDatabase() {
+    const sessions = await this.database.query<CallSessionRow>(
+      `select * from app_call_sessions order by started_at desc`,
+    );
+    const participants = await this.database.query<CallParticipantRow>(
+      `select * from app_call_session_participants order by joined_at asc nulls last`,
+    );
+    const signals = await this.database.query<CallSignalRow>(
+      `select * from app_call_session_signals order by created_at asc`,
+    );
+
+    const participantsBySession = new Map<string, CallParticipantRecord[]>();
+    for (const row of participants.rows) {
+      const list = participantsBySession.get(row.session_id) ?? [];
+      list.push({
+        userId: row.user_id,
+        state: row.state,
+        joinedAt: row.joined_at ? this.iso(row.joined_at) : null,
+        leftAt: row.left_at ? this.iso(row.left_at) : null,
+      });
+      participantsBySession.set(row.session_id, list);
+    }
+
+    const signalsBySession = new Map<string, CallSignalRecord[]>();
+    for (const row of signals.rows) {
+      const list = signalsBySession.get(row.session_id) ?? [];
+      list.push({
+        id: row.id,
+        fromUserId: row.from_user_id,
+        toUserId: row.to_user_id ?? undefined,
+        type: row.type,
+        payload: row.payload ?? {},
+        createdAt: this.iso(row.created_at),
+      });
+      signalsBySession.set(row.session_id, list);
+    }
+
+    this.callSessions.clear();
+    for (const row of sessions.rows) {
+      this.callSessions.set(row.id, {
+        id: row.id,
+        roomName: row.room_name,
+        threadId: row.thread_id ?? undefined,
+        initiatorId: row.initiator_id,
+        recipientIds: Array.isArray(row.recipient_ids) ? row.recipient_ids : [],
+        mode: row.mode,
+        status: row.status,
+        startedAt: this.iso(row.started_at),
+        endedAt: row.ended_at ? this.iso(row.ended_at) : null,
+        endedBy: row.ended_by,
+        reason: row.reason,
+        participants: participantsBySession.get(row.id) ?? [],
+        signals: signalsBySession.get(row.id) ?? [],
+      });
+    }
+  }
+
+  private async saveCallSession(session: CallSessionRecord) {
+    if (!this.useDatabase) {
+      await this.persistSnapshotState();
+      return;
+    }
+
+    this.callSessions.set(session.id, session);
+    await this.database.query(
+      `insert into app_call_sessions (
+        id, room_name, thread_id, initiator_id, recipient_ids, mode, status,
+        started_at, ended_at, ended_by, reason
+      ) values (
+        $1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11
+      )
+      on conflict (id) do update
+      set room_name = excluded.room_name,
+          thread_id = excluded.thread_id,
+          initiator_id = excluded.initiator_id,
+          recipient_ids = excluded.recipient_ids,
+          mode = excluded.mode,
+          status = excluded.status,
+          started_at = excluded.started_at,
+          ended_at = excluded.ended_at,
+          ended_by = excluded.ended_by,
+          reason = excluded.reason`,
+      [
+        session.id,
+        session.roomName,
+        session.threadId ?? null,
+        session.initiatorId,
+        JSON.stringify(session.recipientIds),
+        session.mode,
+        session.status,
+        session.startedAt,
+        session.endedAt,
+        session.endedBy,
+        session.reason,
+      ],
+    );
+    await this.database.query(
+      `delete from app_call_session_participants where session_id = $1`,
+      [session.id],
+    );
+    for (const participant of session.participants) {
+      await this.database.query(
+        `insert into app_call_session_participants (
+          session_id, user_id, state, joined_at, left_at
+        ) values ($1,$2,$3,$4,$5)`,
+        [
+          session.id,
+          participant.userId,
+          participant.state,
+          participant.joinedAt,
+          participant.leftAt,
+        ],
+      );
+    }
+  }
+
+  private async saveCallSignal(sessionId: string, signal: CallSignalRecord) {
+    if (!this.useDatabase) {
+      await this.persistSnapshotState();
+      return;
+    }
+    await this.database.query(
+      `insert into app_call_session_signals (
+        id, session_id, from_user_id, to_user_id, type, payload, created_at
+      ) values ($1,$2,$3,$4,$5,$6::jsonb,$7)`,
+      [
+        signal.id,
+        sessionId,
+        signal.fromUserId,
+        signal.toUserId ?? null,
+        signal.type,
+        JSON.stringify(signal.payload),
+        signal.createdAt,
+      ],
+    );
+  }
+
+  private async persistSnapshotState() {
+    await this.stateSnapshots.save('realtime_call_sessions', [
+      ...this.callSessions.values(),
+    ]);
+  }
+
+  private iso(value: string | Date) {
+    return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
   }
 }

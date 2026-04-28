@@ -122,8 +122,13 @@ export class ChatController {
   }
 
   @Post('threads/:id/messages')
-  async createMessage(@Param('id') id: string, @Body() body: CreateMessageDto) {
-    const message = await this.coreDatabase.createMessage(id, body.senderId, body.text, {
+  async createMessage(
+    @Param('id') id: string,
+    @Body() body: CreateMessageDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const senderId = await this.resolveActorId([body.senderId], authorization);
+    const message = await this.coreDatabase.createMessage(id, senderId, body.text, {
       attachments: body.attachments,
       replyToMessageId: body.replyToMessageId,
       kind: body.kind,
@@ -139,8 +144,13 @@ export class ChatController {
 
   @Patch('threads/:id/read')
   @Post('threads/:id/read')
-  async markRead(@Param('id') id: string, @Body() body: { userId: string }) {
-    const result = await this.coreDatabase.markThreadMessagesRead(id, body.userId);
+  async markRead(
+    @Param('id') id: string,
+    @Body() body: { userId: string },
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actorId = await this.resolveActorId([body.userId], authorization);
+    const result = await this.coreDatabase.markThreadMessagesRead(id, actorId);
     return {
       success: true,
       message: 'Thread marked as read successfully.',
@@ -242,6 +252,6 @@ export class ChatController {
 
     const token = authorization?.replace(/^Bearer\s+/i, '');
     const user = await this.coreDatabase.resolveUserFromAccessToken(token);
-    return user?.id ?? 'u1';
+    return user?.id ?? candidates.find((item) => item?.trim())?.trim() ?? 'u1';
   }
 }

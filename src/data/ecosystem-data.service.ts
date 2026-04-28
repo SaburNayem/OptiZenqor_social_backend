@@ -272,232 +272,24 @@ export interface LiveStreamRecord {
 export class EcosystemDataService implements OnModuleInit {
   constructor(private readonly stateSnapshots: StateSnapshotService) {}
 
-  private readonly hashtags: HashtagRecord[] = [
-    { tag: '#creator', count: 12040 },
-    { tag: '#dhaka', count: 9420 },
-    { tag: '#marketplace', count: 6840 },
-    { tag: '#hiring', count: 5520 },
-  ];
+  private readonly hashtags: HashtagRecord[] = [];
 
-  private readonly trending: TrendingItemRecord[] = [
-    { title: 'Creator Meetup Dhaka', type: 'event', score: 92 },
-    { title: 'Studio lamp drop', type: 'marketplace', score: 89 },
-    { title: '#creator', type: 'hashtag', score: 86 },
-    { title: 'Product Designer Remote', type: 'job', score: 80 },
-  ];
+  private readonly trending: TrendingItemRecord[] = [];
 
-  private readonly bookmarks: BookmarkRecord[] = [
-    { id: 'p1', title: 'Creator launch note', type: 'post' },
-    { id: 'r1', title: '3 onboarding transitions', type: 'reel' },
-    { id: 'prd1', title: 'Studio Lamp Drop', type: 'product' },
-  ];
+  private readonly bookmarks: BookmarkRecord[] = [];
 
   private readonly hiddenItems: Array<{
     id: string;
     targetId: string;
     targetType: 'post' | 'reel' | 'story' | 'comment';
     hiddenAt: string;
-  }> = [
-    {
-      id: 'hid1',
-      targetId: 'p-hidden-1',
-      targetType: 'post',
-      hiddenAt: '2026-04-19T10:15:00.000Z',
-    },
-    {
-      id: 'hid2',
-      targetId: 'p-hidden-2',
-      targetType: 'post',
-      hiddenAt: '2026-04-19T11:45:00.000Z',
-    },
-  ];
+  }> = [];
 
-  private readonly collections: SavedCollectionRecord[] = [
-    { id: 'col1', name: 'Creator Ideas', itemIds: ['p1', 'r1'], privacy: 'private' },
-    { id: 'col2', name: 'Shop Wishlist', itemIds: ['prd1'], privacy: 'private' },
-  ];
+  private readonly collections: SavedCollectionRecord[] = [];
 
-  private readonly pages: PageRecord[] = [
-    {
-      id: 'page1',
-      name: 'OptiZenqor Creators',
-      about: 'Official page for creator programs, events, and launches.',
-      posts: [
-        'Roadmap Q2 is live with creator tools improvements.',
-        'Creator Spotlight: Maya Quinn shared her launch workflow.',
-        'New moderation features are rolling out to public pages.',
-      ],
-      following: true,
-      category: 'Creator Economy',
-      actionButtonLabel: 'Following',
-      reviewSummary: '4.8 average rating from creators.',
-      visitorPostsSummary: 'Weekly creator wins and launch notes.',
-      followersInsight: 'Fastest growing page this month.',
-      avatarUrl: 'https://images.unsplash.com/photo-1551434678-e076c223a692?w=500',
-      coverUrl: 'https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=1200',
-      followersCount: 284000,
-      likesCount: 191000,
-      verified: true,
-      ownerId: 'u2',
-      location: 'Global',
-      contactLabel: 'Message',
-      highlights: ['Announcements', 'Creators', 'Product'],
-    },
-    {
-      id: 'page2',
-      name: 'Nexa Studio',
-      about: 'Brand page for studio launches and marketplace drops.',
-      posts: [
-        'Design sprint notes from this week are now published.',
-        'Template drop for landing page hero sections is live.',
-      ],
-      following: false,
-      category: 'Business',
-      actionButtonLabel: 'Follow',
-      reviewSummary: 'High satisfaction on product launches.',
-      visitorPostsSummary: 'Audience asks about launch timing and bundles.',
-      followersInsight: 'Strong engagement from business accounts.',
-      avatarUrl: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=500',
-      coverUrl: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1200',
-      followersCount: 15400,
-      likesCount: 11800,
-      verified: true,
-      ownerId: 'u2',
-      location: 'Remote Team',
-      contactLabel: 'Message',
-      highlights: ['Design', 'Templates', 'Campaigns'],
-    },
-  ];
+  private readonly pages: PageRecord[] = [];
 
-  private readonly communities: CommunityRecord[] = [
-    {
-      id: 'com1',
-      name: 'Dhaka Creator Hub',
-      description: 'Community for creators sharing growth tactics, feedback, and collaborations.',
-      privacy: 'public',
-      memberCount: 18240,
-      coverColors: [0xff1e40af, 0xff2bb0a1],
-      avatarColor: 0xff2563eb,
-      tags: ['creators', 'growth', 'collabs'],
-      rules: ['Be respectful', 'No spam', 'Credit original work'],
-      createdLabel: 'Created 2 years ago',
-      category: 'Creator Economy',
-      location: 'Dhaka',
-      links: ['https://optizenqor.app/communities/dhaka-creators'],
-      contactInfo: 'mods@optizenqor.app',
-      posts: [
-        {
-          id: 'cp1',
-          authorName: 'Maya Quinn',
-          authorRole: 'admin',
-          authorAccent: 0xff8b5cf6,
-          timeLabel: '2h ago',
-          content: 'We are opening a meetup feedback thread for next Friday.',
-          type: 'text',
-          likes: 120,
-          comments: 18,
-          shares: 9,
-          highlight: true,
-          saved: false,
-          pinned: true,
-          pollOptions: [],
-        },
-      ],
-      events: [
-        {
-          id: 'ce1',
-          title: 'Creator Meetup Dhaka',
-          dateLabel: 'Apr 25, 2026',
-          locationLabel: 'Dhaka',
-          coverColor: 0xff2563eb,
-          status: 'Featured',
-          going: true,
-        },
-      ],
-      members: [
-        {
-          id: 'cm1',
-          name: 'Maya Quinn',
-          role: 'admin',
-          accentColor: 0xff8b5cf6,
-          topContributor: true,
-          following: false,
-        },
-        {
-          id: 'cm2',
-          name: 'Luna Crafts',
-          role: 'member',
-          accentColor: 0xfff59e0b,
-          topContributor: true,
-          following: true,
-        },
-      ],
-      recentActivity: ['12 new posts today', '3 meetup RSVPs in the last hour'],
-      pinnedPosts: [
-        {
-          id: 'cp1',
-          authorName: 'Maya Quinn',
-          authorRole: 'admin',
-          authorAccent: 0xff8b5cf6,
-          timeLabel: '2h ago',
-          content: 'We are opening a meetup feedback thread for next Friday.',
-          type: 'text',
-          likes: 120,
-          comments: 18,
-          shares: 9,
-          highlight: true,
-          saved: false,
-          pinned: true,
-          pollOptions: [],
-        },
-      ],
-      announcements: [
-        {
-          id: 'cp2',
-          authorName: 'Community Mod',
-          authorRole: 'moderator',
-          authorAccent: 0xff14b8a6,
-          timeLabel: '1d ago',
-          content: 'Please keep job posts in the dedicated weekly thread.',
-          type: 'text',
-          likes: 88,
-          comments: 6,
-          shares: 1,
-          highlight: false,
-          saved: false,
-          pinned: false,
-          pollOptions: [],
-        },
-      ],
-      trendingPosts: [
-        {
-          id: 'cp3',
-          authorName: 'Luna Crafts',
-          authorRole: 'member',
-          authorAccent: 0xfff59e0b,
-          timeLabel: '4h ago',
-          content: 'Our storefront conversion improved after changing hero copy.',
-          type: 'image',
-          likes: 210,
-          comments: 32,
-          shares: 18,
-          highlight: false,
-          saved: true,
-          pinned: false,
-          mediaLabel: 'Conversion dashboard screenshot',
-          pollOptions: [],
-        },
-      ],
-      joined: true,
-      approvalRequired: false,
-      allowEvents: true,
-      allowLive: true,
-      allowPolls: true,
-      allowMarketplace: true,
-      allowChatRoom: true,
-      notificationLevel: 'all',
-    },
-  ];
+  private readonly communities: CommunityRecord[] = [];
 
   private readonly taggedPostSummariesByUser: Record<
     string,
@@ -507,184 +299,37 @@ export class EcosystemDataService implements OnModuleInit {
       location: string;
       mediaCount: number;
     }>
-  > = {
-    u1: [
-      {
-        id: 'p1',
-        title: 'Creator studio check-in',
-        location: 'Dhaka',
-        mediaCount: 1,
-      },
-      {
-        id: 'p2',
-        title: 'Launch card review',
-        location: 'Remote',
-        mediaCount: 2,
-      },
-    ],
-    u4: [
-      {
-        id: 'p3',
-        title: 'Weekend storefront drop',
-        location: 'Cox\'s Bazar',
-        mediaCount: 3,
-      },
-    ],
-  };
+  > = {};
 
   private readonly mentionHistoryByUser: Record<
     string,
     Array<{ message: string }>
-  > = {
-    u1: [
-      { message: '@rafiahmed mentioned you in a post' },
-      { message: '@luna.crafts mentioned you in a reel comment' },
-    ],
-    u4: [{ message: '@mayaquinn mentioned you in a collaboration thread' }],
-  };
+  > = {};
 
-  private readonly jobs: JobRecord[] = [
-    {
-      id: 'job1',
-      title: 'Product Designer',
-      company: 'OptiZenqor Labs',
-      location: 'Remote',
-      salary: '$2.5K - $4K',
-      type: 'remote',
-      experienceLevel: 'mid',
-      postedTime: '2h ago',
-      logoInitial: 'O',
-      logoColorValue: 0xff2563eb,
-      description: 'Design social experiences across mobile and admin surfaces.',
-      responsibilities: ['Create UI flows', 'Ship prototypes', 'Work with product and engineering'],
-      requirements: ['2+ years product design', 'Figma proficiency', 'Portfolio required'],
-      skills: ['UI Design', 'UX Research', 'Design Systems'],
-      benefits: ['Remote stipend', 'Flexible schedule', 'Health coverage'],
-      aboutCompany: 'OptiZenqor Labs builds creator-first social tooling.',
-      quickApplyEnabled: true,
-      verifiedEmployer: true,
-      saved: false,
-      applied: false,
-      featured: true,
-      remoteFriendly: true,
-      draft: false,
-      closed: false,
-      externalApplyEnabled: false,
-      deadlineLabel: 'Apply by Apr 30',
-    },
-    {
-      id: 'job2',
-      title: 'Community Operations Manager',
-      company: 'Nexa Studio',
-      location: 'Dhaka',
-      salary: '$1.8K - $2.7K',
-      type: 'hybrid',
-      experienceLevel: 'senior',
-      postedTime: '6h ago',
-      logoInitial: 'N',
-      logoColorValue: 0xffec4899,
-      description: 'Lead creator community operations and event execution.',
-      responsibilities: ['Run community calendar', 'Coordinate ambassadors', 'Review moderation escalations'],
-      requirements: ['Ops experience', 'Community management', 'Strong written communication'],
-      skills: ['Operations', 'Moderation', 'Community'],
-      benefits: ['Bonus', 'Hybrid office', 'Team retreats'],
-      aboutCompany: 'Nexa Studio operates campaigns, launches, and creator programs.',
-      quickApplyEnabled: true,
-      verifiedEmployer: true,
-      saved: true,
-      applied: true,
-      featured: false,
-      remoteFriendly: false,
-      draft: false,
-      closed: false,
-      externalApplyEnabled: true,
-      contactLink: 'https://nexa.app/jobs/community-ops',
-      deadlineLabel: 'Apply by May 05',
-    },
-  ];
+  private readonly jobs: JobRecord[] = [];
 
   private readonly referral: ReferralRecord = {
-    inviteCode: 'OPTI-MAYA-42',
+    inviteCode: '',
     benefit: 'Invite friends and unlock premium credits.',
-    currentInvites: 3,
-    totalMilestone: 10,
-    milestones: [
-      { count: 1, reward: 'Creator badge accent', isAchieved: true },
-      { count: 3, reward: '7 days premium', isAchieved: true },
-      { count: 5, reward: '$10 wallet credit', isAchieved: false },
-      { count: 10, reward: '1 month Creator Pro', isAchieved: false },
-    ],
-    invitedFriends: [
-      { name: 'Rafi Ahmed', avatarUrl: 'https://placehold.co/64x64', status: 'Joined' },
-      { name: 'Tania Noor', avatarUrl: 'https://placehold.co/64x64', status: 'Pending' },
-    ],
+    currentInvites: 0,
+    totalMilestone: 0,
+    milestones: [],
+    invitedFriends: [],
   };
 
-  private readonly premiumPlans: PremiumPlanRecord[] = [
-    {
-      name: 'Creator Pro',
-      price: '$14.99',
-      billingLabel: 'Monthly',
-      description: 'Tools for creators, payouts, and profile boosts.',
-      features: ['Advanced insights', 'Creator badge', 'Priority payouts'],
-      badge: 'Popular',
-      savingsLabel: 'Save 18% yearly',
-    },
-    {
-      name: 'Business Plus',
-      price: '$29.99',
-      billingLabel: 'Monthly',
-      description: 'Tools for business pages, ads, and analytics.',
-      features: ['Ads manager', 'Business analytics', 'Priority support'],
-    },
-  ];
+  private readonly premiumPlans: PremiumPlanRecord[] = [];
 
   private readonly wallet = {
     balance: {
-      available: 2410,
-      pending: 1280,
+      available: 0,
+      pending: 0,
     },
-    transactions: [
-      { title: 'Creator payout', amount: 480, date: '2026-04-19T14:30:00.000Z' },
-      { title: 'Marketplace sale', amount: 320, date: '2026-04-19T12:10:00.000Z' },
-    ],
+    transactions: [] as Array<{ title: string; amount: number; date: string }>,
   };
 
-  private readonly subscriptionPlans = [
-    { id: 'sub1', name: 'Creator Pro', price: 14.99 },
-    { id: 'sub2', name: 'Business Plus', price: 29.99 },
-  ];
+  private readonly subscriptionPlans: Array<{ id: string; name: string; price: number }> = [];
 
-  private notificationInbox: NotificationInboxRecord[] = [
-    {
-      id: 'n1',
-      recipientId: 'u1',
-      title: 'Your reel is trending',
-      body: 'Engagement is up 18% in the last hour.',
-      createdAt: '2026-04-19T15:30:00.000Z',
-      read: false,
-      payload: {
-        type: 'social',
-        routeName: '/reels',
-        entityId: 'r1',
-        metadata: { source: 'trending_engine' },
-      },
-    },
-    {
-      id: 'n2',
-      recipientId: 'u1',
-      title: 'Payout pending review',
-      body: 'Your latest withdrawal is awaiting approval.',
-      createdAt: '2026-04-19T14:35:00.000Z',
-      read: true,
-      payload: {
-        type: 'commerce',
-        routeName: '/wallet-payments',
-        entityId: 'txn-1002',
-        metadata: { status: 'pending' },
-      },
-    },
-  ];
+  private notificationInbox: NotificationInboxRecord[] = [];
 
   private readonly settingsSections: SettingsSectionRecord[] = [
     {
@@ -727,215 +372,76 @@ export class EcosystemDataService implements OnModuleInit {
     },
   ];
 
-  private readonly tickets: SupportTicketRecord[] = [
-    {
-      id: 'tkt1',
-      subject: 'Delayed marketplace payout',
-      category: 'wallet',
-      status: 'pending',
-      createdAt: '2026-04-18T10:00:00.000Z',
-    },
-    {
-      id: 'tkt2',
-      subject: 'Account verification review',
-      category: 'account',
-      status: 'open',
-      createdAt: '2026-04-19T08:30:00.000Z',
-    },
-  ];
+  private readonly tickets: SupportTicketRecord[] = [];
 
-  private readonly groupChats: GroupChatRecord[] = [
-    {
-      id: 'gc1',
-      name: 'Creator Collab Group',
-      members: ['Maya Quinn', 'Nexa Studio', 'Rafi Ahmed'],
-      roles: {
-        'Maya Quinn': 'admin',
-        'Nexa Studio': 'moderator',
-        'Rafi Ahmed': 'member',
-      },
-      media: ['https://placehold.co/200x200', 'https://placehold.co/200x200'],
-    },
-  ];
+  private readonly groupChats: GroupChatRecord[] = [];
 
-  private readonly calls: CallRecord[] = [
-    {
-      id: 'call1',
-      user: 'Maya Quinn',
-      type: 'video',
-      state: 'completed',
-      time: '2026-04-19T09:15:00.000Z',
-    },
-    {
-      id: 'call2',
-      user: 'Luna Crafts',
-      type: 'voice',
-      state: 'missed',
-      time: '2026-04-19T11:40:00.000Z',
-    },
-  ];
+  private readonly calls: CallRecord[] = [];
 
-  private readonly liveStreams: LiveStreamRecord[] = [
-    {
-      id: 'live1',
-      title: 'Creator launch AMA',
-      host: 'Maya Quinn',
-      audienceCount: 420,
-      status: 'live',
-      description: 'Quick behind-the-scenes stream with Q&A and live product highlights.',
-      category: 'Creator Studio',
-      location: 'Dhaka, Bangladesh',
-      quickOptions: [
-        { id: 'live', label: 'Live video', selected: true },
-        { id: 'friend', label: 'Bring a friend' },
-        { id: 'poll', label: 'Poll' },
-        { id: 'products', label: 'Sell products' },
-      ],
-      comments: [
-        {
-          id: 'lc1',
-          username: 'sadia.designs',
-          avatarUrl: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=500',
-          message: 'The setup looks so clean today.',
-          verified: true,
-        },
-        {
-          id: 'lc2',
-          username: 'rahul.codes',
-          avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500',
-          message: 'Please talk about your creator workflow.',
-        },
-      ],
-      reactions: [
-        { id: 'lr1', type: 'love' },
-        { id: 'lr2', type: 'wow' },
-      ],
-    },
-    {
-      id: 'live2',
-      title: 'Seller storefront preview',
-      host: 'Luna Crafts',
-      audienceCount: 0,
-      status: 'scheduled',
-      scheduledAt: '2026-04-21T13:00:00.000Z',
-      description: 'Preview the next storefront launch and answer buyer questions.',
-      category: 'Shopping',
-      location: 'Remote',
-      quickOptions: [
-        { id: 'live', label: 'Live video', selected: true },
-        { id: 'products', label: 'Sell products', selected: true },
-      ],
-      comments: [],
-      reactions: [],
-    },
-  ];
+  private readonly liveStreams: LiveStreamRecord[] = [];
 
-  private readonly jobApplications = [
-    {
-      id: 'a1',
-      jobId: 'job1',
-      applicantName: 'You',
-      status: 'pending',
-      appliedDate: 'Apr 4',
-      timeline: ['Application submitted', 'Recruiter review pending'],
-    },
-    {
-      id: 'a2',
-      jobId: 'job2',
-      applicantName: 'You',
-      status: 'viewed',
-      appliedDate: 'Apr 1',
-      timeline: ['Application submitted', 'Viewed by hiring manager'],
-    },
-  ];
+  private readonly jobApplications: Array<{
+    id: string;
+    jobId: string;
+    applicantName: string;
+    status: string;
+    appliedDate: string;
+    timeline: string[];
+  }> = [];
 
-  private readonly jobAlerts = [
-    {
-      id: 'al1',
-      keyword: 'Flutter',
-      location: 'Remote',
-      frequency: 'daily',
-    },
-    {
-      id: 'al2',
-      keyword: 'Product Design',
-      location: 'Asia',
-      frequency: 'instant',
-    },
-  ];
+  private readonly jobAlerts: Array<{
+    id: string;
+    keyword: string;
+    location: string;
+    frequency: string;
+  }> = [];
 
-  private readonly companies = [
-    {
-      id: 'c1',
-      name: 'OptiZenqor Labs',
-      tagline: 'Creator growth tools',
-      logoInitial: 'O',
-      colorValue: 0xff2563eb,
-      followers: 18200,
-      verified: true,
-    },
-    {
-      id: 'c2',
-      name: 'Nexa Studio',
-      tagline: 'Brand, launch, and creator programs',
-      logoInitial: 'N',
-      colorValue: 0xffec4899,
-      followers: 9100,
-      verified: true,
-    },
-  ];
+  private readonly companies: Array<{
+    id: string;
+    name: string;
+    tagline: string;
+    logoInitial: string;
+    colorValue: number;
+    followers: number;
+    verified: boolean;
+  }> = [];
 
   private readonly careerProfile = {
-    name: 'Maya Quinn',
-    title: 'Product Designer',
-    skills: ['Product Design', 'Design Systems', 'User Research', 'Figma'],
-    experience: ['Senior Product Designer at North Peak', 'UI Designer at Delta Studio'],
-    education: ['B.Des in Interaction Design'],
-    resumeLabel: 'maya_quinn_resume.pdf',
-    portfolioLinks: ['https://portfolio.maya.local', 'https://dribbble.com/mayaquinn'],
-    availability: 'Open to work',
+    name: '',
+    title: '',
+    skills: [] as string[],
+    experience: [] as string[],
+    education: [] as string[],
+    resumeLabel: '',
+    portfolioLinks: [] as string[],
+    availability: '',
   };
 
   private readonly employerStats = {
-    totalJobs: 8,
-    totalApplicants: 124,
-    shortlistedCandidates: 19,
-    messages: 12,
+    totalJobs: 0,
+    totalApplicants: 0,
+    shortlistedCandidates: 0,
+    messages: 0,
   };
 
   private readonly employerProfile = {
-    companyName: 'North Peak Hiring Studio',
-    hiringTitle: 'Talent Partner and Job Provider',
-    about:
-      'Hiring product, engineering, and creator-operations talent for fast-growing social and commerce teams.',
-    location: 'Dhaka, Bangladesh',
-    hiringFocus: [
-      'Flutter and mobile engineering',
-      'Product design and UX research',
-      'Creator growth and partnerships',
-    ],
-    openRoles: ['Senior Flutter Engineer', 'Product Designer', 'Community Operations Specialist'],
-    teamHighlights: ['Fast review cycle', 'Candidate feedback within 5 days', 'Remote-friendly hiring'],
+    companyName: '',
+    hiringTitle: '',
+    about: '',
+    location: '',
+    hiringFocus: [] as string[],
+    openRoles: [] as string[],
+    teamHighlights: [] as string[],
   };
 
-  private readonly applicants = [
-    {
-      id: 'ap1',
-      name: 'Raisa Ahmed',
-      title: 'Senior Flutter Engineer',
-      skills: ['Flutter', 'Dart', 'Architecture'],
-      status: 'shortlisted',
-      resumeLabel: 'raisa_flutter_resume.pdf',
-    },
-    {
-      id: 'ap2',
-      name: 'Noor Rahman',
-      title: 'Product Designer',
-      skills: ['Figma', 'Systems', 'Research'],
-      status: 'viewed',
-      resumeLabel: 'noor_design_resume.pdf',
-    },
-  ];
+  private readonly applicants: Array<{
+    id: string;
+    name: string;
+    title: string;
+    skills: string[];
+    status: string;
+    resumeLabel: string;
+  }> = [];
 
   async onModuleInit() {
     const snapshot = await this.stateSnapshots.load<any>('ecosystem_data_state');
@@ -970,10 +476,7 @@ export class EcosystemDataService implements OnModuleInit {
 
     return {
       query: query ?? '',
-      users: [
-        { id: 'u1', username: 'mayaquinn', name: 'Maya Quinn', type: 'user' },
-        { id: 'u4', username: 'luna.crafts', name: 'Luna Crafts', type: 'user' },
-      ].filter((item) => matchesQuery(`${item.username} ${item.name}`)),
+      users: [] as Array<{ id: string; username: string; name: string; type: string }>,
       hashtags: this.hashtags.filter((item) => matchesQuery(item.tag)),
       jobs: this.jobs.filter((item) => matchesQuery(`${item.title} ${item.company}`)),
       pages: this.pages.filter((item) => matchesQuery(item.name)),
