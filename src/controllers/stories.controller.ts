@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ExtendedDataService } from '../data/extended-data.service';
 import { PlatformDataService } from '../data/platform-data.service';
@@ -23,8 +23,14 @@ export class StoriesController {
 
   @Get()
   @ApiQuery({ name: 'userId', required: false })
-  getStories(@Query('userId') userId?: string) {
-    const stories = this.platformData.getStories(userId);
+  @ApiQuery({ name: 'scope', required: false })
+  async getStories(
+    @Query('userId') userId?: string,
+    @Query('scope') scope?: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const viewerId = await this.resolveViewerId(userId, authorization);
+    const stories = await this.selectStories(userId, scope, viewerId);
     return this.wrapListResponse('Stories fetched successfully.', stories);
   }
 
@@ -159,5 +165,35 @@ export class StoriesController {
       results: items,
       count: items.length,
     };
+  }
+
+  private async resolveViewerId(userId?: string, authorization?: string) {
+    if (userId?.trim()) {
+      return userId.trim();
+    }
+    const token = authorization?.replace(/^Bearer\s+/i, '');
+    const user = await this.coreDatabase.resolveUserFromAccessToken(token);
+    return user?.id ?? 'u1';
+  }
+
+  private async selectStories(
+    userId: string | undefined,
+    scope: string | undefined,
+    viewerId: string,
+  ) {
+    if (userId?.trim()) {
+      return this.platformData.getStories(userId.trim());
+    }
+
+    if (scope?.trim().toLowerCase() !== 'buddies') {
+      return this.platformData.getStories();
+    }
+
+    const buddyIds = await this.coreDatabase
+      .getBuddyIds(viewerId)
+      .catch((): string[] => []);
+    return this.platformData
+      .getStories()
+      .filter((story) => story.userId === viewerId || buddyIds.includes(story.userId));
   }
 }

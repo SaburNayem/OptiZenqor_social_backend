@@ -76,6 +76,23 @@ type MessageRow = QueryResultRow & {
   media_path: string | null;
 };
 
+type BuddyRequestRow = QueryResultRow & {
+  id: string;
+  requester_id: string;
+  target_id: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at: Date | string;
+  responded_at: Date | string | null;
+  responded_by: string | null;
+};
+
+type BuddyRelationRow = QueryResultRow & {
+  id: string;
+  user_a_id: string;
+  user_b_id: string;
+  created_at: Date | string;
+};
+
 type NotificationRow = QueryResultRow & {
   id: string;
   recipient_id: string;
@@ -630,6 +647,204 @@ export class CoreDatabaseService implements OnModuleInit {
     };
   }
 
+  async getBuddyIds(userId: string) {
+    await this.getUser(userId);
+    const { rows } = await this.database.query<
+      QueryResultRow & { buddy_user_id: string }
+    >(
+      `select case
+         when user_a_id = $1 then user_b_id
+         else user_a_id
+       end as buddy_user_id
+       from app_buddy_relations
+       where user_a_id = $1 or user_b_id = $1
+       order by created_at desc`,
+      [userId],
+    );
+    return rows.map((row) => row.buddy_user_id);
+  }
+
+  async getBuddies(userId: string) {
+    await this.getUser(userId);
+    const { rows } = await this.database.query<BuddyRelationRow>(
+      `select *
+       from app_buddy_relations
+       where user_a_id = $1 or user_b_id = $1
+       order by created_at desc`,
+      [userId],
+    );
+    return Promise.all(
+      rows.map((row) => this.mapBuddyRelationRow(row, userId)),
+    );
+  }
+
+  async getSentBuddyRequests(userId: string) {
+    await this.getUser(userId);
+    const { rows } = await this.database.query<BuddyRequestRow>(
+      `select *
+       from app_buddy_requests
+       where requester_id = $1 and status <> 'accepted'
+       order by created_at desc`,
+      [userId],
+    );
+    return Promise.all(
+      rows.map((row) => this.mapBuddyRequestRow(row, userId, 'sent')),
+    );
+  }
+
+  async getReceivedBuddyRequests(userId: string) {
+    await this.getUser(userId);
+    const { rows } = await this.database.query<BuddyRequestRow>(
+      `select *
+       from app_buddy_requests
+       where target_id = $1 and status = 'pending'
+       order by created_at desc`,
+      [userId],
+    );
+    return Promise.all(
+      rows.map((row) => this.mapBuddyRequestRow(row, userId, 'received')),
+    );
+  }
+
+  async createBuddyRequest(requesterId: string, targetUserId: string) {
+    if (requesterId === targetUserId) {
+      throw new ConflictException('You cannot send a buddy request to yourself.');
+    }
+
+    await Promise.all([this.getUser(requesterId), this.getUser(targetUserId)]);
+    const pair = this.normalizeBuddyPair(requesterId, targetUserId);
+
+    const existingRelation = await this.database.query(
+      `select 1
+       from app_buddy_relations
+       where user_a_id = $1 and user_b_id = $2
+       limit 1`,
+      [pair.userAId, pair.userBId],
+    );
+    if (existingRelation.rows[0]) {
+      throw new ConflictException('You are already buddies with this user.');
+    }
+
+    const existingPending = await this.database.query<BuddyRequestRow>(
+      `select *
+       from app_buddy_requests
+       where requester_id = $1 and target_id = $2 and status = 'pending'
+       limit 1`,
+      [requesterId, targetUserId],
+    );
+    if (existingPending.rows[0]) {
+      return this.mapBuddyRequestRow(existingPending.rows[0], requesterId, 'sent');
+    }
+
+    const inversePending = await this.database.query<BuddyRequestRow>(
+      `select *
+       from app_buddy_requests
+       where requester_id = $1 and target_id = $2 and status = 'pending'
+       limit 1`,
+      [targetUserId, requesterId],
+    );
+    if (inversePending.rows[0]) {
+      return this.acceptBuddyRequest(inversePending.rows[0].id, requesterId);
+    }
+
+    const id = `br_${Date.now()}`;
+    const createdAt = new Date().toISOString();
+    await this.database.query(
+      `insert into app_buddy_requests (
+        id, requester_id, target_id, status, created_at, responded_at, responded_by
+      ) values (
+        $1,$2,$3,$4,$5,$6,$7
+      )`,
+      [id, requesterId, targetUserId, 'pending', createdAt, null, null],
+    );
+
+    const request = await this.getBuddyRequestRow(id);
+    return this.mapBuddyRequestRow(request, requesterId, 'sent');
+  }
+
+  async acceptBuddyRequest(requestId: string, actorId: string) {
+    const request = await this.getBuddyRequestRow(requestId);
+    if (request.target_id !== actorId) {
+      throw new UnauthorizedException('Only the receiving user can accept this buddy request.');
+    }
+    if (request.status === 'accepted') {
+      const relation = await this.getBuddyRelationByUsers(
+        request.requester_id,
+        request.target_id,
+      );
+      return this.mapBuddyRelationRow(relation, actorId);
+    }
+    if (request.status === 'rejected') {
+      throw new ConflictException('This buddy request has already been rejected.');
+    }
+
+    const pair = this.normalizeBuddyPair(request.requester_id, request.target_id);
+    const relationId = `bud_${Date.now()}`;
+    const respondedAt = new Date().toISOString();
+    await this.database.query(
+      `update app_buddy_requests
+       set status = 'accepted', responded_at = $2, responded_by = $3
+       where id = $1`,
+      [requestId, respondedAt, actorId],
+    );
+    await this.database.query(
+      `insert into app_buddy_relations (id, user_a_id, user_b_id, created_at)
+       values ($1,$2,$3,$4)
+       on conflict (user_a_id, user_b_id) do nothing`,
+      [relationId, pair.userAId, pair.userBId, respondedAt],
+    );
+    const relation = await this.getBuddyRelationByUsers(pair.userAId, pair.userBId);
+    return this.mapBuddyRelationRow(relation, actorId);
+  }
+
+  async rejectBuddyRequest(requestId: string, actorId: string) {
+    const request = await this.getBuddyRequestRow(requestId);
+    if (request.target_id !== actorId) {
+      throw new UnauthorizedException('Only the receiving user can reject this buddy request.');
+    }
+    const respondedAt = new Date().toISOString();
+    await this.database.query(
+      `update app_buddy_requests
+       set status = 'rejected', responded_at = $2, responded_by = $3
+       where id = $1`,
+      [requestId, respondedAt, actorId],
+    );
+    const updated = await this.getBuddyRequestRow(requestId);
+    return this.mapBuddyRequestRow(updated, actorId, 'received');
+  }
+
+  async deleteBuddyRequest(requestId: string, actorId: string) {
+    const request = await this.getBuddyRequestRow(requestId);
+    if (![request.requester_id, request.target_id].includes(actorId)) {
+      throw new UnauthorizedException('You cannot delete this buddy request.');
+    }
+    await this.database.query(`delete from app_buddy_requests where id = $1`, [requestId]);
+    return {
+      success: true,
+      requestId,
+      userId: actorId,
+      deleted: true,
+      message: 'Buddy request deleted successfully.',
+    };
+  }
+
+  async removeBuddy(actorId: string, buddyUserId: string) {
+    await Promise.all([this.getUser(actorId), this.getUser(buddyUserId)]);
+    const pair = this.normalizeBuddyPair(actorId, buddyUserId);
+    const deleted = await this.database.query(
+      `delete from app_buddy_relations
+       where user_a_id = $1 and user_b_id = $2`,
+      [pair.userAId, pair.userBId],
+    );
+    return {
+      success: true,
+      userId: actorId,
+      buddyUserId,
+      removed: (deleted.rowCount ?? 0) > 0,
+      message: 'Buddy removed successfully.',
+    };
+  }
+
   async getFeed() {
     const posts = await this.getPosts();
     return Promise.all(
@@ -993,7 +1208,14 @@ export class CoreDatabaseService implements OnModuleInit {
     const { rows } = await this.database.query<ThreadRow>(
       `select * from chat_threads order by created_at desc`,
     );
-    return Promise.all(rows.map((thread) => this.buildThreadPayload(thread)));
+    return Promise.all(
+      rows.map((thread) =>
+        this.buildThreadPayload(thread, {
+          includeParticipants: true,
+          includeParticipantIds: true,
+        }),
+      ),
+    );
   }
 
   async getThread(id: string) {
@@ -1089,6 +1311,21 @@ export class CoreDatabaseService implements OnModuleInit {
     }
 
     return this.getThread(threadId);
+  }
+
+  async createOrOpenThread(actorId: string, participantIds: string[]) {
+    const normalized = [...new Set([actorId, ...participantIds].map((value) => value.trim()))];
+    if (normalized.length === 2) {
+      const otherUserId = normalized.find((id) => id !== actorId);
+      if (!otherUserId) {
+        throw new ConflictException('Direct thread target user could not be resolved.');
+      }
+      return this.ensureDirectThread(actorId, otherUserId);
+    }
+
+    throw new ConflictException(
+      'This backend currently supports creating direct threads with one target user.',
+    );
   }
 
   async createMessage(
@@ -1382,6 +1619,27 @@ export class CoreDatabaseService implements OnModuleInit {
         target_id text not null references app_users(id) on delete cascade,
         created_at timestamptz not null,
         primary key (follower_id, target_id)
+      );
+    `);
+    await this.database.query(`
+      create table if not exists app_buddy_requests (
+        id text primary key,
+        requester_id text not null references app_users(id) on delete cascade,
+        target_id text not null references app_users(id) on delete cascade,
+        status text not null default 'pending',
+        created_at timestamptz not null,
+        responded_at timestamptz null,
+        responded_by text null references app_users(id) on delete set null,
+        unique (requester_id, target_id)
+      );
+    `);
+    await this.database.query(`
+      create table if not exists app_buddy_relations (
+        id text primary key,
+        user_a_id text not null references app_users(id) on delete cascade,
+        user_b_id text not null references app_users(id) on delete cascade,
+        created_at timestamptz not null,
+        unique (user_a_id, user_b_id)
       );
     `);
     await this.database.query(`
@@ -2040,6 +2298,95 @@ export class CoreDatabaseService implements OnModuleInit {
       type: row.type,
       createdAt: this.iso(row.created_at),
     };
+  }
+
+  private async getBuddyRequestRow(requestId: string) {
+    const { rows } = await this.database.query<BuddyRequestRow>(
+      `select * from app_buddy_requests where id = $1 limit 1`,
+      [requestId],
+    );
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundException(`Buddy request ${requestId} not found`);
+    }
+    return row;
+  }
+
+  private async getBuddyRelationByUsers(userAId: string, userBId: string) {
+    const pair = this.normalizeBuddyPair(userAId, userBId);
+    const { rows } = await this.database.query<BuddyRelationRow>(
+      `select *
+       from app_buddy_relations
+       where user_a_id = $1 and user_b_id = $2
+       limit 1`,
+      [pair.userAId, pair.userBId],
+    );
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundException(
+        `Buddy relation between ${pair.userAId} and ${pair.userBId} not found`,
+      );
+    }
+    return row;
+  }
+
+  private normalizeBuddyPair(userAId: string, userBId: string) {
+    const [left, right] = [userAId.trim(), userBId.trim()].sort();
+    return {
+      userAId: left,
+      userBId: right,
+    };
+  }
+
+  private async mapBuddyRelationRow(row: BuddyRelationRow, viewerId: string) {
+    const buddyUserId = row.user_a_id === viewerId ? row.user_b_id : row.user_a_id;
+    const user = this.toUserPreview(await this.getUser(buddyUserId));
+    return {
+      id: row.id,
+      status: 'accepted',
+      mutualCount: await this.getMutualCount(viewerId, buddyUserId),
+      createdAt: this.iso(row.created_at),
+      user,
+    };
+  }
+
+  private async mapBuddyRequestRow(
+    row: BuddyRequestRow,
+    viewerId: string,
+    perspective: 'sent' | 'received',
+  ) {
+    const otherUserId = perspective === 'sent' ? row.target_id : row.requester_id;
+    const user = this.toUserPreview(await this.getUser(otherUserId));
+    const status =
+      row.status === 'pending'
+        ? perspective === 'sent'
+          ? 'pending_sent'
+          : 'pending_received'
+        : row.status;
+    return {
+      id: row.id,
+      status,
+      mutualCount: await this.getMutualCount(viewerId, otherUserId),
+      createdAt: this.iso(row.created_at),
+      user,
+    };
+  }
+
+  private async getMutualCount(actorId: string, targetId: string) {
+    const { rows } = await this.database.query<QueryResultRow & { count: string }>(
+      `select count(*)::text as count
+       from (
+         select actor_rel.target_id
+         from app_follow_relations actor_rel
+         join app_follow_relations target_rel
+           on target_rel.target_id = actor_rel.target_id
+         where actor_rel.follower_id = $1
+           and target_rel.follower_id = $2
+           and actor_rel.target_id not in ($1, $2)
+       ) mutuals`,
+      [actorId, targetId],
+    );
+    return Number(rows[0]?.count ?? '0');
   }
 
   private mapThread(row: ThreadRow) {

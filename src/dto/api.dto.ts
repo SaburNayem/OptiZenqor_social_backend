@@ -433,6 +433,34 @@ export class StoryViewDto {
   userId!: string;
 }
 
+export class BuddyRequestCreateDto {
+  @ApiProperty()
+  @IsString()
+  targetUserId!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  actorId?: string;
+}
+
+export class BuddyActionDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  actorId?: string;
+}
+
 export class StoryReplyDto {
   @ApiProperty()
   @IsString()
@@ -615,6 +643,57 @@ export class CreateMessageDto {
   @IsOptional()
   @IsString()
   mediaPath?: string;
+}
+
+export class CreateChatThreadDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  actorId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  targetUserId?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  participantIds?: string[];
+}
+
+export class UpdateChatPreferencesDto {
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  @IsObject()
+  patch!: Record<string, unknown>;
+}
+
+export class UpdateChatPresenceDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  online?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  lastSeen?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  typingInThreadId?: string | null;
 }
 
 export class CreateCommentDto {

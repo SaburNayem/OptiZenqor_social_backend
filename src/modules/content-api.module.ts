@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ChatController } from '../controllers/chat.controller';
+import { BuddiesController } from '../controllers/buddies.controller';
 import { CommentsController } from '../controllers/comments.controller';
 import { ContentController } from '../controllers/content.controller';
 import { CreatorFlowController } from '../controllers/creator-flow.controller';
@@ -28,6 +29,7 @@ import { RealtimeGateway } from '../gateways/realtime.gateway';
     CommentsController,
     CreatorFlowController,
     ChatController,
+    BuddiesController,
     RealtimeController,
   ],
   providers: [RealtimeGateway],

@@ -916,7 +916,7 @@ export class PlatformDataService implements OnModuleInit {
       mentionUsernames,
       linkLabel: input.linkLabel ?? null,
       linkUrl: input.linkUrl ?? null,
-      privacy: input.privacy ?? 'public',
+      privacy: input.privacy ?? 'Everyone',
       location: input.location?.trim() || null,
       collageLayout: input.collageLayout ?? null,
       textOffsetDx: input.textOffsetDx ?? 0,
@@ -983,7 +983,7 @@ export class PlatformDataService implements OnModuleInit {
     story.media = story.media || story.mediaItems[0] || '';
     story.backgroundColors = story.backgroundColors ?? [0xff1e40af, 0xff2bb0a1];
     story.textColorValue = story.textColorValue ?? 0xffffffff;
-    story.privacy = story.privacy ?? 'public';
+    story.privacy = story.privacy ?? 'Everyone';
     story.textOffsetDx = story.textOffsetDx ?? 0;
     story.textOffsetDy = story.textOffsetDy ?? 0;
     story.textScale = story.textScale ?? 1;
@@ -1520,7 +1520,7 @@ export class PlatformDataService implements OnModuleInit {
       mentionUsernames,
       linkLabel: story.linkLabel ?? null,
       linkUrl: story.linkUrl ?? null,
-      privacy: story.privacy ?? 'public',
+      privacy: story.privacy ?? 'Everyone',
       location: story.location ?? null,
       collageLayout: story.collageLayout ?? null,
       textOffsetDx: story.textOffsetDx ?? 0,

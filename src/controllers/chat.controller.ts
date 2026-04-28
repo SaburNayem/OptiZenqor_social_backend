@@ -1,8 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ExtendedDataService } from '../data/extended-data.service';
-import { CreateMessageDto } from '../dto/api.dto';
+import {
+  CreateChatThreadDto,
+  CreateMessageDto,
+  UpdateChatPreferencesDto,
+  UpdateChatPresenceDto,
+} from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { RealtimeStateService } from '../services/realtime-state.service';
 
 @ApiTags('chat')
 @Controller('chat')
@@ -10,6 +16,7 @@ export class ChatController {
   constructor(
     private readonly coreDatabase: CoreDatabaseService,
     private readonly extendedData: ExtendedDataService,
+    private readonly realtimeState: RealtimeStateService,
   ) {}
 
   @Get()
@@ -62,6 +69,30 @@ export class ChatController {
       items: threads,
       results: threads,
       threads,
+    };
+  }
+
+  @Post('threads')
+  async createThread(
+    @Body() body: CreateChatThreadDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actorId = await this.resolveActorId(
+      [body.userId, body.actorId],
+      authorization,
+    );
+    const participantIds = body.participantIds?.length
+      ? body.participantIds
+      : body.targetUserId
+        ? [body.targetUserId]
+        : [];
+    const thread = await this.coreDatabase.createOrOpenThread(actorId, participantIds);
+    return {
+      success: true,
+      message: 'Thread created successfully.',
+      ...thread,
+      thread,
+      data: thread,
     };
   }
 
@@ -119,16 +150,19 @@ export class ChatController {
   }
 
   @Patch('threads/:id/archive')
+  @Post('threads/:id/archive')
   archiveThread(@Param('id') id: string) {
     return this.extendedData.updateConversationPreference(id, 'archived', true);
   }
 
   @Patch('threads/:id/mute')
+  @Post('threads/:id/mute')
   muteThread(@Param('id') id: string) {
     return this.extendedData.updateConversationPreference(id, 'muted', true);
   }
 
   @Patch('threads/:id/pin')
+  @Post('threads/:id/pin')
   pinThread(@Param('id') id: string) {
     return this.extendedData.updateConversationPreference(id, 'pinned', true);
   }
@@ -145,5 +179,69 @@ export class ChatController {
       'clearedAt',
       new Date().toISOString(),
     );
+  }
+
+  @Get('presence')
+  getPresence() {
+    const snapshot = this.realtimeState.getPresenceSnapshot();
+    return {
+      success: true,
+      message: 'Chat presence fetched successfully.',
+      data: snapshot,
+      presence: snapshot,
+    };
+  }
+
+  @Post('presence')
+  async updatePresence(@Body() body: UpdateChatPresenceDto) {
+    const presence = await this.extendedData.updatePresence(body);
+    return {
+      success: true,
+      message: 'Chat presence updated successfully.',
+      data: presence,
+      presence,
+    };
+  }
+
+  @Get('preferences')
+  getPreferences() {
+    const preferences = {
+      conversationPreferences: this.extendedData.getConversationPreferences(),
+      notificationPreferences: this.extendedData.getNotificationPreferences(),
+      safetyConfig: this.extendedData.getSafetyConfig(),
+    };
+    return {
+      success: true,
+      message: 'Chat preferences fetched successfully.',
+      data: preferences,
+      preferences,
+    };
+  }
+
+  @Put('preferences')
+  async updatePreferences(@Body() body: UpdateChatPreferencesDto) {
+    const preferences = await this.extendedData.updateChatPreferences(body.patch);
+    return {
+      success: true,
+      message: 'Chat preferences updated successfully.',
+      data: preferences,
+      preferences,
+    };
+  }
+
+  private async resolveActorId(
+    candidates: Array<string | undefined>,
+    authorization?: string,
+  ) {
+    for (const candidate of candidates) {
+      const normalized = candidate?.trim();
+      if (normalized) {
+        return normalized;
+      }
+    }
+
+    const token = authorization?.replace(/^Bearer\s+/i, '');
+    const user = await this.coreDatabase.resolveUserFromAccessToken(token);
+    return user?.id ?? 'u1';
   }
 }

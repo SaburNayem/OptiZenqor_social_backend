@@ -373,9 +373,12 @@ export class RealtimeStateService implements OnModuleInit {
       serverEvents: [
         'session.ready',
         'presence.updated',
+        'presence:update',
         'thread.presence.updated',
         'chat.message.created',
+        'message:new',
         'chat.message.read',
+        'message:read',
         'notification.created',
         'call.session.created',
         'call.participant.joined',

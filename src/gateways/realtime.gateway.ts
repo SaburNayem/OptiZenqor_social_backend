@@ -48,6 +48,7 @@ export class RealtimeGateway
         contract: this.realtimeState.getSocketContract(),
       });
       this.server.emit('presence.updated', presence);
+      this.server.emit('presence:update', presence);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Realtime authentication failed.';
       client.emit('session.error', { message });
@@ -58,12 +59,14 @@ export class RealtimeGateway
   handleDisconnect(client: Socket) {
     const presence = this.realtimeState.unregisterConnection(client.id);
     this.server.emit('presence.updated', presence);
+    this.server.emit('presence:update', presence);
   }
 
   @SubscribeMessage('presence.subscribe')
   handlePresenceSubscribe(@ConnectedSocket() client: Socket) {
     const snapshot = this.realtimeState.getPresenceSnapshot();
     client.emit('presence.updated', snapshot);
+    client.emit('presence:update', snapshot);
     return snapshot;
   }
 
@@ -130,6 +133,7 @@ export class RealtimeGateway
     };
 
     this.server.to(`thread:${body.threadId}`).emit('chat.message.created', eventPayload);
+    this.server.to(`thread:${body.threadId}`).emit('message:new', eventPayload);
 
     for (const participantId of (await this.coreDatabase.getThreadParticipantIds(body.threadId)).filter(
       (id) => id !== userId,
@@ -153,6 +157,7 @@ export class RealtimeGateway
     const userId = this.requireUserId(client);
     const receipt = await this.coreDatabase.markThreadMessagesRead(body.threadId, userId);
     this.server.to(`thread:${body.threadId}`).emit('chat.message.read', receipt);
+    this.server.to(`thread:${body.threadId}`).emit('message:read', receipt);
     return receipt;
   }
 

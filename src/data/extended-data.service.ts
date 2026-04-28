@@ -965,6 +965,44 @@ export class ExtendedDataService implements OnModuleInit {
     return this.presenceState;
   }
 
+  async updatePresence(patch: {
+    userId?: string;
+    online?: boolean;
+    lastSeen?: string;
+    typingInThreadId?: string | null;
+  }) {
+    const userId = patch.userId?.trim() || 'u1';
+    const existing =
+      this.presenceState.users.find((item) => item.userId === userId) ??
+      (() => {
+        const next = {
+          userId,
+          online: false,
+          lastSeen: new Date().toISOString(),
+          typingInThreadId: null as string | null,
+        };
+        this.presenceState.users.unshift(next);
+        return next;
+      })();
+
+    if (typeof patch.online === 'boolean') {
+      existing.online = patch.online;
+    }
+    if (patch.lastSeen !== undefined) {
+      existing.lastSeen = patch.lastSeen || new Date().toISOString();
+    } else if (patch.online === false) {
+      existing.lastSeen = new Date().toISOString();
+    } else if (patch.online === true) {
+      existing.lastSeen = 'now';
+    }
+    if (patch.typingInThreadId !== undefined) {
+      existing.typingInThreadId = patch.typingInThreadId;
+    }
+
+    await this.persistState();
+    return this.presenceState;
+  }
+
   getConversationPreferences() {
     return this.conversationPreferences;
   }
@@ -989,6 +1027,31 @@ export class ExtendedDataService implements OnModuleInit {
     Object.assign(this.notificationPreferences, patch);
     await this.persistState();
     return this.notificationPreferences;
+  }
+
+  async updateChatPreferences(patch: Record<string, unknown>) {
+    if (patch.notificationPreferences && typeof patch.notificationPreferences === 'object') {
+      Object.assign(
+        this.notificationPreferences,
+        patch.notificationPreferences as Record<string, unknown>,
+      );
+    }
+    if (Array.isArray(patch.conversationPreferences)) {
+      this.conversationPreferences = patch.conversationPreferences as typeof this.conversationPreferences;
+    }
+    if (patch.safetyConfig && typeof patch.safetyConfig === 'object') {
+      this.safetyConfig = {
+        ...this.safetyConfig,
+        ...(patch.safetyConfig as typeof this.safetyConfig),
+      };
+    }
+
+    await this.persistState();
+    return {
+      conversationPreferences: this.conversationPreferences,
+      notificationPreferences: this.notificationPreferences,
+      safetyConfig: this.safetyConfig,
+    };
   }
 
   getSafetyConfig() {
