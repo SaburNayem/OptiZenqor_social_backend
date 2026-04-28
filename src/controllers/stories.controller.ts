@@ -11,6 +11,7 @@ import {
   UpdateStoryDto,
 } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { StoriesDatabaseService } from '../services/stories-database.service';
 
 @ApiTags('stories')
 @Controller('stories')
@@ -19,6 +20,7 @@ export class StoriesController {
     private readonly platformData: PlatformDataService,
     private readonly extendedData: ExtendedDataService,
     private readonly coreDatabase: CoreDatabaseService,
+    private readonly storiesDatabase: StoriesDatabaseService,
   ) {}
 
   @Get()
@@ -51,8 +53,8 @@ export class StoriesController {
   }
 
   @Get(':id')
-  getStory(@Param('id') id: string) {
-    const story = this.platformData.getStory(id);
+  async getStory(@Param('id') id: string) {
+    const story = await this.storiesDatabase.getStory(id);
     const payload = {
       ...story,
       comments: this.extendedData.getStoryComments(id),
@@ -69,35 +71,19 @@ export class StoriesController {
   }
 
   @Post()
-  createStory(@Body() body: CreateStoryDto) {
-    return this.platformData.createStory({
-      userId: body.userId,
-      text: body.text,
-      media: body.media ?? '',
-      mediaItems: body.mediaItems ?? [],
-      music: body.music,
-      isLocalFile: body.isLocalFile ?? false,
-      backgroundColors: body.backgroundColors ?? [0xff1e40af, 0xff2bb0a1],
-      textColorValue: body.textColorValue ?? 0xffffffff,
-      sticker: body.sticker,
-      effectName: body.effectName,
-      mentionUsername: body.mentionUsername,
-      mentionUsernames: body.mentionUsernames,
-      linkLabel: body.linkLabel,
-      linkUrl: body.linkUrl,
-      privacy: body.privacy ?? 'public',
-      location: body.location,
-      collageLayout: body.collageLayout,
-      textOffsetDx: body.textOffsetDx ?? 0,
-      textOffsetDy: body.textOffsetDy ?? 0,
-      textScale: body.textScale ?? 1,
-      mediaTransforms: body.mediaTransforms,
-    });
+  async createStory(
+    @Body() body: CreateStoryDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const token = authorization?.replace(/^Bearer\s+/i, '');
+    const authUser = await this.coreDatabase.resolveUserFromAccessToken(token);
+    const userId = authUser?.id ?? body.userId;
+    return this.storiesDatabase.createStory(userId, body);
   }
 
   @Patch(':id')
   updateStory(@Param('id') id: string, @Body() body: UpdateStoryDto) {
-    return this.platformData.updateStory(id, body);
+    return this.storiesDatabase.updateStory(id, body);
   }
 
   @Get(':id/comments')
@@ -127,7 +113,7 @@ export class StoriesController {
 
   @Post(':id/reply')
   async replyToStory(@Param('id') id: string, @Body() body: StoryReplyDto) {
-    const story = this.platformData.getStory(id);
+    const story = await this.storiesDatabase.getStory(id);
     const recipientUserId = body.recipientUserId?.trim() || story.userId;
     const thread = await this.coreDatabase.ensureDirectThread(body.userId, recipientUserId);
     const text = body.message?.trim() || body.text?.trim() || '';
@@ -153,7 +139,7 @@ export class StoriesController {
 
   @Delete(':id')
   deleteStory(@Param('id') id: string) {
-    return this.platformData.deleteStory(id);
+    return this.storiesDatabase.deleteStory(id);
   }
 
   private wrapListResponse(message: string, items: unknown[]) {
@@ -182,17 +168,17 @@ export class StoriesController {
     viewerId: string,
   ) {
     if (userId?.trim()) {
-      return this.platformData.getStories(userId.trim());
+      return this.storiesDatabase.getActiveStories(userId.trim());
     }
 
     if (scope?.trim().toLowerCase() !== 'buddies') {
-      return this.platformData.getStories();
+      return this.storiesDatabase.getActiveStories();
     }
 
     const buddyIds = await this.coreDatabase
       .getBuddyIds(viewerId)
       .catch((): string[] => []);
-    return (await this.platformData.getStories()).filter(
+    return (await this.storiesDatabase.getActiveStories()).filter(
       (story) => story.userId === viewerId || buddyIds.includes(story.userId),
     );
   }

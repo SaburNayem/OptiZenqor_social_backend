@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'crypto';
 import { QueryResultRow } from 'pg';
+import { makeId } from '../common/id.util';
 import { coreSeedCommentReactions, coreSeedFollows, coreSeedMessages, coreSeedNotifications, coreSeedPostComments, coreSeedPostReactions, coreSeedPosts, coreSeedThreads, coreSeedUsers } from '../database/core-seed';
 import { DatabaseService } from './database.service';
 
@@ -224,7 +225,7 @@ export class CoreDatabaseService implements OnModuleInit {
     interests?: string[];
   }) {
     await this.assertEmailAndUsernameAvailable(input.email, input.username);
-    const id = `u${Date.now()}`;
+    const id = makeId('user');
     const passwordHash = this.hashPassword(input.password);
     const interests = [...new Set((input.interests ?? []).map((interest) => interest.trim()).filter(Boolean))];
     await this.database.query(
@@ -308,7 +309,7 @@ export class CoreDatabaseService implements OnModuleInit {
         username = `${baseUsername}${attempt}`;
       }
 
-      const id = `u${Date.now()}`;
+      const id = makeId('user');
       await this.database.query(
         `insert into app_users (
           id, name, username, email, avatar, bio, role, verification, status,
@@ -886,7 +887,7 @@ export class CoreDatabaseService implements OnModuleInit {
     tags: string[];
   }) {
     await this.getUser(input.authorId);
-    const id = `p${Date.now()}`;
+    const id = makeId('post');
     await this.database.query(
       `insert into app_posts (
         id, author_id, caption, media, tags, likes, comments, shares, views, status, type, created_at

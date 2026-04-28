@@ -1,11 +1,15 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { PlatformDataService } from '../data/platform-data.service';
+import { StoriesDatabaseService } from '../services/stories-database.service';
 
 @ApiTags('admin')
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly platformData: PlatformDataService) {}
+  constructor(
+    private readonly platformData: PlatformDataService,
+    private readonly storiesDatabase: StoriesDatabaseService,
+  ) {}
 
   @Get('dashboard')
   getDashboard() {
@@ -21,7 +25,7 @@ export class AdminController {
   async getContent() {
     return {
       posts: this.platformData.getPosts(),
-      stories: await this.platformData.getStories(),
+      stories: await this.storiesDatabase.getActiveStories(),
       reels: this.platformData.getReels(),
     };
   }
