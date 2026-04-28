@@ -10,8 +10,10 @@ import { CoreDatabaseService } from '../services/core-database.service';
 import { DatabaseService } from '../services/database.service';
 import { MailService } from '../services/mail.service';
 import { RealtimeStateService } from '../services/realtime-state.service';
+import { ReelsDatabaseService } from '../services/reels-database.service';
 import { StateSnapshotService } from '../services/state-snapshot.service';
 import { StoriesDatabaseService } from '../services/stories-database.service';
+import { UploadsDatabaseService } from '../services/uploads-database.service';
 
 @Global()
 @Module({
@@ -29,6 +31,8 @@ import { StoriesDatabaseService } from '../services/stories-database.service';
     StateSnapshotService,
     MailService,
     StoriesDatabaseService,
+    UploadsDatabaseService,
+    ReelsDatabaseService,
   ],
   exports: [
     PlatformDataService,
@@ -44,6 +48,8 @@ import { StoriesDatabaseService } from '../services/stories-database.service';
     StateSnapshotService,
     MailService,
     StoriesDatabaseService,
+    UploadsDatabaseService,
+    ReelsDatabaseService,
   ],
 })
 export class DataModule {}

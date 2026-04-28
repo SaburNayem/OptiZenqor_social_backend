@@ -7,6 +7,7 @@ import {
 import { QueryResultRow } from 'pg';
 import { CreateStoryDto, UpdateStoryDto } from '../dto/api.dto';
 import { makeId } from '../common/id.util';
+import { CoreDatabaseService } from './core-database.service';
 import { DatabaseService } from './database.service';
 
 type StoryRow = QueryResultRow & {
@@ -38,11 +39,35 @@ type StoryRow = QueryResultRow & {
   expires_at: Date | string;
 };
 
+type StoryCommentRow = QueryResultRow & {
+  id: string;
+  story_id: string;
+  user_id: string;
+  comment: string;
+  created_at: string | Date;
+};
+
+type StoryReactionRow = QueryResultRow & {
+  story_id: string;
+  user_id: string;
+  reaction: string;
+  created_at: string | Date;
+};
+
+type StoryViewRow = QueryResultRow & {
+  story_id: string;
+  user_id: string;
+  viewed_at: string | Date;
+};
+
 @Injectable()
 export class StoriesDatabaseService implements OnModuleInit {
   private schemaEnsured = false;
 
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly coreDatabase: CoreDatabaseService,
+  ) {}
 
   async onModuleInit() {
     await this.ensureSchema();
@@ -268,6 +293,114 @@ export class StoriesDatabaseService implements OnModuleInit {
     };
   }
 
+  async getStoryComments(storyId: string) {
+    await this.ensureSchema();
+    await this.getStory(storyId);
+    const result = await this.database.query<StoryCommentRow>(
+      `select * from app_story_comments where story_id = $1 order by created_at asc`,
+      [storyId],
+    );
+    return Promise.all(
+      result.rows.map(async (row) => ({
+        id: row.id,
+        storyId: row.story_id,
+        userId: row.user_id,
+        comment: row.comment,
+        createdAt: this.iso(row.created_at),
+        author: await this.coreDatabase.getUser(row.user_id),
+      })),
+    );
+  }
+
+  async createStoryComment(storyId: string, userId: string, comment: string) {
+    await this.ensureSchema();
+    await Promise.all([this.getStory(storyId), this.coreDatabase.getUser(userId)]);
+    const result = await this.database.query<StoryCommentRow>(
+      `insert into app_story_comments (id, story_id, user_id, comment)
+       values ($1,$2,$3,$4)
+       returning *`,
+      [makeId('comment'), storyId, userId, comment],
+    );
+    return (await this.getStoryComments(storyId)).find((item) => item.id === result.rows[0].id);
+  }
+
+  async getStoryReactions(storyId: string) {
+    await this.ensureSchema();
+    await this.getStory(storyId);
+    const result = await this.database.query<StoryReactionRow>(
+      `select * from app_story_reactions where story_id = $1 order by created_at desc`,
+      [storyId],
+    );
+    return Promise.all(
+      result.rows.map(async (row) => ({
+        storyId: row.story_id,
+        userId: row.user_id,
+        reaction: row.reaction,
+        createdAt: this.iso(row.created_at),
+        user: await this.coreDatabase.getUser(row.user_id),
+      })),
+    );
+  }
+
+  async reactToStory(storyId: string, userId: string, reaction: string) {
+    await this.ensureSchema();
+    await Promise.all([this.getStory(storyId), this.coreDatabase.getUser(userId)]);
+    await this.database.query(
+      `
+      insert into app_story_reactions (story_id, user_id, reaction, created_at)
+      values ($1,$2,$3,now())
+      on conflict (story_id, user_id)
+      do update set reaction = excluded.reaction, created_at = excluded.created_at
+      `,
+      [storyId, userId, reaction],
+    );
+    return this.getStoryReactions(storyId);
+  }
+
+  async getStoryViewers(storyId: string) {
+    await this.ensureSchema();
+    await this.getStory(storyId);
+    const result = await this.database.query<StoryViewRow>(
+      `select * from app_story_views where story_id = $1 order by viewed_at desc`,
+      [storyId],
+    );
+    return Promise.all(
+      result.rows.map(async (row) => {
+        const user = await this.coreDatabase.getUser(row.user_id);
+        return {
+          id: user.id,
+          name: user.name,
+          username: user.username,
+          avatar: user.avatar,
+          avatarUrl: user.avatar,
+          viewedAt: this.iso(row.viewed_at),
+        };
+      }),
+    );
+  }
+
+  async recordStoryView(storyId: string, userId: string) {
+    await this.ensureSchema();
+    await Promise.all([this.getStory(storyId), this.coreDatabase.getUser(userId)]);
+    await this.database.query(
+      `
+      insert into app_story_views (story_id, user_id, viewed_at)
+      values ($1,$2,now())
+      on conflict (story_id, user_id)
+      do update set viewed_at = excluded.viewed_at
+      `,
+      [storyId, userId],
+    );
+    const viewers = await this.getStoryViewers(storyId);
+    return {
+      success: true,
+      storyId,
+      userId,
+      viewerCount: viewers.length,
+      viewedAt: viewers.find((item) => item.id === userId)?.viewedAt ?? new Date().toISOString(),
+    };
+  }
+
   private async ensureSchema() {
     if (this.schemaEnsured || !this.database.getHealth().enabled) {
       return;
@@ -294,7 +427,7 @@ export class StoriesDatabaseService implements OnModuleInit {
         mention_usernames jsonb not null default '[]'::jsonb,
         link_label text,
         link_url text,
-        privacy text not null default 'Everyone',
+        privacy text not null default 'public',
         location text,
         collage_layout text,
         text_offset_dx double precision not null default 0,
@@ -306,9 +439,34 @@ export class StoriesDatabaseService implements OnModuleInit {
         updated_at timestamptz not null default now(),
         expires_at timestamptz not null default now() + interval '24 hours',
         constraint app_stories_id_format check (id ~ '^story_[a-zA-Z0-9]+$'),
-        constraint app_stories_privacy_check check (
-          privacy in ('Everyone', 'Followers', 'Only me', 'public')
-        )
+        constraint app_stories_privacy_check check (privacy in ('public', 'followers', 'private'))
+      );
+    `);
+    await this.database.query(`
+      create table if not exists app_story_views (
+        story_id text not null references app_stories(id) on delete cascade,
+        user_id text not null references app_users(id) on delete cascade,
+        viewed_at timestamptz not null default now(),
+        primary key (story_id, user_id)
+      );
+    `);
+    await this.database.query(`
+      create table if not exists app_story_reactions (
+        story_id text not null references app_stories(id) on delete cascade,
+        user_id text not null references app_users(id) on delete cascade,
+        reaction text not null,
+        created_at timestamptz not null default now(),
+        primary key (story_id, user_id)
+      );
+    `);
+    await this.database.query(`
+      create table if not exists app_story_comments (
+        id text primary key,
+        story_id text not null references app_stories(id) on delete cascade,
+        user_id text not null references app_users(id) on delete cascade,
+        comment text not null,
+        created_at timestamptz not null default now(),
+        constraint app_story_comments_id_format check (id ~ '^comment_[a-zA-Z0-9]+$')
       );
     `);
     await this.database.query(`
@@ -339,7 +497,7 @@ export class StoriesDatabaseService implements OnModuleInit {
       mentionUsernames: this.toStringArray(row.mention_usernames),
       linkLabel: row.link_label,
       linkUrl: row.link_url,
-      privacy: row.privacy ?? 'Everyone',
+      privacy: row.privacy ?? 'public',
       location: row.location,
       collageLayout: row.collage_layout,
       textOffsetDx: Number(row.text_offset_dx ?? 0),
@@ -371,8 +529,18 @@ export class StoriesDatabaseService implements OnModuleInit {
   }
 
   private normalizePrivacy(privacy?: string) {
-    const normalized = privacy?.trim();
-    return normalized || 'Everyone';
+    switch ((privacy ?? '').trim().toLowerCase()) {
+      case 'followers':
+        return 'followers';
+      case 'private':
+      case 'only me':
+      case 'only_me':
+        return 'private';
+      case 'public':
+      case 'everyone':
+      default:
+        return 'public';
+    }
   }
 
   private toStringArray(value: unknown) {

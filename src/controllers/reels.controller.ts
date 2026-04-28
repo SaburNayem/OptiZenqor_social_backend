@@ -1,37 +1,37 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
-import { ExtendedDataService } from '../data/extended-data.service';
-import { PlatformDataService } from '../data/platform-data.service';
 import {
   CreateReelDto,
   ReelCommentDto,
   ReelReactionDto,
   UpdateReelDto,
 } from '../dto/api.dto';
+import { CoreDatabaseService } from '../services/core-database.service';
+import { ReelsDatabaseService } from '../services/reels-database.service';
 
 @ApiTags('reels')
 @Controller('reels')
 export class ReelsController {
   constructor(
-    private readonly platformData: PlatformDataService,
-    private readonly extendedData: ExtendedDataService,
+    private readonly reelsDatabase: ReelsDatabaseService,
+    private readonly coreDatabase: CoreDatabaseService,
   ) {}
 
   @Get()
   @ApiQuery({ name: 'authorId', required: false })
   @ApiQuery({ name: 'userId', required: false })
-  getReels(@Query('authorId') authorId?: string, @Query('userId') userId?: string) {
-    const reels = this.platformData.getReels(authorId ?? userId);
+  async getReels(@Query('authorId') authorId?: string, @Query('userId') userId?: string) {
+    const reels = await this.reelsDatabase.getReels(authorId ?? userId);
     return this.wrapListResponse('Reels fetched successfully.', reels);
   }
 
   @Get(':id')
-  getReel(@Param('id') id: string) {
-    const reel = this.platformData.getReel(id);
+  async getReel(@Param('id') id: string) {
+    const reel = await this.reelsDatabase.getReel(id);
     const payload = {
       ...reel,
-      comments: this.extendedData.getReelComments(id),
-      reactions: this.extendedData.getReelReactions(id),
+      comments: await this.reelsDatabase.getReelComments(id),
+      reactions: await this.reelsDatabase.getReelReactions(id),
     };
     return {
       success: true,
@@ -43,19 +43,15 @@ export class ReelsController {
   }
 
   @Post()
-  async createReel(@Body() body: CreateReelDto) {
-    const reel = await this.platformData.createReel({
-      authorId: body.authorId,
-      caption: body.caption,
-      audioName: body.audioName,
-      thumbnail: body.thumbnail,
-      videoUrl: body.videoUrl,
-      textOverlays: body.textOverlays ?? [],
-      subtitleEnabled: body.subtitleEnabled ?? false,
-      trimInfo: body.trimInfo,
-      remixEnabled: body.remixEnabled ?? false,
-      isDraft: body.isDraft ?? false,
-    });
+  async createReel(
+    @Body() body: CreateReelDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.authorId,
+    );
+    const reel = await this.reelsDatabase.createReel(user.id, body);
     return {
       success: true,
       message: 'Reel created successfully.',
@@ -66,7 +62,7 @@ export class ReelsController {
 
   @Patch(':id')
   async updateReel(@Param('id') id: string, @Body() body: UpdateReelDto) {
-    const reel = await this.platformData.updateReel(id, body);
+    const reel = await this.reelsDatabase.updateReel(id, body);
     return {
       success: true,
       message: 'Reel updated successfully.',
@@ -77,27 +73,43 @@ export class ReelsController {
 
   @Get(':id/comments')
   getReelComments(@Param('id') id: string) {
-    return this.extendedData.getReelComments(id);
+    return this.reelsDatabase.getReelComments(id);
   }
 
   @Post(':id/comments')
-  createReelComment(@Param('id') id: string, @Body() body: ReelCommentDto) {
-    return this.extendedData.createReelComment(id, body.userId, body.comment);
+  async createReelComment(
+    @Param('id') id: string,
+    @Body() body: ReelCommentDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    return this.reelsDatabase.createReelComment(id, user.id, body.comment);
   }
 
   @Get(':id/reactions')
   getReelReactions(@Param('id') id: string) {
-    return this.extendedData.getReelReactions(id);
+    return this.reelsDatabase.getReelReactions(id);
   }
 
   @Post(':id/reactions')
-  reactToReel(@Param('id') id: string, @Body() body: ReelReactionDto) {
-    return this.extendedData.reactToReel(id, body.userId, body.reaction);
+  async reactToReel(
+    @Param('id') id: string,
+    @Body() body: ReelReactionDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    return this.reelsDatabase.reactToReel(id, user.id, body.reaction);
   }
 
   @Delete(':id')
   deleteReel(@Param('id') id: string) {
-    return this.platformData.deleteReel(id);
+    return this.reelsDatabase.deleteReel(id);
   }
 
   private wrapListResponse(message: string, items: unknown[]) {

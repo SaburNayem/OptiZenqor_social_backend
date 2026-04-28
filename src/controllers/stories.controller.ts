@@ -48,7 +48,7 @@ export class StoriesController {
   getStoryViewers(@Param('id') id: string) {
     return this.wrapListResponse(
       'Story viewers fetched successfully.',
-      this.extendedData.getStoryViewers(id),
+      this.storiesDatabase.getStoryViewers(id) as unknown as unknown[],
     );
   }
 
@@ -57,9 +57,9 @@ export class StoriesController {
     const story = await this.storiesDatabase.getStory(id);
     const payload = {
       ...story,
-      comments: this.extendedData.getStoryComments(id),
-      reactions: this.extendedData.getStoryReactions(id),
-      viewers: this.extendedData.getStoryViewers(id),
+      comments: await this.storiesDatabase.getStoryComments(id),
+      reactions: await this.storiesDatabase.getStoryReactions(id),
+      viewers: await this.storiesDatabase.getStoryViewers(id),
     };
     return {
       success: true,
@@ -88,36 +88,68 @@ export class StoriesController {
 
   @Get(':id/comments')
   getStoryComments(@Param('id') id: string) {
-    return this.extendedData.getStoryComments(id);
+    return this.storiesDatabase.getStoryComments(id);
   }
 
   @Post(':id/comments')
-  createStoryComment(@Param('id') id: string, @Body() body: StoryCommentDto) {
-    return this.extendedData.createStoryComment(id, body.userId, body.comment);
+  async createStoryComment(
+    @Param('id') id: string,
+    @Body() body: StoryCommentDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    return this.storiesDatabase.createStoryComment(id, user.id, body.comment);
   }
 
   @Get(':id/reactions')
   getStoryReactions(@Param('id') id: string) {
-    return this.extendedData.getStoryReactions(id);
+    return this.storiesDatabase.getStoryReactions(id);
   }
 
   @Post(':id/reactions')
-  reactToStory(@Param('id') id: string, @Body() body: StoryReactionDto) {
-    return this.extendedData.reactToStory(id, body.userId, body.reaction);
+  async reactToStory(
+    @Param('id') id: string,
+    @Body() body: StoryReactionDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    return this.storiesDatabase.reactToStory(id, user.id, body.reaction);
   }
 
   @Post(':id/view')
-  recordStoryView(@Param('id') id: string, @Body() body: StoryViewDto) {
-    return this.extendedData.recordStoryView(id, body.userId);
+  async recordStoryView(
+    @Param('id') id: string,
+    @Body() body: StoryViewDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    return this.storiesDatabase.recordStoryView(id, user.id);
   }
 
   @Post(':id/reply')
-  async replyToStory(@Param('id') id: string, @Body() body: StoryReplyDto) {
+  async replyToStory(
+    @Param('id') id: string,
+    @Body() body: StoryReplyDto,
+    @Headers('authorization') authorization?: string,
+  ) {
     const story = await this.storiesDatabase.getStory(id);
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
     const recipientUserId = body.recipientUserId?.trim() || story.userId;
-    const thread = await this.coreDatabase.ensureDirectThread(body.userId, recipientUserId);
+    const thread = await this.coreDatabase.ensureDirectThread(actor.id, recipientUserId);
     const text = body.message?.trim() || body.text?.trim() || '';
-    const message = await this.coreDatabase.createMessage(thread.id, body.userId, text, {
+    const message = await this.coreDatabase.createMessage(thread.id, actor.id, text, {
       attachments: body.attachments,
       kind: body.kind,
       mediaPath: body.mediaPath,
@@ -157,8 +189,9 @@ export class StoriesController {
     if (userId?.trim()) {
       return userId.trim();
     }
-    const token = authorization?.replace(/^Bearer\s+/i, '');
-    const user = await this.coreDatabase.resolveUserFromAccessToken(token);
+    const user = await this.coreDatabase
+      .requireUserFromAuthorization(authorization)
+      .catch(() => null);
     return user?.id ?? 'u1';
   }
 

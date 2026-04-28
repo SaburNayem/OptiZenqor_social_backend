@@ -28,6 +28,7 @@ import {
 import { ExtendedDataService } from '../data/extended-data.service';
 import { MailService } from '../services/mail.service';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { UploadsDatabaseService } from '../services/uploads-database.service';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -36,6 +37,7 @@ export class AuthController {
     private readonly coreDatabase: CoreDatabaseService,
     private readonly mailService: MailService,
     private readonly extendedData: ExtendedDataService,
+    private readonly uploadsDatabase: UploadsDatabaseService,
   ) {}
 
   @Get('demo-accounts')
@@ -350,7 +352,7 @@ export class AuthController {
     }
 
     try {
-      const upload = this.extendedData.getUpload(uploadId);
+      const upload = await this.uploadsDatabase.getUpload(uploadId);
       const avatar = upload.secureUrl ?? upload.url;
       if (!avatar) {
         throw new BadRequestException(

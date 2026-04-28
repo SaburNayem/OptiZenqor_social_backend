@@ -403,6 +403,21 @@ export class CoreDatabaseService implements OnModuleInit {
     return this.getUser(session.user_id);
   }
 
+  async requireUserFromAuthorization(
+    authorization?: string,
+    fallbackUserId?: string,
+  ) {
+    const token = authorization?.replace(/^Bearer\s+/i, '');
+    const user = await this.resolveUserFromAccessToken(token);
+    if (user) {
+      return user;
+    }
+    if (fallbackUserId?.trim()) {
+      return this.getUser(fallbackUserId.trim());
+    }
+    throw new UnauthorizedException('Authentication required.');
+  }
+
   async updateUserProfile(
     id: string,
     patch: Partial<{

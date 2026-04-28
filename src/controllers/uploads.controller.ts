@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   Post,
   UploadedFile,
@@ -10,20 +11,22 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { ExtendedDataService } from '../data/extended-data.service';
 import { CloudinaryUploadService } from '../services/cloudinary-upload.service';
+import { CoreDatabaseService } from '../services/core-database.service';
+import { UploadsDatabaseService } from '../services/uploads-database.service';
 
 @ApiTags('uploads')
 @Controller()
 export class UploadsController {
   constructor(
     private readonly cloudinaryUploadService: CloudinaryUploadService,
-    private readonly extendedData: ExtendedDataService,
+    private readonly uploadsDatabase: UploadsDatabaseService,
+    private readonly coreDatabase: CoreDatabaseService,
   ) {}
 
   @Get('uploads')
-  getUploads() {
-    const uploads = this.extendedData.getUploads();
+  async getUploads() {
+    const uploads = await this.uploadsDatabase.getUploads();
     return {
       success: true,
       message: 'Uploads fetched successfully.',
@@ -35,8 +38,8 @@ export class UploadsController {
   }
 
   @Get('uploads/:id')
-  getUpload(@Param('id') id: string) {
-    const upload = this.extendedData.getUpload(id);
+  async getUpload(@Param('id') id: string) {
+    const upload = await this.uploadsDatabase.getUpload(id);
     const remotePath = upload.secureUrl ?? upload.url ?? null;
     return {
       success: true,
@@ -82,6 +85,14 @@ export class UploadsController {
     @Body('folder') folder?: string,
     @Body('publicId') publicId?: string,
     @Body('resourceType') resourceType?: string,
+    @Body('userId') userId?: string,
+    @Body('authorId') authorId?: string,
+    @Body('ownerId') ownerId?: string,
+    @Body('creatorId') creatorId?: string,
+    @Body('actorId') actorId?: string,
+    @Body('recipientId') recipientId?: string,
+    @Body() body?: Record<string, unknown>,
+    @Headers('authorization') authorization?: string,
   ) {
     if (!file?.buffer || !file.originalname) {
       throw new BadRequestException('Multipart field "file" is required.');
@@ -95,16 +106,32 @@ export class UploadsController {
       mimeType: file.mimetype,
     });
 
-    const uploadTask = await this.extendedData.registerUpload({
+    const user = await this.coreDatabase
+      .requireUserFromAuthorization(
+        authorization,
+        [userId, authorId, ownerId, creatorId, actorId, recipientId]
+          .find((value) => value?.trim())
+          ?.trim(),
+      )
+      .catch(() => null);
+
+    const uploadTask = await this.uploadsDatabase.createUpload({
+      userId: user?.id ?? null,
       fileName: file.originalname,
-      progress: 1,
       status: 'completed',
-      mimeType: file.mimetype,
-      size: file.size,
+      mimeType: file.mimetype ?? null,
+      sizeBytes: file.size ?? uploaded.bytes,
       url: uploaded.url,
       secureUrl: uploaded.secureUrl,
       publicId: uploaded.publicId,
       provider: uploaded.provider,
+      resourceType: uploaded.resourceType,
+      folder: uploaded.folder,
+      originalFilename: uploaded.originalFilename,
+      metadata: {
+        body: body ?? {},
+        cloudinary: uploaded,
+      },
     });
 
     const remotePath = uploaded.secureUrl ?? uploaded.url ?? uploadTask.secureUrl ?? uploadTask.url;

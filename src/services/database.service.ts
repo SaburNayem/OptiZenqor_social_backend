@@ -36,6 +36,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) {
+      if ((process.env.NODE_ENV ?? '').trim().toLowerCase() === 'production') {
+        throw new InternalServerErrorException(
+          'DATABASE_URL is required in production. Refusing to start without a database connection.',
+        );
+      }
       this.logger.warn('DATABASE_URL is not set. Database connection is disabled.');
       this.healthState = {
         ...this.healthState,

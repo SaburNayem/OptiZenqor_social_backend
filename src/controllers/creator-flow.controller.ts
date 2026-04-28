@@ -2,11 +2,15 @@ import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/commo
 import { ApiTags } from '@nestjs/swagger';
 import { ExtendedDataService } from '../data/extended-data.service';
 import { CreateDraftDto, UpdateUploadDto } from '../dto/api.dto';
+import { UploadsDatabaseService } from '../services/uploads-database.service';
 
 @ApiTags('creator-flow')
 @Controller()
 export class CreatorFlowController {
-  constructor(private readonly extendedData: ExtendedDataService) {}
+  constructor(
+    private readonly extendedData: ExtendedDataService,
+    private readonly uploadsDatabase: UploadsDatabaseService,
+  ) {}
 
   @Get('drafts')
   getDrafts() {
@@ -53,22 +57,22 @@ export class CreatorFlowController {
     return {
       drafts: this.extendedData.getDrafts(),
       scheduled: this.extendedData.getScheduledPosts(),
-      uploads: this.extendedData.getUploads(),
+      uploads: this.uploadsDatabase.getUploads(),
     };
   }
 
   @Get('upload-manager')
   getUploads() {
-    return this.extendedData.getUploads();
+    return this.uploadsDatabase.getUploads();
   }
 
   @Get('upload-manager/:id')
   getUpload(@Param('id') id: string) {
-    return this.extendedData.getUpload(id);
+    return this.uploadsDatabase.getUpload(id);
   }
 
   @Patch('upload-manager/:id')
   updateUpload(@Param('id') id: string, @Body() body: UpdateUploadDto) {
-    return this.extendedData.updateUpload(id, body.action);
+    return this.uploadsDatabase.updateUploadStatus(id, body.action);
   }
 }
