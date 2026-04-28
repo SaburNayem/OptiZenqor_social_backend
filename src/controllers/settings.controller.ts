@@ -1,11 +1,19 @@
-import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Patch, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { SettingsDataService } from '../data/settings-data.service';
+import { AccountStateDatabaseService } from '../services/account-state-database.service';
+import { CoreDatabaseService } from '../services/core-database.service';
 
 @ApiTags('settings')
 @Controller('settings')
+@UseGuards(JwtAuthGuard)
 export class SettingsController {
-  constructor(private readonly settingsData: SettingsDataService) {}
+  constructor(
+    private readonly settingsData: SettingsDataService,
+    private readonly accountStateDatabase: AccountStateDatabaseService,
+    private readonly coreDatabase: CoreDatabaseService,
+  ) {}
 
   @Get()
   getSettingsSections() {
@@ -23,8 +31,9 @@ export class SettingsController {
   }
 
   @Get('state')
-  getSettingsState() {
-    return this.settingsData.getState();
+  async getSettingsState(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return this.accountStateDatabase.getSettingsState(user.id);
   }
 
   @Get('items/:itemKey')
@@ -46,8 +55,12 @@ export class SettingsController {
   }
 
   @Patch('state')
-  updateSettingsState(@Body() body: Record<string, unknown>) {
-    return this.settingsData.updateState(body);
+  async updateSettingsState(
+    @Body() body: Record<string, unknown>,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return this.accountStateDatabase.updateSettingsState(user.id, body);
   }
 
   @Patch(':sectionKey')

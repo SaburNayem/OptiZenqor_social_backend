@@ -1,47 +1,80 @@
-import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
-import { PlatformDataService } from '../data/platform-data.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BlockUserDto } from '../dto/api.dto';
+import { AccountStateDatabaseService } from '../services/account-state-database.service';
+import { CoreDatabaseService } from '../services/core-database.service';
 
 @ApiTags('block')
 @Controller('block')
+@UseGuards(JwtAuthGuard)
 export class BlockController {
-  constructor(private readonly platformData: PlatformDataService) {}
+  constructor(
+    private readonly accountStateDatabase: AccountStateDatabaseService,
+    private readonly coreDatabase: CoreDatabaseService,
+  ) {}
 
   @Get()
   @ApiQuery({ name: 'actorId', required: false })
-  getBlockedUsers(@Query('actorId') actorId?: string) {
-    return this.platformData.getBlockedUsers(actorId);
+  async getBlockedUsers(
+    @Query('actorId') actorId?: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      actorId,
+    );
+    return this.accountStateDatabase.getBlockedUsers(user.id);
   }
 
   @Get(':targetId')
   @ApiQuery({ name: 'actorId', required: false })
-  getBlockedUser(
+  async getBlockedUser(
     @Param('targetId') targetId: string,
     @Query('actorId') actorId?: string,
+    @Headers('authorization') authorization?: string,
   ) {
-    return this.platformData.getBlockedUser(targetId, actorId);
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      actorId,
+    );
+    return this.accountStateDatabase.getBlockedUser(user.id, targetId);
   }
 
   @Post()
-  blockUser(@Body() body: BlockUserDto) {
-    return this.platformData.blockUser(body.targetId, body.actorId, body.reason);
+  async blockUser(
+    @Body() body: BlockUserDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.actorId,
+    );
+    return this.accountStateDatabase.blockUser(user.id, body.targetId, body.reason);
   }
 
   @Delete(':targetId')
   @ApiQuery({ name: 'actorId', required: false })
-  unblockUser(
+  async unblockUser(
     @Param('targetId') targetId: string,
     @Query('actorId') actorIdFromQuery?: string,
     @Body() body?: { actorId?: string },
+    @Headers('authorization') authorization?: string,
   ) {
-    const actorId = actorIdFromQuery ?? body?.actorId;
-    if (!actorId) {
-      return {
-        success: false,
-        message: 'actorId is required in query or body for unblock.',
-      };
-    }
-    return this.platformData.unblockUser(targetId, actorId);
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      actorIdFromQuery ?? body?.actorId,
+    );
+    return this.accountStateDatabase.unblockUser(user.id, targetId);
   }
 }

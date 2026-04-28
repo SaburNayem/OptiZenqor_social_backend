@@ -1,63 +1,100 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { ExtendedDataService } from '../data/extended-data.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateDraftDto, UpdateUploadDto } from '../dto/api.dto';
+import { AccountStateDatabaseService } from '../services/account-state-database.service';
+import { CoreDatabaseService } from '../services/core-database.service';
 import { UploadsDatabaseService } from '../services/uploads-database.service';
 
 @ApiTags('creator-flow')
 @Controller()
+@UseGuards(JwtAuthGuard)
 export class CreatorFlowController {
   constructor(
-    private readonly extendedData: ExtendedDataService,
+    private readonly accountStateDatabase: AccountStateDatabaseService,
+    private readonly coreDatabase: CoreDatabaseService,
     private readonly uploadsDatabase: UploadsDatabaseService,
   ) {}
 
   @Get('drafts')
-  getDrafts() {
-    return this.extendedData.getDrafts();
+  async getDrafts(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return this.accountStateDatabase.getDrafts(user.id);
   }
 
   @Get('posts/drafts')
-  getDraftsViaPostAlias() {
-    return this.extendedData.getDrafts();
+  async getDraftsViaPostAlias(@Headers('authorization') authorization?: string) {
+    return this.getDrafts(authorization);
   }
 
   @Get('drafts/:id')
-  getDraft(@Param('id') id: string) {
-    return this.extendedData.getDraft(id);
+  async getDraft(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return this.accountStateDatabase.getDraft(user.id, id);
   }
 
   @Post('drafts')
-  createDraft(@Body() body: CreateDraftDto) {
-    return this.extendedData.createDraft(body.title, body.type);
+  async createDraft(
+    @Body() body: CreateDraftDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return this.accountStateDatabase.createDraft(user.id, {
+      title: body.title,
+      type: body.type,
+    });
   }
 
   @Patch('drafts/:id')
-  updateDraft(@Param('id') id: string, @Body() body: Record<string, unknown>) {
-    return this.extendedData.updateDraft(id, body);
+  async updateDraft(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return this.accountStateDatabase.updateDraft(user.id, id, body);
   }
 
   @Delete('drafts/:id')
-  deleteDraft(@Param('id') id: string) {
-    return this.extendedData.deleteDraft(id);
+  async deleteDraft(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return this.accountStateDatabase.deleteDraft(user.id, id);
   }
 
   @Get('scheduling')
-  getScheduling() {
-    return this.extendedData.getScheduledPosts();
+  async getScheduling(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return this.accountStateDatabase.getScheduledDrafts(user.id);
   }
 
   @Get('posts/scheduled')
-  getSchedulingViaPostAlias() {
-    return this.extendedData.getScheduledPosts();
+  async getSchedulingViaPostAlias(@Headers('authorization') authorization?: string) {
+    return this.getScheduling(authorization);
   }
 
   @Get('drafts-scheduling')
-  getDraftsScheduling() {
+  async getDraftsScheduling(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
     return {
-      drafts: this.extendedData.getDrafts(),
-      scheduled: this.extendedData.getScheduledPosts(),
-      uploads: this.uploadsDatabase.getUploads(),
+      drafts: await this.accountStateDatabase.getDrafts(user.id),
+      scheduled: await this.accountStateDatabase.getScheduledDrafts(user.id),
+      uploads: await this.uploadsDatabase.getUploads(user.id),
     };
   }
 

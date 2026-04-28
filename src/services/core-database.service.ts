@@ -10,6 +10,14 @@ import { QueryResultRow } from 'pg';
 import { makeId } from '../common/id.util';
 import { coreSeedCommentReactions, coreSeedFollows, coreSeedMessages, coreSeedNotifications, coreSeedPostComments, coreSeedPostReactions, coreSeedPosts, coreSeedThreads, coreSeedUsers } from '../database/core-seed';
 import { DatabaseService } from './database.service';
+import {
+  getAccessTokenTtlSeconds,
+  getRefreshTokenTtlSeconds,
+  resolveAccessTokenSecret,
+  resolveRefreshTokenSecret,
+  signJwt,
+  verifyJwt,
+} from '../utils/jwt.util';
 
 type UserRow = QueryResultRow & {
   id: string;
@@ -359,9 +367,24 @@ export class CoreDatabaseService implements OnModuleInit {
   }
 
   async refreshUserToken(refreshToken: string) {
+    const refreshSecret = resolveRefreshTokenSecret();
+    if (!refreshSecret) {
+      throw new UnauthorizedException('JWT refresh secret is not configured.');
+    }
+    const claims = verifyJwt(refreshToken, refreshSecret);
+    if (claims.type !== 'refresh') {
+      throw new UnauthorizedException('Invalid refresh token type.');
+    }
     const { rows } = await this.database.query<QueryResultRow & { user_id: string }>(
-      `select user_id from auth_sessions where refresh_token = $1 limit 1`,
-      [refreshToken],
+      `
+      select user_id
+      from auth_sessions
+      where refresh_token = $1
+        and session_id = $2
+        and refresh_expires_at > now()
+      limit 1
+      `,
+      [refreshToken, claims.sessionId],
     );
     const session = rows[0];
     if (!session) {
@@ -392,9 +415,29 @@ export class CoreDatabaseService implements OnModuleInit {
     if (!accessToken) {
       return null;
     }
+    const accessSecret = resolveAccessTokenSecret();
+    if (!accessSecret) {
+      return null;
+    }
+    let claims;
+    try {
+      claims = verifyJwt(accessToken, accessSecret);
+    } catch {
+      return null;
+    }
+    if (claims.type !== 'access') {
+      return null;
+    }
     const { rows } = await this.database.query<QueryResultRow & { user_id: string }>(
-      `select user_id from auth_sessions where access_token = $1 limit 1`,
-      [accessToken],
+      `
+      select user_id
+      from auth_sessions
+      where access_token = $1
+        and session_id = $2
+        and access_expires_at > now()
+      limit 1
+      `,
+      [accessToken, claims.sessionId],
     );
     const session = rows[0];
     if (!session) {
@@ -2219,12 +2262,41 @@ export class CoreDatabaseService implements OnModuleInit {
   }
 
   private async issueTokens(userId: string) {
-    const accessToken = `atk_${randomUUID().replace(/-/g, '')}${randomBytes(8).toString('hex')}`;
-    const refreshToken = `rtk_${randomUUID().replace(/-/g, '')}${randomBytes(8).toString('hex')}`;
     const sessionId = `ses_${randomUUID().replace(/-/g, '')}`;
     const createdAt = new Date().toISOString();
-    const accessExpiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
-    const refreshExpiresAt = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
+    const accessSecret = resolveAccessTokenSecret();
+    const refreshSecret = resolveRefreshTokenSecret();
+    if (!accessSecret || !refreshSecret) {
+      throw new UnauthorizedException(
+        'JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be configured.',
+      );
+    }
+
+    const user = await this.getUser(userId);
+    const accessTtlSeconds = getAccessTokenTtlSeconds();
+    const refreshTtlSeconds = getRefreshTokenTtlSeconds();
+    const accessToken = signJwt(
+      {
+        sub: userId,
+        sessionId,
+        role: String(user.role ?? 'user'),
+        type: 'access',
+      },
+      accessSecret,
+      accessTtlSeconds,
+    );
+    const refreshToken = signJwt(
+      {
+        sub: userId,
+        sessionId,
+        role: String(user.role ?? 'user'),
+        type: 'refresh',
+      },
+      refreshSecret,
+      refreshTtlSeconds,
+    );
+    const accessExpiresAt = new Date(Date.now() + accessTtlSeconds * 1000).toISOString();
+    const refreshExpiresAt = new Date(Date.now() + refreshTtlSeconds * 1000).toISOString();
 
     await this.database.query(
       `insert into auth_sessions (
@@ -2248,8 +2320,8 @@ export class CoreDatabaseService implements OnModuleInit {
       accessToken,
       refreshToken,
       createdAt,
-      expiresInSeconds: 3600,
-      refreshExpiresInSeconds: 60 * 60 * 24 * 30,
+      expiresInSeconds: accessTtlSeconds,
+      refreshExpiresInSeconds: refreshTtlSeconds,
       tokenType: 'Bearer',
     };
   }

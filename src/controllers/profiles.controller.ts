@@ -2,6 +2,7 @@ import { Body, Controller, Get, Headers, Param, Patch, Post, Query } from '@nest
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { EcosystemDataService } from '../data/ecosystem-data.service';
 import { FollowUserDto, UpdateUserDto } from '../dto/api.dto';
+import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 
 @ApiTags('profiles')
@@ -10,6 +11,7 @@ export class ProfilesController {
   constructor(
     private readonly coreDatabase: CoreDatabaseService,
     private readonly ecosystemData: EcosystemDataService,
+    private readonly accountStateDatabase: AccountStateDatabaseService,
   ) {}
 
   private async buildProfilePayload(id: string) {
@@ -249,8 +251,12 @@ export class ProfilesController {
   }
 
   @Get('creator-dashboard')
-  getCreatorDashboard() {
-    return this.ecosystemData.getProfessionalProfiles().creatorTools;
+  async getCreatorDashboard(@Headers('authorization') authorization?: string) {
+    const viewerId = (await this.resolveViewerId(authorization)) ?? 'u1';
+    return {
+      ...this.ecosystemData.getProfessionalProfiles().creatorTools,
+      analytics: await this.accountStateDatabase.getCreatorAnalytics(viewerId),
+    };
   }
 
   @Get('business-profile')

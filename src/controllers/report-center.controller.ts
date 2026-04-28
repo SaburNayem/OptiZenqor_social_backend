@@ -1,20 +1,43 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { AppExtensionsDataService } from '../data/app-extensions-data.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { SubmitReportDto } from '../dto/api.dto';
+import { AccountStateDatabaseService } from '../services/account-state-database.service';
+import { CoreDatabaseService } from '../services/core-database.service';
 
 @ApiTags('report-center')
 @Controller('report-center')
+@UseGuards(JwtAuthGuard)
 export class ReportCenterController {
-  constructor(private readonly appExtensionsData: AppExtensionsDataService) {}
+  constructor(
+    private readonly accountStateDatabase: AccountStateDatabaseService,
+    private readonly coreDatabase: CoreDatabaseService,
+  ) {}
 
   @Get()
-  getReportCenter() {
-    return this.appExtensionsData.getReportCenter();
+  async getReportCenter(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return this.accountStateDatabase.getReportCenter(user.id);
   }
 
   @Post()
-  submitReport(@Body() body: SubmitReportDto) {
-    return this.appExtensionsData.submitReport(body.reason);
+  async submitReport(
+    @Body() body: SubmitReportDto & {
+      targetUserId?: string;
+      targetEntityId?: string;
+      targetEntityType?: string;
+      details?: string;
+    },
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return this.accountStateDatabase.submitReport({
+      reporterUserId: user.id,
+      reason: body.reason,
+      details: body.details,
+      targetUserId: body.targetUserId,
+      targetEntityId: body.targetEntityId,
+      targetEntityType: body.targetEntityType,
+    });
   }
 }
