@@ -212,7 +212,8 @@ export class StoriesController {
       .getBuddyIds(viewerId)
       .catch((): string[] => []);
     return (await this.storiesDatabase.getActiveStories()).filter(
-      (story) => story.userId === viewerId || buddyIds.includes(story.userId),
+      (story: { userId: string }) =>
+        story.userId === viewerId || buddyIds.includes(story.userId),
     );
   }
 }

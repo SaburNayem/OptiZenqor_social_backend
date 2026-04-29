@@ -1,319 +1,248 @@
-import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
-import { QueryResultRow } from 'pg';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { CreateReelDto, UpdateReelDto } from '../dto/api.dto';
 import { makeId } from '../common/id.util';
 import { CoreDatabaseService } from './core-database.service';
-import { DatabaseService } from './database.service';
-
-type ReelRow = QueryResultRow & {
-  id: string;
-  user_id: string;
-  caption: string;
-  audio_name: string;
-  thumbnail_url: string;
-  video_url: string;
-  text_overlays: unknown;
-  subtitle_enabled: boolean;
-  trim_info: string | null;
-  remix_enabled: boolean;
-  is_draft: boolean;
-  likes_count: number;
-  comments_count: number;
-  shares_count: number;
-  views_count: number;
-  created_at: string | Date;
-  updated_at: string | Date;
-};
-
-type ReelCommentRow = QueryResultRow & {
-  id: string;
-  reel_id: string;
-  user_id: string;
-  comment: string;
-  created_at: string | Date;
-};
-
-type ReelReactionRow = QueryResultRow & {
-  reel_id: string;
-  user_id: string;
-  reaction: string;
-  created_at: string | Date;
-};
+import { PrismaService } from './prisma.service';
 
 @Injectable()
-export class ReelsDatabaseService implements OnModuleInit {
-  private schemaEnsured = false;
-
+export class ReelsDatabaseService {
   constructor(
-    private readonly database: DatabaseService,
+    private readonly prisma: PrismaService,
     private readonly coreDatabase: CoreDatabaseService,
   ) {}
 
-  async onModuleInit() {
-    await this.ensureSchema();
-  }
-
   async getReels(userId?: string) {
-    await this.ensureSchema();
-    const result = userId?.trim()
-      ? await this.database.query<ReelRow>(
-          `select * from app_reels where user_id = $1 order by created_at desc`,
-          [userId.trim()],
-        )
-      : await this.database.query<ReelRow>(
-          `select * from app_reels order by created_at desc`,
-        );
-    return Promise.all(result.rows.map((row) => this.mapReel(row)));
+    const reels = await this.prisma.reel.findMany({
+      where: {
+        userId: userId?.trim() || undefined,
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return Promise.all(reels.map((row) => this.mapReel(row)));
   }
 
   async getReel(id: string) {
-    await this.ensureSchema();
-    const result = await this.database.query<ReelRow>(
-      `select * from app_reels where id = $1 limit 1`,
-      [id],
-    );
-    const row = result.rows[0];
-    if (!row) {
+    const reel = await this.prisma.reel.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+      },
+    });
+    if (!reel) {
       throw new NotFoundException(`Reel ${id} not found`);
     }
-    return this.mapReel(row);
+    return this.mapReel(reel);
   }
 
   async createReel(userId: string, dto: CreateReelDto) {
-    await this.ensureSchema();
-    const result = await this.database.query<ReelRow>(
-      `
-      insert into app_reels (
-        id, user_id, caption, audio_name, thumbnail_url, video_url, text_overlays,
-        subtitle_enabled, trim_info, remix_enabled, is_draft
-      ) values (
-        $1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11
-      )
-      returning *
-      `,
-      [
-        makeId('reel'),
+    const reel = await this.prisma.reel.create({
+      data: {
+        id: makeId('reel'),
         userId,
-        dto.caption,
-        dto.audioName,
-        dto.thumbnail,
-        dto.videoUrl,
-        JSON.stringify(dto.textOverlays ?? []),
-        dto.subtitleEnabled ?? false,
-        dto.trimInfo ?? null,
-        dto.remixEnabled ?? false,
-        dto.isDraft ?? false,
-      ],
-    );
-    return this.mapReel(result.rows[0]);
+        caption: dto.caption,
+        audioName: dto.audioName,
+        thumbnailUrl: dto.thumbnail,
+        videoUrl: dto.videoUrl,
+        textOverlays: (dto.textOverlays ?? []) as Prisma.InputJsonValue,
+        subtitleEnabled: dto.subtitleEnabled ?? false,
+        trimInfo: dto.trimInfo ?? null,
+        remixEnabled: dto.remixEnabled ?? false,
+        isDraft: dto.isDraft ?? false,
+      },
+    });
+    return this.mapReel(reel);
   }
 
   async updateReel(id: string, patch: UpdateReelDto) {
-    await this.ensureSchema();
-    await this.getReel(id);
-    const result = await this.database.query<ReelRow>(
-      `
-      update app_reels
-      set caption = coalesce($2, caption),
-          audio_name = coalesce($3, audio_name),
-          thumbnail_url = coalesce($4, thumbnail_url),
-          video_url = coalesce($5, video_url),
-          text_overlays = coalesce($6::jsonb, text_overlays),
-          subtitle_enabled = coalesce($7, subtitle_enabled),
-          trim_info = coalesce($8, trim_info),
-          remix_enabled = coalesce($9, remix_enabled),
-          is_draft = coalesce($10, is_draft),
-          updated_at = now()
-      where id = $1
-      returning *
-      `,
-      [
-        id,
-        patch.caption ?? null,
-        patch.audioName ?? null,
-        patch.thumbnail ?? null,
-        patch.videoUrl ?? null,
-        patch.textOverlays ? JSON.stringify(patch.textOverlays) : null,
-        patch.subtitleEnabled ?? null,
-        patch.trimInfo ?? null,
-        patch.remixEnabled ?? null,
-        patch.isDraft ?? null,
-      ],
-    );
-    return this.mapReel(result.rows[0]);
+    const existing = await this.prisma.reel.findUnique({ where: { id } });
+    if (!existing || existing.deletedAt) {
+      throw new NotFoundException(`Reel ${id} not found`);
+    }
+
+    const reel = await this.prisma.reel.update({
+      where: { id },
+      data: {
+        caption: patch.caption ?? undefined,
+        audioName: patch.audioName ?? undefined,
+        thumbnailUrl: patch.thumbnail ?? undefined,
+        videoUrl: patch.videoUrl ?? undefined,
+        textOverlays: patch.textOverlays
+          ? (patch.textOverlays as Prisma.InputJsonValue)
+          : undefined,
+        subtitleEnabled: patch.subtitleEnabled ?? undefined,
+        trimInfo: patch.trimInfo ?? undefined,
+        remixEnabled: patch.remixEnabled ?? undefined,
+        isDraft: patch.isDraft ?? undefined,
+        updatedAt: new Date(),
+      },
+    });
+    return this.mapReel(reel);
   }
 
   async deleteReel(id: string) {
-    await this.ensureSchema();
-    const result = await this.database.query<ReelRow>(
-      `delete from app_reels where id = $1 returning *`,
-      [id],
-    );
-    const row = result.rows[0];
-    if (!row) {
+    const existing = await this.prisma.reel.findUnique({ where: { id } });
+    if (!existing || existing.deletedAt) {
       throw new NotFoundException(`Reel ${id} not found`);
     }
+
+    const reel = await this.prisma.reel.update({
+      where: { id },
+      data: {
+        deletedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const mapped = await this.mapReel(reel);
     return {
       success: true,
       message: 'Reel deleted successfully.',
-      data: await this.mapReel(row),
-      removed: await this.mapReel(row),
+      data: mapped,
+      removed: mapped,
     };
   }
 
   async getReelComments(reelId: string) {
-    await this.ensureSchema();
     await this.getReel(reelId);
-    const result = await this.database.query<ReelCommentRow>(
-      `select * from app_reel_comments where reel_id = $1 order by created_at asc`,
-      [reelId],
-    );
+    const comments = await this.prisma.reelComment.findMany({
+      where: { reelId },
+      orderBy: { createdAt: 'asc' },
+    });
     return Promise.all(
-      result.rows.map(async (row) => ({
+      comments.map(async (row) => ({
         id: row.id,
-        reelId: row.reel_id,
-        userId: row.user_id,
+        reelId: row.reelId,
+        userId: row.userId,
         comment: row.comment,
-        createdAt: this.iso(row.created_at),
-        user: await this.coreDatabase.getUser(row.user_id),
+        createdAt: row.createdAt.toISOString(),
+        user: await this.coreDatabase.getUser(row.userId),
       })),
     );
   }
 
   async createReelComment(reelId: string, userId: string, comment: string) {
-    await this.ensureSchema();
     await Promise.all([this.getReel(reelId), this.coreDatabase.getUser(userId)]);
-    const result = await this.database.query<ReelCommentRow>(
-      `
-      insert into app_reel_comments (id, reel_id, user_id, comment)
-      values ($1,$2,$3,$4)
-      returning *
-      `,
-      [makeId('comment'), reelId, userId, comment],
-    );
-    await this.database.query(
-      `update app_reels set comments_count = comments_count + 1, updated_at = now() where id = $1`,
-      [reelId],
-    );
-    return (await this.getReelComments(reelId)).find((item) => item.id === result.rows[0].id);
+    const created = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.reelComment.create({
+        data: {
+          id: makeId('comment'),
+          reelId,
+          userId,
+          comment,
+        },
+      });
+      await tx.reel.update({
+        where: { id: reelId },
+        data: {
+          commentsCount: { increment: 1 },
+          updatedAt: new Date(),
+        },
+      });
+      return row;
+    });
+    return (await this.getReelComments(reelId)).find((item) => item.id === created.id);
   }
 
   async getReelReactions(reelId: string) {
-    await this.ensureSchema();
     await this.getReel(reelId);
-    const result = await this.database.query<ReelReactionRow>(
-      `select * from app_reel_reactions where reel_id = $1 order by created_at desc`,
-      [reelId],
-    );
+    const reactions = await this.prisma.reelReaction.findMany({
+      where: { reelId },
+      orderBy: { createdAt: 'desc' },
+    });
     return Promise.all(
-      result.rows.map(async (row) => ({
-        reelId: row.reel_id,
-        userId: row.user_id,
+      reactions.map(async (row) => ({
+        reelId: row.reelId,
+        userId: row.userId,
         reaction: row.reaction,
-        createdAt: this.iso(row.created_at),
-        user: await this.coreDatabase.getUser(row.user_id),
+        createdAt: row.createdAt.toISOString(),
+        user: await this.coreDatabase.getUser(row.userId),
       })),
     );
   }
 
   async reactToReel(reelId: string, userId: string, reaction: string) {
-    await this.ensureSchema();
     await Promise.all([this.getReel(reelId), this.coreDatabase.getUser(userId)]);
-    const existing = await this.database.query<ReelReactionRow>(
-      `select * from app_reel_reactions where reel_id = $1 and user_id = $2 limit 1`,
-      [reelId, userId],
-    );
-    const hadReaction = Boolean(existing.rows[0]);
-    await this.database.query(
-      `
-      insert into app_reel_reactions (reel_id, user_id, reaction, created_at)
-      values ($1,$2,$3,now())
-      on conflict (reel_id, user_id)
-      do update set reaction = excluded.reaction, created_at = excluded.created_at
-      `,
-      [reelId, userId, reaction],
-    );
-    if (!hadReaction) {
-      await this.database.query(
-        `update app_reels set likes_count = likes_count + 1, updated_at = now() where id = $1`,
-        [reelId],
-      );
-    }
+    const existing = await this.prisma.reelReaction.findUnique({
+      where: {
+        reelId_userId: {
+          reelId,
+          userId,
+        },
+      },
+    });
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.reelReaction.upsert({
+        where: {
+          reelId_userId: {
+            reelId,
+            userId,
+          },
+        },
+        create: {
+          reelId,
+          userId,
+          reaction,
+        },
+        update: {
+          reaction,
+          createdAt: new Date(),
+        },
+      });
+
+      if (!existing) {
+        await tx.reel.update({
+          where: { id: reelId },
+          data: {
+            likesCount: { increment: 1 },
+            updatedAt: new Date(),
+          },
+        });
+      }
+    });
+
     return this.getReelReactions(reelId);
   }
 
-  private async ensureSchema() {
-    if (this.schemaEnsured || !this.database.getHealth().enabled) {
-      return;
-    }
-    await this.database.query(`
-      create table if not exists app_reels (
-        id text primary key,
-        user_id text not null references app_users(id) on delete cascade,
-        caption text not null default '',
-        audio_name text not null default '',
-        thumbnail_url text not null default '',
-        video_url text not null default '',
-        text_overlays jsonb not null default '[]'::jsonb,
-        subtitle_enabled boolean not null default false,
-        trim_info text null,
-        remix_enabled boolean not null default false,
-        is_draft boolean not null default false,
-        likes_count integer not null default 0,
-        comments_count integer not null default 0,
-        shares_count integer not null default 0,
-        views_count integer not null default 0,
-        created_at timestamptz not null default now(),
-        updated_at timestamptz not null default now(),
-        constraint app_reels_id_format check (id ~ '^reel_[a-zA-Z0-9]+$')
-      );
-    `);
-    await this.database.query(`
-      create table if not exists app_reel_comments (
-        id text primary key,
-        reel_id text not null references app_reels(id) on delete cascade,
-        user_id text not null references app_users(id) on delete cascade,
-        comment text not null,
-        created_at timestamptz not null default now(),
-        constraint app_reel_comments_id_format check (id ~ '^comment_[a-zA-Z0-9]+$')
-      );
-    `);
-    await this.database.query(`
-      create table if not exists app_reel_reactions (
-        reel_id text not null references app_reels(id) on delete cascade,
-        user_id text not null references app_users(id) on delete cascade,
-        reaction text not null,
-        created_at timestamptz not null default now(),
-        primary key (reel_id, user_id)
-      );
-    `);
-    this.schemaEnsured = true;
-  }
-
-  private async mapReel(row: ReelRow) {
+  private async mapReel(row: {
+    id: string;
+    userId: string;
+    caption: string;
+    audioName: string;
+    thumbnailUrl: string;
+    videoUrl: string;
+    likesCount: number;
+    commentsCount: number;
+    sharesCount: number;
+    viewsCount: number;
+    textOverlays: Prisma.JsonValue;
+    subtitleEnabled: boolean;
+    trimInfo: string | null;
+    remixEnabled: boolean;
+    isDraft: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
     return {
       id: row.id,
-      authorId: row.user_id,
+      authorId: row.userId,
       caption: row.caption,
-      audioName: row.audio_name,
-      thumbnail: row.thumbnail_url,
-      videoUrl: row.video_url,
-      likes: row.likes_count ?? 0,
-      comments: row.comments_count ?? 0,
-      shares: row.shares_count ?? 0,
-      viewCount: row.views_count ?? 0,
-      textOverlays: Array.isArray(row.text_overlays) ? row.text_overlays : [],
-      subtitleEnabled: row.subtitle_enabled,
-      trimInfo: row.trim_info,
-      remixEnabled: row.remix_enabled,
-      isDraft: row.is_draft,
-      createdAt: this.iso(row.created_at),
-      updatedAt: this.iso(row.updated_at),
-      author: await this.coreDatabase.getUser(row.user_id),
+      audioName: row.audioName,
+      thumbnail: row.thumbnailUrl,
+      videoUrl: row.videoUrl,
+      likes: row.likesCount ?? 0,
+      comments: row.commentsCount ?? 0,
+      shares: row.sharesCount ?? 0,
+      viewCount: row.viewsCount ?? 0,
+      textOverlays: Array.isArray(row.textOverlays) ? row.textOverlays : [],
+      subtitleEnabled: row.subtitleEnabled,
+      trimInfo: row.trimInfo,
+      remixEnabled: row.remixEnabled,
+      isDraft: row.isDraft,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+      author: await this.coreDatabase.getUser(row.userId),
     };
-  }
-
-  private iso(value: string | Date) {
-    return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
   }
 }

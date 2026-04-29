@@ -1,60 +1,28 @@
-import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
-import { QueryResultRow } from 'pg';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { makeId } from '../common/id.util';
-import { DatabaseService } from './database.service';
-
-type UploadRow = QueryResultRow & {
-  id: string;
-  user_id: string | null;
-  file_name: string;
-  original_filename: string | null;
-  mime_type: string | null;
-  size_bytes: string | number | null;
-  url: string | null;
-  secure_url: string | null;
-  public_id: string | null;
-  provider: string;
-  resource_type: string | null;
-  folder: string | null;
-  status: string;
-  metadata: Record<string, unknown> | null;
-  created_at: string | Date;
-};
+import { PrismaService } from './prisma.service';
 
 @Injectable()
-export class UploadsDatabaseService implements OnModuleInit {
-  private schemaEnsured = false;
-
-  constructor(private readonly database: DatabaseService) {}
-
-  async onModuleInit() {
-    await this.ensureSchema();
-  }
+export class UploadsDatabaseService {
+  constructor(private readonly prisma: PrismaService) {}
 
   async getUploads(userId?: string) {
-    await this.ensureSchema();
-    const result = userId?.trim()
-      ? await this.database.query<UploadRow>(
-          `select * from app_uploads where user_id = $1 order by created_at desc`,
-          [userId.trim()],
-        )
-      : await this.database.query<UploadRow>(
-          `select * from app_uploads order by created_at desc`,
-        );
-    return result.rows.map((row) => this.mapUpload(row));
+    const uploads = await this.prisma.mediaUpload.findMany({
+      where: userId?.trim() ? { userId: userId.trim() } : undefined,
+      orderBy: { createdAt: 'desc' },
+    });
+    return uploads.map((row) => this.mapUpload(row));
   }
 
   async getUpload(id: string) {
-    await this.ensureSchema();
-    const result = await this.database.query<UploadRow>(
-      `select * from app_uploads where id = $1 limit 1`,
-      [id],
-    );
-    const row = result.rows[0];
-    if (!row) {
+    const upload = await this.prisma.mediaUpload.findUnique({
+      where: { id },
+    });
+    if (!upload) {
       throw new NotFoundException(`Upload ${id} not found`);
     }
-    return this.mapUpload(row);
+    return this.mapUpload(upload);
   }
 
   async createUpload(input: {
@@ -72,100 +40,84 @@ export class UploadsDatabaseService implements OnModuleInit {
     status?: string;
     metadata?: Record<string, unknown>;
   }) {
-    await this.ensureSchema();
-    const result = await this.database.query<UploadRow>(
-      `
-      insert into app_uploads (
-        id, user_id, file_name, original_filename, mime_type, size_bytes, url,
-        secure_url, public_id, provider, resource_type, folder, status, metadata
-      ) values (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb
-      )
-      returning *
-      `,
-      [
-        makeId('upload'),
-        input.userId?.trim() || null,
-        input.fileName,
-        input.originalFilename ?? null,
-        input.mimeType ?? null,
-        input.sizeBytes ?? null,
-        input.url ?? null,
-        input.secureUrl ?? null,
-        input.publicId ?? null,
-        input.provider ?? 'cloudinary',
-        input.resourceType ?? null,
-        input.folder ?? null,
-        input.status ?? 'completed',
-        JSON.stringify(input.metadata ?? {}),
-      ],
-    );
-    return this.mapUpload(result.rows[0]);
+    const upload = await this.prisma.mediaUpload.create({
+      data: {
+        id: makeId('upload'),
+        userId: input.userId?.trim() || null,
+        fileName: input.fileName,
+        originalFilename: input.originalFilename ?? null,
+        mimeType: input.mimeType ?? null,
+        sizeBytes:
+          input.sizeBytes == null ? null : BigInt(Math.max(0, Math.trunc(input.sizeBytes))),
+        url: input.url ?? null,
+        secureUrl: input.secureUrl ?? null,
+        publicId: input.publicId ?? null,
+        provider: input.provider ?? 'cloudinary',
+        resourceType: input.resourceType ?? null,
+        folder: input.folder ?? null,
+        status: input.status ?? 'completed',
+        metadata: (input.metadata ?? {}) as Prisma.InputJsonValue,
+      },
+    });
+    return this.mapUpload(upload);
   }
 
   async updateUploadStatus(id: string, action: 'retry' | 'cancel' | 'pause') {
-    await this.ensureSchema();
-    const status =
-      action === 'retry' ? 'uploading' : action === 'cancel' ? 'failed' : 'paused';
-    const result = await this.database.query<UploadRow>(
-      `update app_uploads set status = $2 where id = $1 returning *`,
-      [id, status],
-    );
-    const row = result.rows[0];
-    if (!row) {
+    const existing = await this.prisma.mediaUpload.findUnique({ where: { id } });
+    if (!existing) {
       throw new NotFoundException(`Upload ${id} not found`);
     }
-    return this.mapUpload(row);
+
+    const status =
+      action === 'retry' ? 'uploading' : action === 'cancel' ? 'failed' : 'paused';
+
+    const upload = await this.prisma.mediaUpload.update({
+      where: { id },
+      data: { status },
+    });
+    return this.mapUpload(upload);
   }
 
-  private async ensureSchema() {
-    if (this.schemaEnsured || !this.database.getHealth().enabled) {
-      return;
-    }
-    await this.database.query(`
-      create table if not exists app_uploads (
-        id text primary key,
-        user_id text null references app_users(id) on delete set null,
-        file_name text not null,
-        original_filename text null,
-        mime_type text null,
-        size_bytes bigint null,
-        url text null,
-        secure_url text null,
-        public_id text null,
-        provider text not null default 'cloudinary',
-        resource_type text null,
-        folder text null,
-        status text not null default 'completed',
-        metadata jsonb not null default '{}'::jsonb,
-        created_at timestamptz not null default now(),
-        constraint app_uploads_id_format check (id ~ '^upload_[a-zA-Z0-9]+$')
-      );
-    `);
-    this.schemaEnsured = true;
-  }
-
-  private mapUpload(row: UploadRow) {
+  private mapUpload(row: {
+    id: string;
+    userId: string | null;
+    fileName: string;
+    originalFilename: string | null;
+    mimeType: string | null;
+    sizeBytes: bigint | null;
+    url: string | null;
+    secureUrl: string | null;
+    publicId: string | null;
+    provider: string;
+    resourceType: string | null;
+    folder: string | null;
+    status: string;
+    metadata: Prisma.JsonValue;
+    createdAt: Date;
+  }) {
     return {
       id: row.id,
-      userId: row.user_id,
-      fileName: row.file_name,
-      originalFilename: row.original_filename,
-      mimeType: row.mime_type,
-      size: row.size_bytes == null ? null : Number(row.size_bytes),
-      sizeBytes: row.size_bytes == null ? null : Number(row.size_bytes),
+      userId: row.userId,
+      fileName: row.fileName,
+      originalFilename: row.originalFilename,
+      mimeType: row.mimeType,
+      size: row.sizeBytes == null ? null : Number(row.sizeBytes),
+      sizeBytes: row.sizeBytes == null ? null : Number(row.sizeBytes),
       url: row.url,
-      secureUrl: row.secure_url,
-      publicId: row.public_id,
+      secureUrl: row.secureUrl,
+      publicId: row.publicId,
       provider: row.provider,
-      resourceType: row.resource_type,
+      resourceType: row.resourceType,
       folder: row.folder,
       status: row.status,
-      metadata: row.metadata ?? {},
-      createdAt:
-        row.created_at instanceof Date
-          ? row.created_at.toISOString()
-          : new Date(row.created_at).toISOString(),
+      metadata: this.toObject(row.metadata),
+      createdAt: row.createdAt.toISOString(),
     };
+  }
+
+  private toObject(value: Prisma.JsonValue) {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
   }
 }

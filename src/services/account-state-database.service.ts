@@ -1,58 +1,10 @@
-import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
-import { QueryResultRow } from 'pg';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { makeId } from '../common/id.util';
-import { DatabaseService } from './database.service';
 import { CoreDatabaseService } from './core-database.service';
+import { PrismaService } from './prisma.service';
 import { ReelsDatabaseService } from './reels-database.service';
 import { StoriesDatabaseService } from './stories-database.service';
-
-type BookmarkRow = QueryResultRow & {
-  id: string;
-  user_id: string;
-  entity_id: string;
-  title: string | null;
-  type: 'post' | 'reel' | 'product';
-  metadata: Record<string, unknown> | null;
-  created_at: string | Date;
-};
-
-type BlockRow = QueryResultRow & {
-  actor_user_id: string;
-  target_user_id: string;
-  reason: string | null;
-  created_at: string | Date;
-};
-
-type ReportRow = QueryResultRow & {
-  id: string;
-  reporter_user_id: string;
-  target_user_id: string | null;
-  target_entity_id: string | null;
-  target_entity_type: string | null;
-  reason: string;
-  details: string | null;
-  status: string;
-  created_at: string | Date;
-  updated_at: string | Date;
-};
-
-type SettingsRow = QueryResultRow & {
-  user_id: string;
-  settings: Record<string, unknown>;
-  updated_at: string | Date;
-};
-
-type DraftRow = QueryResultRow & {
-  id: string;
-  user_id: string;
-  title: string;
-  type: string;
-  payload: Record<string, unknown>;
-  scheduled_at: string | Date | null;
-  status: string;
-  created_at: string | Date;
-  updated_at: string | Date;
-};
 
 const DEFAULT_SETTINGS_STATE: Record<string, unknown> = {
   'privacy.profile_private': false,
@@ -81,40 +33,35 @@ const DEFAULT_SETTINGS_STATE: Record<string, unknown> = {
 };
 
 @Injectable()
-export class AccountStateDatabaseService implements OnModuleInit {
-  private schemaEnsured = false;
-
+export class AccountStateDatabaseService {
   constructor(
-    private readonly database: DatabaseService,
+    private readonly prisma: PrismaService,
     private readonly coreDatabase: CoreDatabaseService,
     private readonly reelsDatabase: ReelsDatabaseService,
     private readonly storiesDatabase: StoriesDatabaseService,
   ) {}
 
-  async onModuleInit() {
-    await this.ensureSchema();
-  }
-
   async getBookmarks(userId: string) {
-    await this.ensureSchema();
-    const result = await this.database.query<BookmarkRow>(
-      `select * from app_bookmarks where user_id = $1 order by created_at desc`,
-      [userId],
-    );
-    return result.rows.map((row) => this.mapBookmark(row));
+    const bookmarks = await this.prisma.bookmark.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return bookmarks.map((row) => this.mapBookmark(row));
   }
 
   async getBookmark(userId: string, entityId: string) {
-    await this.ensureSchema();
-    const result = await this.database.query<BookmarkRow>(
-      `select * from app_bookmarks where user_id = $1 and entity_id = $2 limit 1`,
-      [userId, entityId],
-    );
-    const row = result.rows[0];
-    if (!row) {
+    const bookmark = await this.prisma.bookmark.findUnique({
+      where: {
+        userId_entityId: {
+          userId,
+          entityId,
+        },
+      },
+    });
+    if (!bookmark) {
       throw new NotFoundException(`Bookmark ${entityId} not found`);
     }
-    return this.mapBookmark(row);
+    return this.mapBookmark(bookmark);
   }
 
   async addBookmark(
@@ -126,66 +73,87 @@ export class AccountStateDatabaseService implements OnModuleInit {
       metadata?: Record<string, unknown>;
     },
   ) {
-    await this.ensureSchema();
-    const result = await this.database.query<BookmarkRow>(
-      `
-      insert into app_bookmarks (id, user_id, entity_id, title, type, metadata)
-      values ($1,$2,$3,$4,$5,$6::jsonb)
-      on conflict (user_id, entity_id)
-      do update set
-        title = excluded.title,
-        type = excluded.type,
-        metadata = excluded.metadata
-      returning *
-      `,
-      [
-        makeId('bookmark'),
-        userId,
-        input.entityId,
-        input.title ?? null,
-        input.type ?? 'post',
-        JSON.stringify(input.metadata ?? {}),
-      ],
-    );
-    return this.mapBookmark(result.rows[0]);
+    const data: Prisma.BookmarkUncheckedCreateInput = {
+      id: makeId('bookmark'),
+      userId,
+      entityId: input.entityId,
+      title: input.title ?? null,
+      type: input.type ?? 'post',
+      metadata: (input.metadata ?? {}) as Prisma.InputJsonValue,
+    };
+
+    if ((input.type ?? 'post') === 'post') {
+      data.postId = input.entityId;
+    } else if (input.type === 'reel') {
+      data.reelId = input.entityId;
+    } else if (input.type === 'product') {
+      data.productId = input.entityId;
+    }
+
+    const bookmark = await this.prisma.bookmark.upsert({
+      where: {
+        userId_entityId: {
+          userId,
+          entityId: input.entityId,
+        },
+      },
+      create: data,
+      update: {
+        title: input.title ?? null,
+        type: input.type ?? 'post',
+        metadata: (input.metadata ?? {}) as Prisma.InputJsonValue,
+        postId: data.postId ?? null,
+        reelId: data.reelId ?? null,
+        productId: data.productId ?? null,
+      },
+    });
+
+    return this.mapBookmark(bookmark);
   }
 
   async removeBookmark(userId: string, entityId: string) {
-    await this.ensureSchema();
-    const result = await this.database.query<BookmarkRow>(
-      `delete from app_bookmarks where user_id = $1 and entity_id = $2 returning *`,
-      [userId, entityId],
-    );
-    const row = result.rows[0];
-    if (!row) {
+    const bookmark = await this.prisma.bookmark.findUnique({
+      where: {
+        userId_entityId: {
+          userId,
+          entityId,
+        },
+      },
+    });
+    if (!bookmark) {
       throw new NotFoundException(`Bookmark ${entityId} not found`);
     }
+
+    await this.prisma.bookmark.delete({
+      where: { id: bookmark.id },
+    });
+
     return {
       success: true,
       message: 'Bookmark removed successfully.',
-      removed: this.mapBookmark(row),
+      removed: this.mapBookmark(bookmark),
     };
   }
 
   async getBlockedUsers(actorUserId: string) {
-    await this.ensureSchema();
-    const result = await this.database.query<BlockRow>(
-      `select * from app_user_blocks where actor_user_id = $1 order by created_at desc`,
-      [actorUserId],
-    );
+    const blocks = await this.prisma.userBlock.findMany({
+      where: { actorUserId },
+      orderBy: { createdAt: 'desc' },
+    });
     return Promise.all(
-      result.rows.map(async (row) => ({
-        id: row.target_user_id,
+      blocks.map(async (row) => ({
+        id: row.targetUserId,
         reason: row.reason,
-        blockedAt: this.iso(row.created_at),
-        user: await this.coreDatabase.getUser(row.target_user_id),
+        blockedAt: row.createdAt.toISOString(),
+        user: await this.coreDatabase.getUser(row.targetUserId),
       })),
     );
   }
 
   async getBlockedUser(actorUserId: string, targetUserId: string) {
-    const users = await this.getBlockedUsers(actorUserId);
-    const item = users.find((entry) => entry.id === targetUserId);
+    const item = (await this.getBlockedUsers(actorUserId)).find(
+      (entry) => entry.id === targetUserId,
+    );
     if (!item) {
       throw new NotFoundException(`Blocked user ${targetUserId} not found`);
     }
@@ -193,20 +161,29 @@ export class AccountStateDatabaseService implements OnModuleInit {
   }
 
   async blockUser(actorUserId: string, targetUserId: string, reason?: string) {
-    await this.ensureSchema();
     await Promise.all([
       this.coreDatabase.getUser(actorUserId),
       this.coreDatabase.getUser(targetUserId),
     ]);
-    await this.database.query(
-      `
-      insert into app_user_blocks (actor_user_id, target_user_id, reason)
-      values ($1,$2,$3)
-      on conflict (actor_user_id, target_user_id)
-      do update set reason = excluded.reason, created_at = now()
-      `,
-      [actorUserId, targetUserId, reason ?? null],
-    );
+
+    await this.prisma.userBlock.upsert({
+      where: {
+        actorUserId_targetUserId: {
+          actorUserId,
+          targetUserId,
+        },
+      },
+      create: {
+        actorUserId,
+        targetUserId,
+        reason: reason ?? null,
+      },
+      update: {
+        reason: reason ?? null,
+        createdAt: new Date(),
+      },
+    });
+
     return {
       success: true,
       message: 'User blocked successfully.',
@@ -215,26 +192,34 @@ export class AccountStateDatabaseService implements OnModuleInit {
   }
 
   async unblockUser(actorUserId: string, targetUserId: string) {
-    await this.ensureSchema();
-    const result = await this.database.query<BlockRow>(
-      `
-      delete from app_user_blocks
-      where actor_user_id = $1 and target_user_id = $2
-      returning *
-      `,
-      [actorUserId, targetUserId],
-    );
-    const row = result.rows[0];
-    if (!row) {
+    const block = await this.prisma.userBlock.findUnique({
+      where: {
+        actorUserId_targetUserId: {
+          actorUserId,
+          targetUserId,
+        },
+      },
+    });
+    if (!block) {
       throw new NotFoundException(`Blocked user ${targetUserId} not found`);
     }
+
+    await this.prisma.userBlock.delete({
+      where: {
+        actorUserId_targetUserId: {
+          actorUserId,
+          targetUserId,
+        },
+      },
+    });
+
     return {
       success: true,
       message: 'User unblocked successfully.',
       removed: {
-        actorUserId: row.actor_user_id,
-        targetUserId: row.target_user_id,
-        reason: row.reason,
+        actorUserId: block.actorUserId,
+        targetUserId: block.targetUserId,
+        reason: block.reason,
       },
     };
   }
@@ -247,80 +232,75 @@ export class AccountStateDatabaseService implements OnModuleInit {
     targetEntityId?: string;
     targetEntityType?: string;
   }) {
-    await this.ensureSchema();
-    const result = await this.database.query<ReportRow>(
-      `
-      insert into app_user_reports (
-        id, reporter_user_id, target_user_id, target_entity_id, target_entity_type,
-        reason, details, status
-      ) values (
-        $1,$2,$3,$4,$5,$6,$7,$8
-      )
-      returning *
-      `,
-      [
-        makeId('report'),
-        input.reporterUserId,
-        input.targetUserId ?? null,
-        input.targetEntityId ?? null,
-        input.targetEntityType ?? null,
-        input.reason,
-        input.details ?? null,
-        'submitted',
-      ],
-    );
-    return this.mapReport(result.rows[0]);
+    const report = await this.prisma.userReport.create({
+      data: {
+        id: makeId('report'),
+        reporterUserId: input.reporterUserId,
+        targetUserId: input.targetUserId ?? null,
+        targetEntityId: input.targetEntityId ?? null,
+        targetEntityType: input.targetEntityType ?? null,
+        reason: input.reason,
+        details: input.details ?? null,
+        status: 'submitted',
+        postId: input.targetEntityType === 'post' ? input.targetEntityId ?? null : null,
+      },
+    });
+    return this.mapReport(report);
   }
 
   async getReportCenter(userId: string) {
-    await this.ensureSchema();
-    const result = await this.database.query<ReportRow>(
-      `select * from app_user_reports where reporter_user_id = $1 order by created_at desc`,
-      [userId],
-    );
-    const reports = result.rows.map((row) => this.mapReport(row));
+    const reports = await this.prisma.userReport.findMany({
+      where: { reporterUserId: userId },
+      orderBy: { createdAt: 'desc' },
+    });
+    const mapped = reports.map((row) => this.mapReport(row));
     return {
       success: true,
       summary: {
-        total: reports.length,
-        openReports: reports.filter((item) => item.status !== 'resolved').length,
-        resolvedReports: reports.filter((item) => item.status === 'resolved').length,
+        total: mapped.length,
+        openReports: mapped.filter((item) => item.status !== 'resolved').length,
+        resolvedReports: mapped.filter((item) => item.status === 'resolved').length,
       },
-      reports,
+      reports: mapped,
       data: {
-        reports,
+        reports: mapped,
       },
     };
   }
 
   async getSettingsState(userId: string) {
-    await this.ensureSchema();
-    const result = await this.database.query<SettingsRow>(
-      `select * from app_user_settings where user_id = $1 limit 1`,
-      [userId],
-    );
+    const [settingsRow, privacyRow] = await Promise.all([
+      this.prisma.userSettings.findUnique({ where: { userId } }),
+      this.prisma.userPrivacy.findUnique({ where: { userId } }),
+    ]);
+
     return {
       ...DEFAULT_SETTINGS_STATE,
-      ...(result.rows[0]?.settings ?? {}),
+      ...(this.toObject(settingsRow?.settings ?? {}) as Record<string, unknown>),
+      ...this.privacyRowToSettings(privacyRow),
     };
   }
 
   async updateSettingsState(userId: string, patch: Record<string, unknown>) {
-    await this.ensureSchema();
     const current = await this.getSettingsState(userId);
     const next = {
       ...current,
       ...patch,
     };
-    await this.database.query(
-      `
-      insert into app_user_settings (user_id, settings)
-      values ($1,$2::jsonb)
-      on conflict (user_id)
-      do update set settings = excluded.settings, updated_at = now()
-      `,
-      [userId, JSON.stringify(next)],
-    );
+
+    await this.prisma.userSettings.upsert({
+      where: { userId },
+      create: {
+        userId,
+        settings: next as Prisma.InputJsonValue,
+      },
+      update: {
+        settings: next as Prisma.InputJsonValue,
+        updatedAt: new Date(),
+      },
+    });
+
+    await this.syncPrivacyFromSettings(userId, next);
     return next;
   }
 
@@ -339,25 +319,24 @@ export class AccountStateDatabaseService implements OnModuleInit {
   }
 
   async getDrafts(userId: string) {
-    await this.ensureSchema();
-    const result = await this.database.query<DraftRow>(
-      `select * from app_post_drafts where user_id = $1 order by updated_at desc`,
-      [userId],
-    );
-    return result.rows.map((row) => this.mapDraft(row));
+    const drafts = await this.prisma.postDraft.findMany({
+      where: { userId },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return drafts.map((row) => this.mapDraft(row));
   }
 
   async getDraft(userId: string, id: string) {
-    await this.ensureSchema();
-    const result = await this.database.query<DraftRow>(
-      `select * from app_post_drafts where user_id = $1 and id = $2 limit 1`,
-      [userId, id],
-    );
-    const row = result.rows[0];
-    if (!row) {
+    const draft = await this.prisma.postDraft.findFirst({
+      where: {
+        id,
+        userId,
+      },
+    });
+    if (!draft) {
       throw new NotFoundException(`Draft ${id} not found`);
     }
-    return this.mapDraft(row);
+    return this.mapDraft(draft);
   }
 
   async createDraft(
@@ -369,28 +348,26 @@ export class AccountStateDatabaseService implements OnModuleInit {
       scheduledAt?: string | null;
     },
   ) {
-    await this.ensureSchema();
-    const result = await this.database.query<DraftRow>(
-      `
-      insert into app_post_drafts (id, user_id, title, type, payload, scheduled_at, status)
-      values ($1,$2,$3,$4,$5::jsonb,$6,$7)
-      returning *
-      `,
-      [
-        makeId('draft'),
+    const draft = await this.prisma.postDraft.create({
+      data: {
+        id: makeId('draft'),
         userId,
-        input.title,
-        input.type,
-        JSON.stringify(input.payload ?? {}),
-        input.scheduledAt ?? null,
-        input.scheduledAt ? 'scheduled' : 'draft',
-      ],
-    );
-    return this.mapDraft(result.rows[0]);
+        title: input.title,
+        type: input.type,
+        payload: (input.payload ?? {}) as Prisma.InputJsonValue,
+        scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
+        status: input.scheduledAt ? 'scheduled' : 'draft',
+      },
+    });
+
+    if (input.scheduledAt) {
+      await this.upsertScheduledPost(userId, draft.id, input.scheduledAt);
+    }
+
+    return this.mapDraft(draft);
   }
 
   async updateDraft(userId: string, id: string, patch: Record<string, unknown>) {
-    await this.ensureSchema();
     const current = await this.getDraft(userId, id);
     const nextPayload =
       patch.payload && typeof patch.payload === 'object'
@@ -402,44 +379,49 @@ export class AccountStateDatabaseService implements OnModuleInit {
         : patch.scheduledAt === null
           ? null
           : current.scheduledAt;
-    const result = await this.database.query<DraftRow>(
-      `
-      update app_post_drafts
-      set title = $3,
-          type = $4,
-          payload = $5::jsonb,
-          scheduled_at = $6,
-          status = $7,
-          updated_at = now()
-      where user_id = $1 and id = $2
-      returning *
-      `,
-      [
-        userId,
-        id,
-        typeof patch.title === 'string' ? patch.title : current.title,
-        typeof patch.type === 'string' ? patch.type : current.type,
-        JSON.stringify(nextPayload),
-        nextScheduledAt,
-        nextScheduledAt ? 'scheduled' : 'draft',
-      ],
-    );
-    return this.mapDraft(result.rows[0]);
+
+    const draft = await this.prisma.postDraft.update({
+      where: { id },
+      data: {
+        title: typeof patch.title === 'string' ? patch.title : current.title,
+        type: typeof patch.type === 'string' ? patch.type : current.type,
+        payload: nextPayload as Prisma.InputJsonValue,
+        scheduledAt: nextScheduledAt ? new Date(nextScheduledAt) : null,
+        status: nextScheduledAt ? 'scheduled' : 'draft',
+        updatedAt: new Date(),
+      },
+    });
+
+    if (nextScheduledAt) {
+      await this.upsertScheduledPost(userId, id, nextScheduledAt);
+    } else {
+      await this.prisma.scheduledPost.deleteMany({
+        where: { draftId: id },
+      });
+    }
+
+    return this.mapDraft(draft);
   }
 
   async deleteDraft(userId: string, id: string) {
-    await this.ensureSchema();
-    const result = await this.database.query<DraftRow>(
-      `delete from app_post_drafts where user_id = $1 and id = $2 returning *`,
-      [userId, id],
-    );
-    const row = result.rows[0];
-    if (!row) {
+    const draft = await this.prisma.postDraft.findFirst({
+      where: {
+        id,
+        userId,
+      },
+    });
+    if (!draft) {
       throw new NotFoundException(`Draft ${id} not found`);
     }
+
+    await this.prisma.$transaction([
+      this.prisma.scheduledPost.deleteMany({ where: { draftId: id } }),
+      this.prisma.postDraft.delete({ where: { id } }),
+    ]);
+
     return {
       success: true,
-      removed: this.mapDraft(row),
+      removed: this.mapDraft(draft),
     };
   }
 
@@ -483,111 +465,166 @@ export class AccountStateDatabaseService implements OnModuleInit {
     };
   }
 
-  private async ensureSchema() {
-    if (this.schemaEnsured || !this.database.getHealth().enabled) {
+  private async upsertScheduledPost(userId: string, draftId: string, scheduledAt: string) {
+    const existing = await this.prisma.scheduledPost.findFirst({
+      where: { draftId },
+    });
+
+    if (existing) {
+      await this.prisma.scheduledPost.update({
+        where: { id: existing.id },
+        data: {
+          scheduledFor: new Date(scheduledAt),
+          status: 'pending',
+          updatedAt: new Date(),
+          lastError: null,
+        },
+      });
       return;
     }
 
-    await this.database.query(`
-      create table if not exists app_bookmarks (
-        id text primary key,
-        user_id text not null references app_users(id) on delete cascade,
-        entity_id text not null,
-        title text null,
-        type text not null default 'post',
-        metadata jsonb not null default '{}'::jsonb,
-        created_at timestamptz not null default now(),
-        unique (user_id, entity_id)
-      );
-    `);
-    await this.database.query(`
-      create table if not exists app_user_blocks (
-        actor_user_id text not null references app_users(id) on delete cascade,
-        target_user_id text not null references app_users(id) on delete cascade,
-        reason text null,
-        created_at timestamptz not null default now(),
-        primary key (actor_user_id, target_user_id)
-      );
-    `);
-    await this.database.query(`
-      create table if not exists app_user_reports (
-        id text primary key,
-        reporter_user_id text not null references app_users(id) on delete cascade,
-        target_user_id text null references app_users(id) on delete set null,
-        target_entity_id text null,
-        target_entity_type text null,
-        reason text not null,
-        details text null,
-        status text not null default 'submitted',
-        created_at timestamptz not null default now(),
-        updated_at timestamptz not null default now()
-      );
-    `);
-    await this.database.query(`
-      create table if not exists app_user_settings (
-        user_id text primary key references app_users(id) on delete cascade,
-        settings jsonb not null default '{}'::jsonb,
-        updated_at timestamptz not null default now()
-      );
-    `);
-    await this.database.query(`
-      create table if not exists app_post_drafts (
-        id text primary key,
-        user_id text not null references app_users(id) on delete cascade,
-        title text not null,
-        type text not null,
-        payload jsonb not null default '{}'::jsonb,
-        scheduled_at timestamptz null,
-        status text not null default 'draft',
-        created_at timestamptz not null default now(),
-        updated_at timestamptz not null default now()
-      );
-    `);
-    this.schemaEnsured = true;
+    await this.prisma.scheduledPost.create({
+      data: {
+        id: makeId('scheduled'),
+        userId,
+        draftId,
+        scheduledFor: new Date(scheduledAt),
+        status: 'pending',
+      },
+    });
   }
 
-  private mapBookmark(row: BookmarkRow) {
+  private async syncPrivacyFromSettings(userId: string, settings: Record<string, unknown>) {
+    await this.prisma.userPrivacy.upsert({
+      where: { userId },
+      create: {
+        userId,
+        profilePrivate: Boolean(settings['privacy.profile_private']),
+        activityStatus: Boolean(settings['privacy.activity_status']),
+        allowTagging: Boolean(settings['privacy.allow_tagging']),
+        allowMentions: Boolean(settings['privacy.allow_mentions']),
+        allowReposts: Boolean(settings['privacy.allow_reposts']),
+        allowComments: Boolean(settings['privacy.allow_comments']),
+        hideSensitive: Boolean(settings['privacy.hide_sensitive']),
+        hideLikes: Boolean(settings['privacy.hide_likes']),
+      },
+      update: {
+        profilePrivate: Boolean(settings['privacy.profile_private']),
+        activityStatus: Boolean(settings['privacy.activity_status']),
+        allowTagging: Boolean(settings['privacy.allow_tagging']),
+        allowMentions: Boolean(settings['privacy.allow_mentions']),
+        allowReposts: Boolean(settings['privacy.allow_reposts']),
+        allowComments: Boolean(settings['privacy.allow_comments']),
+        hideSensitive: Boolean(settings['privacy.hide_sensitive']),
+        hideLikes: Boolean(settings['privacy.hide_likes']),
+        updatedAt: new Date(),
+      },
+    });
+  }
+
+  private privacyRowToSettings(
+    privacy:
+      | {
+          profilePrivate: boolean;
+          activityStatus: boolean;
+          allowTagging: boolean;
+          allowMentions: boolean;
+          allowReposts: boolean;
+          allowComments: boolean;
+          hideSensitive: boolean;
+          hideLikes: boolean;
+        }
+      | null,
+  ) {
+    if (!privacy) {
+      return {};
+    }
+
     return {
-      id: row.entity_id,
-      bookmarkId: row.id,
-      userId: row.user_id,
-      title: row.title ?? row.entity_id,
-      type: row.type,
-      metadata: row.metadata ?? {},
-      createdAt: this.iso(row.created_at),
+      'privacy.profile_private': privacy.profilePrivate,
+      'privacy.activity_status': privacy.activityStatus,
+      'privacy.allow_tagging': privacy.allowTagging,
+      'privacy.allow_mentions': privacy.allowMentions,
+      'privacy.allow_reposts': privacy.allowReposts,
+      'privacy.allow_comments': privacy.allowComments,
+      'privacy.hide_sensitive': privacy.hideSensitive,
+      'privacy.hide_likes': privacy.hideLikes,
     };
   }
 
-  private mapReport(row: ReportRow) {
+  private mapBookmark(row: {
+    id: string;
+    userId: string;
+    entityId: string;
+    title: string | null;
+    type: string;
+    metadata: Prisma.JsonValue;
+    createdAt: Date;
+  }) {
+    return {
+      id: row.entityId,
+      bookmarkId: row.id,
+      userId: row.userId,
+      title: row.title ?? row.entityId,
+      type: row.type,
+      metadata: this.toObject(row.metadata),
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  private mapReport(row: {
+    id: string;
+    reporterUserId: string;
+    targetUserId: string | null;
+    targetEntityId: string | null;
+    targetEntityType: string | null;
+    reason: string;
+    details: string | null;
+    status: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
     return {
       id: row.id,
-      reporterUserId: row.reporter_user_id,
-      targetUserId: row.target_user_id,
-      targetEntityId: row.target_entity_id,
-      targetEntityType: row.target_entity_type,
+      reporterUserId: row.reporterUserId,
+      targetUserId: row.targetUserId,
+      targetEntityId: row.targetEntityId,
+      targetEntityType: row.targetEntityType,
       reason: row.reason,
       details: row.details,
       status: row.status,
-      createdAt: this.iso(row.created_at),
-      updatedAt: this.iso(row.updated_at),
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
     };
   }
 
-  private mapDraft(row: DraftRow) {
+  private mapDraft(row: {
+    id: string;
+    userId: string;
+    title: string;
+    type: string;
+    payload: Prisma.JsonValue;
+    scheduledAt: Date | null;
+    status: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
     return {
       id: row.id,
-      userId: row.user_id,
+      userId: row.userId,
       title: row.title,
       type: row.type,
-      payload: row.payload ?? {},
-      scheduledAt: row.scheduled_at ? this.iso(row.scheduled_at) : null,
+      payload: this.toObject(row.payload),
+      scheduledAt: row.scheduledAt ? row.scheduledAt.toISOString() : null,
       status: row.status,
-      createdAt: this.iso(row.created_at),
-      updatedAt: this.iso(row.updated_at),
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
     };
   }
 
-  private iso(value: string | Date) {
-    return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+  private toObject(value: Prisma.JsonValue) {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
   }
 }

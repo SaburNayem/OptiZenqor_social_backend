@@ -11,6 +11,7 @@ export type IdPrefix =
   | 'reaction'
   | 'reel'
   | 'draft'
+  | 'scheduled'
   | 'like'
   | 'share'
   | 'order'

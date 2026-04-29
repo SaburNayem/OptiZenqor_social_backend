@@ -1,125 +1,45 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-  OnModuleInit,
-} from '@nestjs/common';
-import { QueryResultRow } from 'pg';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { CreateStoryDto, UpdateStoryDto } from '../dto/api.dto';
 import { makeId } from '../common/id.util';
 import { CoreDatabaseService } from './core-database.service';
-import { DatabaseService } from './database.service';
-
-type StoryRow = QueryResultRow & {
-  id: string;
-  user_id: string;
-  media: string;
-  media_items: unknown;
-  is_local_file: boolean;
-  text: string;
-  music: string | null;
-  background_colors: unknown;
-  text_color_value: string | number;
-  sticker: string | null;
-  effect_name: string | null;
-  mention_username: string | null;
-  mention_usernames: unknown;
-  link_label: string | null;
-  link_url: string | null;
-  privacy: string;
-  location: string | null;
-  collage_layout: string | null;
-  text_offset_dx: string | number;
-  text_offset_dy: string | number;
-  text_scale: string | number;
-  media_transforms: unknown;
-  seen: boolean;
-  created_at: Date | string;
-  updated_at: Date | string;
-  expires_at: Date | string;
-};
-
-type StoryCommentRow = QueryResultRow & {
-  id: string;
-  story_id: string;
-  user_id: string;
-  comment: string;
-  created_at: string | Date;
-};
-
-type StoryReactionRow = QueryResultRow & {
-  story_id: string;
-  user_id: string;
-  reaction: string;
-  created_at: string | Date;
-};
-
-type StoryViewRow = QueryResultRow & {
-  story_id: string;
-  user_id: string;
-  viewed_at: string | Date;
-};
+import { PrismaService } from './prisma.service';
 
 @Injectable()
-export class StoriesDatabaseService implements OnModuleInit {
-  private schemaEnsured = false;
-
+export class StoriesDatabaseService {
   constructor(
-    private readonly database: DatabaseService,
+    private readonly prisma: PrismaService,
     private readonly coreDatabase: CoreDatabaseService,
   ) {}
 
-  async onModuleInit() {
-    await this.ensureSchema();
-  }
-
   async getActiveStories(userId?: string) {
-    await this.ensureSchema();
-    const normalizedUserId = userId?.trim();
-    const result = normalizedUserId
-      ? await this.database.query<StoryRow>(
-          `
-          select *
-          from app_stories
-          where expires_at > now()
-            and user_id = $1
-          order by created_at desc
-          `,
-          [normalizedUserId],
-        )
-      : await this.database.query<StoryRow>(
-          `
-          select *
-          from app_stories
-          where expires_at > now()
-          order by created_at desc
-          `,
-        );
+    const stories = await this.prisma.story.findMany({
+      where: {
+        userId: userId?.trim() || undefined,
+        expiresAt: { gt: new Date() },
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
-    return result.rows.map((row) => this.mapStory(row));
+    return stories.map((row) => this.mapStory(row));
   }
 
   async getStory(id: string) {
-    await this.ensureSchema();
-    const result = await this.database.query<StoryRow>(
-      `
-      select *
-      from app_stories
-      where id = $1
-        and expires_at > now()
-      limit 1
-      `,
-      [id],
-    );
-    const row = result.rows[0];
-    if (!row) {
+    const story = await this.prisma.story.findFirst({
+      where: {
+        id,
+        expiresAt: { gt: new Date() },
+        deletedAt: null,
+      },
+    });
+    if (!story) {
       throw new NotFoundException(`Story ${id} not found`);
     }
-    return this.mapStory(row);
+    return this.mapStory(story);
   }
 
   async createStory(userId: string, dto: CreateStoryDto) {
-    await this.ensureSchema();
     const normalizedUserId = userId?.trim();
     if (!normalizedUserId) {
       throw new BadRequestException('userId is required.');
@@ -130,384 +50,288 @@ export class StoriesDatabaseService implements OnModuleInit {
       dto.mentionUsernames,
       dto.mentionUsername,
     );
-    const result = await this.database.query<StoryRow>(
-      `
-      insert into app_stories (
-        id,
-        user_id,
-        media,
-        media_items,
-        is_local_file,
-        text,
-        music,
-        background_colors,
-        text_color_value,
-        sticker,
-        effect_name,
-        mention_username,
-        mention_usernames,
-        link_label,
-        link_url,
-        privacy,
-        location,
-        collage_layout,
-        text_offset_dx,
-        text_offset_dy,
-        text_scale,
-        media_transforms,
-        seen,
-        expires_at
-      )
-      values (
-        $1,$2,$3,$4::jsonb,$5,
-        $6,$7,$8::jsonb,$9,
-        $10,$11,$12,$13::jsonb,
-        $14,$15,$16,$17,$18,
-        $19,$20,$21,$22::jsonb,
-        false,
-        now() + interval '24 hours'
-      )
-      returning *
-      `,
-      [
-        makeId('story'),
-        normalizedUserId,
-        dto.media?.trim() || mediaItems[0] || '',
-        JSON.stringify(mediaItems),
-        dto.isLocalFile ?? false,
-        dto.text?.trim() ?? '',
-        dto.music?.trim() || null,
-        JSON.stringify(dto.backgroundColors ?? []),
-        dto.textColorValue ?? 4294967295,
-        dto.sticker?.trim() || null,
-        dto.effectName?.trim() || null,
-        mentionUsernames[0] ?? dto.mentionUsername?.trim() ?? null,
-        JSON.stringify(mentionUsernames),
-        dto.linkLabel?.trim() || null,
-        dto.linkUrl?.trim() || null,
-        this.normalizePrivacy(dto.privacy),
-        dto.location?.trim() || null,
-        dto.collageLayout?.trim() || null,
-        dto.textOffsetDx ?? 0,
-        dto.textOffsetDy ?? 0,
-        dto.textScale ?? 1,
-        JSON.stringify(dto.mediaTransforms ?? []),
-      ],
-    );
 
-    return this.mapStory(result.rows[0]);
+    const story = await this.prisma.story.create({
+      data: {
+        id: makeId('story'),
+        userId: normalizedUserId,
+        media: dto.media?.trim() || mediaItems[0] || '',
+        mediaItems: mediaItems as Prisma.InputJsonValue,
+        isLocalFile: dto.isLocalFile ?? false,
+        text: dto.text?.trim() ?? '',
+        music: dto.music?.trim() || null,
+        backgroundColors: (dto.backgroundColors ?? []) as Prisma.InputJsonValue,
+        textColorValue: BigInt(Math.trunc(dto.textColorValue ?? 4294967295)),
+        sticker: dto.sticker?.trim() || null,
+        effectName: dto.effectName?.trim() || null,
+        mentionUsername: mentionUsernames[0] ?? dto.mentionUsername?.trim() ?? null,
+        mentionUsernames: mentionUsernames as Prisma.InputJsonValue,
+        linkLabel: dto.linkLabel?.trim() || null,
+        linkUrl: dto.linkUrl?.trim() || null,
+        privacy: this.normalizePrivacy(dto.privacy),
+        location: dto.location?.trim() || null,
+        collageLayout: dto.collageLayout?.trim() || null,
+        textOffsetDx: dto.textOffsetDx ?? 0,
+        textOffsetDy: dto.textOffsetDy ?? 0,
+        textScale: dto.textScale ?? 1,
+        mediaTransforms: (dto.mediaTransforms ?? []) as unknown as Prisma.InputJsonValue,
+        seen: false,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+
+    return this.mapStory(story);
   }
 
   async updateStory(id: string, patch: UpdateStoryDto) {
-    await this.ensureSchema();
-    const existing = await this.getStory(id);
+    const existing = await this.prisma.story.findUnique({ where: { id } });
+    if (!existing || existing.deletedAt) {
+      throw new NotFoundException(`Story ${id} not found`);
+    }
+
+    const current = this.mapStory(existing);
     const mediaItems = this.normalizeMediaItems(
-      patch.media ?? existing.media,
-      patch.mediaItems ?? existing.mediaItems,
+      patch.media ?? current.media,
+      patch.mediaItems ?? current.mediaItems,
     );
     const mentionUsernames = this.normalizeMentions(
-      patch.mentionUsernames ?? existing.mentionUsernames,
-      patch.mentionUsername ?? existing.mentionUsername ?? undefined,
+      patch.mentionUsernames ?? current.mentionUsernames,
+      patch.mentionUsername ?? current.mentionUsername ?? undefined,
     );
 
-    const result = await this.database.query<StoryRow>(
-      `
-      update app_stories
-      set media = $2,
-          media_items = $3::jsonb,
-          is_local_file = $4,
-          text = $5,
-          music = $6,
-          background_colors = $7::jsonb,
-          text_color_value = $8,
-          sticker = $9,
-          effect_name = $10,
-          mention_username = $11,
-          mention_usernames = $12::jsonb,
-          link_label = $13,
-          link_url = $14,
-          privacy = $15,
-          location = $16,
-          collage_layout = $17,
-          text_offset_dx = $18,
-          text_offset_dy = $19,
-          text_scale = $20,
-          media_transforms = $21::jsonb,
-          seen = $22,
-          updated_at = now()
-      where id = $1
-      returning *
-      `,
-      [
-        id,
-        (patch.media ?? existing.media)?.trim() || mediaItems[0] || '',
-        JSON.stringify(mediaItems),
-        patch.isLocalFile ?? existing.isLocalFile ?? false,
-        patch.text?.trim() ?? existing.text ?? '',
-        patch.music?.trim() ?? existing.music ?? null,
-        JSON.stringify(patch.backgroundColors ?? existing.backgroundColors ?? []),
-        patch.textColorValue ?? existing.textColorValue ?? 4294967295,
-        patch.sticker?.trim() ?? existing.sticker ?? null,
-        patch.effectName?.trim() ?? existing.effectName ?? null,
-        mentionUsernames[0] ?? null,
-        JSON.stringify(mentionUsernames),
-        patch.linkLabel?.trim() ?? existing.linkLabel ?? null,
-        patch.linkUrl?.trim() ?? existing.linkUrl ?? null,
-        this.normalizePrivacy(patch.privacy ?? existing.privacy),
-        patch.location?.trim() ?? existing.location ?? null,
-        patch.collageLayout?.trim() ?? existing.collageLayout ?? null,
-        patch.textOffsetDx ?? existing.textOffsetDx ?? 0,
-        patch.textOffsetDy ?? existing.textOffsetDy ?? 0,
-        patch.textScale ?? existing.textScale ?? 1,
-        JSON.stringify(patch.mediaTransforms ?? existing.mediaTransforms ?? []),
-        patch.seen ?? existing.seen ?? false,
-      ],
-    );
+    const story = await this.prisma.story.update({
+      where: { id },
+      data: {
+        media: (patch.media ?? current.media)?.trim() || mediaItems[0] || '',
+        mediaItems: mediaItems as Prisma.InputJsonValue,
+        isLocalFile: patch.isLocalFile ?? current.isLocalFile ?? false,
+        text: patch.text?.trim() ?? current.text ?? '',
+        music: patch.music?.trim() ?? current.music ?? null,
+        backgroundColors: (patch.backgroundColors ?? current.backgroundColors ?? []) as Prisma.InputJsonValue,
+        textColorValue: BigInt(
+          Math.trunc(patch.textColorValue ?? current.textColorValue ?? 4294967295),
+        ),
+        sticker: patch.sticker?.trim() ?? current.sticker ?? null,
+        effectName: patch.effectName?.trim() ?? current.effectName ?? null,
+        mentionUsername: mentionUsernames[0] ?? null,
+        mentionUsernames: mentionUsernames as Prisma.InputJsonValue,
+        linkLabel: patch.linkLabel?.trim() ?? current.linkLabel ?? null,
+        linkUrl: patch.linkUrl?.trim() ?? current.linkUrl ?? null,
+        privacy: this.normalizePrivacy(patch.privacy ?? current.privacy),
+        location: patch.location?.trim() ?? current.location ?? null,
+        collageLayout: patch.collageLayout?.trim() ?? current.collageLayout ?? null,
+        textOffsetDx: patch.textOffsetDx ?? current.textOffsetDx ?? 0,
+        textOffsetDy: patch.textOffsetDy ?? current.textOffsetDy ?? 0,
+        textScale: patch.textScale ?? current.textScale ?? 1,
+        mediaTransforms: (patch.mediaTransforms ?? current.mediaTransforms ?? []) as unknown as Prisma.InputJsonValue,
+        seen: patch.seen ?? current.seen ?? false,
+        updatedAt: new Date(),
+      },
+    });
 
-    return this.mapStory(result.rows[0]);
+    return this.mapStory(story);
   }
 
   async deleteStory(storyId: string, userId?: string) {
-    await this.ensureSchema();
-    const normalizedUserId = userId?.trim();
-    const result = normalizedUserId
-      ? await this.database.query<StoryRow>(
-          `delete from app_stories where id = $1 and user_id = $2 returning *`,
-          [storyId, normalizedUserId],
-        )
-      : await this.database.query<StoryRow>(
-          `delete from app_stories where id = $1 returning *`,
-          [storyId],
-        );
-
-    const row = result.rows[0];
-    if (!row) {
+    const story = await this.prisma.story.findUnique({ where: { id: storyId } });
+    if (!story || story.deletedAt || (userId?.trim() && story.userId !== userId.trim())) {
       throw new NotFoundException('Story not found.');
     }
 
+    const updated = await this.prisma.story.update({
+      where: { id: storyId },
+      data: {
+        deletedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    const mapped = this.mapStory(updated);
     return {
       success: true,
       message: 'Story deleted successfully.',
-      data: this.mapStory(row),
-      removed: this.mapStory(row),
+      data: mapped,
+      removed: mapped,
     };
   }
 
   async getStoryComments(storyId: string) {
-    await this.ensureSchema();
     await this.getStory(storyId);
-    const result = await this.database.query<StoryCommentRow>(
-      `select * from app_story_comments where story_id = $1 order by created_at asc`,
-      [storyId],
-    );
+    const comments = await this.prisma.storyComment.findMany({
+      where: { storyId },
+      orderBy: { createdAt: 'asc' },
+    });
+
     return Promise.all(
-      result.rows.map(async (row) => ({
+      comments.map(async (row) => ({
         id: row.id,
-        storyId: row.story_id,
-        userId: row.user_id,
+        storyId: row.storyId,
+        userId: row.userId,
         comment: row.comment,
-        createdAt: this.iso(row.created_at),
-        author: await this.coreDatabase.getUser(row.user_id),
+        createdAt: row.createdAt.toISOString(),
+        author: await this.coreDatabase.getUser(row.userId),
       })),
     );
   }
 
   async createStoryComment(storyId: string, userId: string, comment: string) {
-    await this.ensureSchema();
     await Promise.all([this.getStory(storyId), this.coreDatabase.getUser(userId)]);
-    const result = await this.database.query<StoryCommentRow>(
-      `insert into app_story_comments (id, story_id, user_id, comment)
-       values ($1,$2,$3,$4)
-       returning *`,
-      [makeId('comment'), storyId, userId, comment],
-    );
-    return (await this.getStoryComments(storyId)).find((item) => item.id === result.rows[0].id);
+    const created = await this.prisma.storyComment.create({
+      data: {
+        id: makeId('comment'),
+        storyId,
+        userId,
+        comment,
+      },
+    });
+    return (await this.getStoryComments(storyId)).find((item) => item.id === created.id);
   }
 
   async getStoryReactions(storyId: string) {
-    await this.ensureSchema();
     await this.getStory(storyId);
-    const result = await this.database.query<StoryReactionRow>(
-      `select * from app_story_reactions where story_id = $1 order by created_at desc`,
-      [storyId],
-    );
+    const reactions = await this.prisma.storyReaction.findMany({
+      where: { storyId },
+      orderBy: { createdAt: 'desc' },
+    });
+
     return Promise.all(
-      result.rows.map(async (row) => ({
-        storyId: row.story_id,
-        userId: row.user_id,
+      reactions.map(async (row) => ({
+        storyId: row.storyId,
+        userId: row.userId,
         reaction: row.reaction,
-        createdAt: this.iso(row.created_at),
-        user: await this.coreDatabase.getUser(row.user_id),
+        createdAt: row.createdAt.toISOString(),
+        user: await this.coreDatabase.getUser(row.userId),
       })),
     );
   }
 
   async reactToStory(storyId: string, userId: string, reaction: string) {
-    await this.ensureSchema();
     await Promise.all([this.getStory(storyId), this.coreDatabase.getUser(userId)]);
-    await this.database.query(
-      `
-      insert into app_story_reactions (story_id, user_id, reaction, created_at)
-      values ($1,$2,$3,now())
-      on conflict (story_id, user_id)
-      do update set reaction = excluded.reaction, created_at = excluded.created_at
-      `,
-      [storyId, userId, reaction],
-    );
+    await this.prisma.storyReaction.upsert({
+      where: {
+        storyId_userId: {
+          storyId,
+          userId,
+        },
+      },
+      create: {
+        storyId,
+        userId,
+        reaction,
+      },
+      update: {
+        reaction,
+        createdAt: new Date(),
+      },
+    });
     return this.getStoryReactions(storyId);
   }
 
   async getStoryViewers(storyId: string) {
-    await this.ensureSchema();
     await this.getStory(storyId);
-    const result = await this.database.query<StoryViewRow>(
-      `select * from app_story_views where story_id = $1 order by viewed_at desc`,
-      [storyId],
-    );
+    const viewers = await this.prisma.storyView.findMany({
+      where: { storyId },
+      orderBy: { viewedAt: 'desc' },
+    });
+
     return Promise.all(
-      result.rows.map(async (row) => {
-        const user = await this.coreDatabase.getUser(row.user_id);
+      viewers.map(async (row) => {
+        const user = await this.coreDatabase.getUser(row.userId);
         return {
           id: user.id,
           name: user.name,
           username: user.username,
           avatar: user.avatar,
           avatarUrl: user.avatar,
-          viewedAt: this.iso(row.viewed_at),
+          viewedAt: row.viewedAt.toISOString(),
         };
       }),
     );
   }
 
   async recordStoryView(storyId: string, userId: string) {
-    await this.ensureSchema();
     await Promise.all([this.getStory(storyId), this.coreDatabase.getUser(userId)]);
-    await this.database.query(
-      `
-      insert into app_story_views (story_id, user_id, viewed_at)
-      values ($1,$2,now())
-      on conflict (story_id, user_id)
-      do update set viewed_at = excluded.viewed_at
-      `,
-      [storyId, userId],
-    );
+    await this.prisma.storyView.upsert({
+      where: {
+        storyId_userId: {
+          storyId,
+          userId,
+        },
+      },
+      create: {
+        storyId,
+        userId,
+      },
+      update: {
+        viewedAt: new Date(),
+      },
+    });
     const viewers = await this.getStoryViewers(storyId);
     return {
       success: true,
       storyId,
       userId,
       viewerCount: viewers.length,
-      viewedAt: viewers.find((item) => item.id === userId)?.viewedAt ?? new Date().toISOString(),
+      viewedAt:
+        viewers.find((item) => item.id === userId)?.viewedAt ?? new Date().toISOString(),
     };
   }
 
-  private async ensureSchema() {
-    if (this.schemaEnsured || !this.database.getHealth().enabled) {
-      return;
-    }
-
-    if (!this.database.getHealth().enabled) {
-      return;
-    }
-
-    await this.database.query(`
-      create table if not exists app_stories (
-        id text primary key,
-        user_id text not null,
-        media text not null default '',
-        media_items jsonb not null default '[]'::jsonb,
-        is_local_file boolean not null default false,
-        text text not null default '',
-        music text,
-        background_colors jsonb not null default '[]'::jsonb,
-        text_color_value bigint not null default 4294967295,
-        sticker text,
-        effect_name text,
-        mention_username text,
-        mention_usernames jsonb not null default '[]'::jsonb,
-        link_label text,
-        link_url text,
-        privacy text not null default 'public',
-        location text,
-        collage_layout text,
-        text_offset_dx double precision not null default 0,
-        text_offset_dy double precision not null default 0,
-        text_scale double precision not null default 1,
-        media_transforms jsonb not null default '[]'::jsonb,
-        seen boolean not null default false,
-        created_at timestamptz not null default now(),
-        updated_at timestamptz not null default now(),
-        expires_at timestamptz not null default now() + interval '24 hours',
-        constraint app_stories_id_format check (id ~ '^story_[a-zA-Z0-9]+$'),
-        constraint app_stories_privacy_check check (privacy in ('public', 'followers', 'private'))
-      );
-    `);
-    await this.database.query(`
-      create table if not exists app_story_views (
-        story_id text not null references app_stories(id) on delete cascade,
-        user_id text not null references app_users(id) on delete cascade,
-        viewed_at timestamptz not null default now(),
-        primary key (story_id, user_id)
-      );
-    `);
-    await this.database.query(`
-      create table if not exists app_story_reactions (
-        story_id text not null references app_stories(id) on delete cascade,
-        user_id text not null references app_users(id) on delete cascade,
-        reaction text not null,
-        created_at timestamptz not null default now(),
-        primary key (story_id, user_id)
-      );
-    `);
-    await this.database.query(`
-      create table if not exists app_story_comments (
-        id text primary key,
-        story_id text not null references app_stories(id) on delete cascade,
-        user_id text not null references app_users(id) on delete cascade,
-        comment text not null,
-        created_at timestamptz not null default now(),
-        constraint app_story_comments_id_format check (id ~ '^comment_[a-zA-Z0-9]+$')
-      );
-    `);
-    await this.database.query(`
-      create index if not exists app_stories_user_id_created_at_idx
-      on app_stories (user_id, created_at desc);
-    `);
-    await this.database.query(`
-      create index if not exists app_stories_expires_at_idx
-      on app_stories (expires_at);
-    `);
-    this.schemaEnsured = true;
-  }
-
-  private mapStory(row: StoryRow) {
+  private mapStory(row: {
+    id: string;
+    userId: string;
+    media: string;
+    mediaItems: Prisma.JsonValue;
+    isLocalFile: boolean;
+    text: string;
+    music: string | null;
+    backgroundColors: Prisma.JsonValue;
+    textColorValue: bigint;
+    sticker: string | null;
+    effectName: string | null;
+    mentionUsername: string | null;
+    mentionUsernames: Prisma.JsonValue;
+    linkLabel: string | null;
+    linkUrl: string | null;
+    privacy: string;
+    location: string | null;
+    collageLayout: string | null;
+    textOffsetDx: number;
+    textOffsetDy: number;
+    textScale: number;
+    mediaTransforms: Prisma.JsonValue;
+    seen: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+    expiresAt: Date;
+  }) {
     return {
       id: row.id,
-      userId: row.user_id,
+      userId: row.userId,
       media: row.media,
-      mediaItems: this.toStringArray(row.media_items),
-      isLocalFile: row.is_local_file,
+      mediaItems: this.toStringArray(row.mediaItems),
+      isLocalFile: row.isLocalFile,
       text: row.text ?? '',
       music: row.music,
-      backgroundColors: this.toNumberArray(row.background_colors),
-      textColorValue: Number(row.text_color_value ?? 4294967295),
+      backgroundColors: this.toNumberArray(row.backgroundColors),
+      textColorValue: Number(row.textColorValue ?? BigInt(4294967295)),
       sticker: row.sticker,
-      effectName: row.effect_name,
-      mentionUsername: row.mention_username,
-      mentionUsernames: this.toStringArray(row.mention_usernames),
-      linkLabel: row.link_label,
-      linkUrl: row.link_url,
+      effectName: row.effectName,
+      mentionUsername: row.mentionUsername,
+      mentionUsernames: this.toStringArray(row.mentionUsernames),
+      linkLabel: row.linkLabel,
+      linkUrl: row.linkUrl,
       privacy: row.privacy ?? 'public',
       location: row.location,
-      collageLayout: row.collage_layout,
-      textOffsetDx: Number(row.text_offset_dx ?? 0),
-      textOffsetDy: Number(row.text_offset_dy ?? 0),
-      textScale: Number(row.text_scale ?? 1),
-      mediaTransforms: this.toObjectArray(row.media_transforms),
+      collageLayout: row.collageLayout,
+      textOffsetDx: row.textOffsetDx ?? 0,
+      textOffsetDy: row.textOffsetDy ?? 0,
+      textScale: row.textScale ?? 1,
+      mediaTransforms: this.toObjectArray(row.mediaTransforms),
       seen: row.seen ?? false,
-      createdAt: this.iso(row.created_at),
-      updatedAt: this.iso(row.updated_at),
-      expiresAt: this.iso(row.expires_at),
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+      expiresAt: row.expiresAt.toISOString(),
     };
   }
 
@@ -543,25 +367,21 @@ export class StoriesDatabaseService implements OnModuleInit {
     }
   }
 
-  private toStringArray(value: unknown) {
-    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
-  }
-
-  private toNumberArray(value: unknown) {
+  private toStringArray(value: Prisma.JsonValue) {
     return Array.isArray(value)
-      ? value
-          .map((item) => Number(item))
-          .filter((item) => Number.isFinite(item))
+      ? value.filter((item): item is string => typeof item === 'string')
       : [];
   }
 
-  private toObjectArray(value: unknown) {
+  private toNumberArray(value: Prisma.JsonValue) {
     return Array.isArray(value)
-      ? value.filter((item) => item && typeof item === 'object')
+      ? value.map((item) => Number(item)).filter((item) => Number.isFinite(item))
       : [];
   }
 
-  private iso(value: string | Date) {
-    return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+  private toObjectArray(value: Prisma.JsonValue) {
+    return Array.isArray(value)
+      ? value.filter((item) => !!item && typeof item === 'object')
+      : [];
   }
 }

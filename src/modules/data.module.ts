@@ -13,6 +13,7 @@ import { MailService } from '../services/mail.service';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { RealtimeStateService } from '../services/realtime-state.service';
 import { ReelsDatabaseService } from '../services/reels-database.service';
+import { PrismaService } from '../services/prisma.service';
 import { StateSnapshotService } from '../services/state-snapshot.service';
 import { StoriesDatabaseService } from '../services/stories-database.service';
 import { UploadsDatabaseService } from '../services/uploads-database.service';
@@ -29,6 +30,7 @@ import { UploadsDatabaseService } from '../services/uploads-database.service';
     SessionAuthGuard,
     CloudinaryUploadService,
     DatabaseService,
+    PrismaService,
     CoreDatabaseService,
     RealtimeStateService,
     StateSnapshotService,
@@ -48,6 +50,7 @@ import { UploadsDatabaseService } from '../services/uploads-database.service';
     SessionAuthGuard,
     CloudinaryUploadService,
     DatabaseService,
+    PrismaService,
     CoreDatabaseService,
     RealtimeStateService,
     StateSnapshotService,
