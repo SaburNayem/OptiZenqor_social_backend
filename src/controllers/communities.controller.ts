@@ -1,60 +1,77 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { CommunityRecord, EcosystemDataService } from '../data/ecosystem-data.service';
+import { CommunityRecord } from '../data/ecosystem-data.service';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { CreatePageDto } from '../dto/api.dto';
+import { CoreDatabaseService } from '../services/core-database.service';
+import { ExperienceDatabaseService } from '../services/experience-database.service';
 
 @ApiTags('communities')
 @Controller()
 export class CommunitiesController {
-  constructor(private readonly ecosystemData: EcosystemDataService) {}
+  constructor(
+    private readonly experienceDatabase: ExperienceDatabaseService,
+    private readonly coreDatabase: CoreDatabaseService,
+  ) {}
 
   @Get('communities')
   getCommunities() {
-    return this.ecosystemData.getCommunities();
+    return this.experienceDatabase.getCommunities();
   }
 
   @Get('communities/:id')
   getCommunity(@Param('id') id: string) {
-    return this.ecosystemData.getCommunity(id);
+    return this.experienceDatabase.getCommunity(id);
   }
 
   @Get('communities/:id/posts')
-  getCommunityPosts(@Param('id') id: string) {
-    return this.ecosystemData.getCommunity(id).posts;
+  async getCommunityPosts(@Param('id') id: string) {
+    const community = await this.experienceDatabase.getCommunity(id);
+    return community.posts;
   }
 
   @Get('communities/:id/members')
-  getCommunityMembers(@Param('id') id: string) {
-    return this.ecosystemData.getCommunity(id).members;
+  async getCommunityMembers(@Param('id') id: string) {
+    const community = await this.experienceDatabase.getCommunity(id);
+    return community.members;
   }
 
   @Get('communities/:id/events')
-  getCommunityEvents(@Param('id') id: string) {
-    return this.ecosystemData.getCommunity(id).events;
+  async getCommunityEvents(@Param('id') id: string) {
+    const community = await this.experienceDatabase.getCommunity(id);
+    return community.events;
   }
 
   @Get('communities/:id/pinned-posts')
-  getCommunityPinnedPosts(@Param('id') id: string) {
-    return this.ecosystemData.getCommunity(id).pinnedPosts;
+  async getCommunityPinnedPosts(@Param('id') id: string) {
+    const community = await this.experienceDatabase.getCommunity(id);
+    return community.pinnedPosts;
   }
 
   @Get('communities/:id/trending-posts')
-  getCommunityTrendingPosts(@Param('id') id: string) {
-    return this.ecosystemData.getCommunity(id).trendingPosts;
+  async getCommunityTrendingPosts(@Param('id') id: string) {
+    const community = await this.experienceDatabase.getCommunity(id);
+    return community.trendingPosts;
   }
 
   @Get('communities/:id/announcements')
-  getCommunityAnnouncements(@Param('id') id: string) {
-    return this.ecosystemData.getCommunity(id).announcements;
+  async getCommunityAnnouncements(@Param('id') id: string) {
+    const community = await this.experienceDatabase.getCommunity(id);
+    return community.announcements;
   }
 
+  @UseGuards(SessionAuthGuard)
   @Post('communities/:id/join')
-  async joinCommunity(@Param('id') id: string, @Body() body: Record<string, unknown>) {
-    const result = await this.ecosystemData.joinCommunity(
-      id,
-      this.readString(body.userId) ?? this.readString(body.actorId) ?? 'u1',
-      this.readString(body.name) ?? this.readString(body.userName) ?? 'Maya Quinn',
+  async joinCommunity(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      this.readString(body.userId) ?? this.readString(body.actorId),
     );
+    const result = await this.experienceDatabase.joinCommunity(id, actor.id);
     return {
       success: true,
       joined: result.joined,
@@ -68,12 +85,18 @@ export class CommunitiesController {
     };
   }
 
+  @UseGuards(SessionAuthGuard)
   @Post('communities/:id/leave')
-  async leaveCommunity(@Param('id') id: string, @Body() body: Record<string, unknown>) {
-    const result = await this.ecosystemData.leaveCommunity(
-      id,
-      this.readString(body.userId) ?? this.readString(body.actorId) ?? 'u1',
+  async leaveCommunity(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      this.readString(body.userId) ?? this.readString(body.actorId),
     );
+    const result = await this.experienceDatabase.leaveCommunity(id, actor.id);
     return {
       success: true,
       joined: result.joined,
@@ -87,11 +110,20 @@ export class CommunitiesController {
     };
   }
 
+  @UseGuards(SessionAuthGuard)
   @Post('communities')
-  async createCommunity(@Body() body: Record<string, unknown>) {
-    const community = await this.ecosystemData.createCommunity(
-      this.normalizeCommunityCreateInput(body),
+  async createCommunity(
+    @Body() body: Record<string, unknown>,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const owner = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      this.readString(body.ownerId),
     );
+    const community = await this.experienceDatabase.createCommunity({
+      ...this.normalizeCommunityCreateInput(body),
+      ownerId: owner.id,
+    });
     return {
       success: true,
       message: 'Community created successfully.',
@@ -100,9 +132,13 @@ export class CommunitiesController {
     };
   }
 
+  @UseGuards(SessionAuthGuard)
   @Patch('communities/:id')
-  async updateCommunity(@Param('id') id: string, @Body() body: Record<string, unknown>) {
-    const community = await this.ecosystemData.updateCommunity(
+  async updateCommunity(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+  ) {
+    const community = await this.experienceDatabase.updateCommunity(
       id,
       this.normalizeCommunityPatch(body),
     );
@@ -116,13 +152,19 @@ export class CommunitiesController {
 
   @Get('pages')
   getPages() {
-    return this.ecosystemData.getPages();
+    return this.experienceDatabase.getPages();
   }
 
   @Get('pages/create')
-  getCreatePageOptions() {
+  async getCreatePageOptions() {
     return {
-      categories: [...new Set(this.ecosystemData.getPages().map((page) => page.category))],
+      categories: [
+        ...new Set(
+          (await this.experienceDatabase.getPages()).map(
+            (page: { category: string }) => page.category,
+          ),
+        ),
+      ],
       ownerSuggestions: ['u1', 'u2', 'u4', 'u5'],
       locations: ['Dhaka, Bangladesh', 'Remote', 'Global'],
     };
@@ -130,32 +172,42 @@ export class CommunitiesController {
 
   @Get('pages/detail')
   getPageDetail(@Query('id') id: string) {
-    return this.ecosystemData.getPage(id);
+    return this.experienceDatabase.getPage(id);
   }
 
   @Get('pages/detail/:id')
   getPageDetailById(@Param('id') id: string) {
-    return this.ecosystemData.getPage(id);
+    return this.experienceDatabase.getPage(id);
   }
 
+  @UseGuards(SessionAuthGuard)
   @Post('pages/create')
   createPage(@Body() body: CreatePageDto) {
-    return this.ecosystemData.createPage(body);
+    return this.experienceDatabase.createPage(body);
   }
 
+  @UseGuards(SessionAuthGuard)
   @Patch('pages/:id/follow')
-  followPage(@Param('id') id: string) {
-    return this.ecosystemData.togglePageFollow(id);
+  async followPage(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      this.readString(body.userId),
+    );
+    return this.experienceDatabase.togglePageFollow(id, user.id);
   }
 
   @Get('pages/:id')
   getPage(@Param('id') id: string) {
-    return this.ecosystemData.getPage(id);
+    return this.experienceDatabase.getPage(id);
   }
 
   @Get('groups')
-  getGroups() {
-    return this.ecosystemData.getCommunities().map((community) => ({
+  async getGroups() {
+    return (await this.experienceDatabase.getCommunities()).map((community) => ({
       id: community.id,
       name: community.name,
       description: community.description,
@@ -166,17 +218,19 @@ export class CommunitiesController {
 
   @Get('groups/:id')
   getGroup(@Param('id') id: string) {
-    return this.ecosystemData.getCommunity(id);
+    return this.experienceDatabase.getCommunity(id);
   }
 
   @Get('groups/:id/posts')
-  getGroupPosts(@Param('id') id: string) {
-    return this.ecosystemData.getCommunity(id).posts;
+  async getGroupPosts(@Param('id') id: string) {
+    const community = await this.experienceDatabase.getCommunity(id);
+    return community.posts;
   }
 
   @Get('groups/:id/members')
-  getGroupMembers(@Param('id') id: string) {
-    return this.ecosystemData.getCommunity(id).members;
+  async getGroupMembers(@Param('id') id: string) {
+    const community = await this.experienceDatabase.getCommunity(id);
+    return community.members;
   }
 
   private normalizeCommunityPatch(body: Record<string, unknown>) {

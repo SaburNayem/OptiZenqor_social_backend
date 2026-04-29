@@ -9,6 +9,7 @@ import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { CloudinaryUploadService } from '../services/cloudinary-upload.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { DatabaseService } from '../services/database.service';
+import { ExperienceDatabaseService } from '../services/experience-database.service';
 import { MailService } from '../services/mail.service';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { RealtimeStateService } from '../services/realtime-state.service';
@@ -32,6 +33,7 @@ import { UploadsDatabaseService } from '../services/uploads-database.service';
     DatabaseService,
     PrismaService,
     CoreDatabaseService,
+    ExperienceDatabaseService,
     RealtimeStateService,
     StateSnapshotService,
     MailService,
@@ -52,6 +54,7 @@ import { UploadsDatabaseService } from '../services/uploads-database.service';
     DatabaseService,
     PrismaService,
     CoreDatabaseService,
+    ExperienceDatabaseService,
     RealtimeStateService,
     StateSnapshotService,
     MailService,

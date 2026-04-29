@@ -1,0 +1,975 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { makeId } from '../common/id.util';
+import { CreateEventDto, CreateJobDto, CreatePageDto, CreateProductDto } from '../dto/api.dto';
+import { CoreDatabaseService } from './core-database.service';
+import { PrismaService } from './prisma.service';
+
+@Injectable()
+export class ExperienceDatabaseService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly coreDatabase: CoreDatabaseService,
+  ) {}
+
+  async getBootstrap(userId?: string) {
+    const [feed, stories, reels, notifications, communities, products, jobs, events] =
+      await Promise.all([
+        this.coreDatabase.getFeed(),
+        this.prisma.story.count({ where: { deletedAt: null, expiresAt: { gt: new Date() } } }),
+        this.prisma.reel.count({ where: { deletedAt: null } }),
+        userId
+          ? this.prisma.appNotification.count({
+              where: { recipientId: userId, read: false },
+            })
+          : Promise.resolve(0),
+        this.prisma.community.count({ where: { deletedAt: null } }),
+        this.prisma.marketplaceProduct.count({ where: { deletedAt: null } }),
+        this.prisma.job.count({ where: { deletedAt: null } }),
+        this.prisma.event.count({ where: { deletedAt: null } }),
+      ]);
+
+    const user = userId ? await this.coreDatabase.getUser(userId).catch(() => null) : null;
+
+    return {
+      generatedAt: new Date().toISOString(),
+      authenticated: Boolean(user),
+      user,
+      counters: {
+        feedItems: feed.length,
+        activeStories: stories,
+        reels,
+        unreadNotifications: notifications,
+        communities,
+        marketplaceProducts: products,
+        jobs,
+        events,
+      },
+      entrypoints: {
+        login: '/auth/login',
+        me: '/auth/me',
+        feed: '/feed',
+        stories: '/stories',
+        reels: '/reels',
+        chatThreads: '/chat/threads',
+        notifications: '/notifications',
+        profile: user ? `/profile/${user.id}` : '/profile/:id',
+        settingsState: '/settings/state',
+        marketplaceProducts: '/marketplace/products',
+        jobs: '/jobs',
+        events: '/events',
+      },
+      feedPreview: feed.slice(0, 5),
+    };
+  }
+
+  async getMarketplaceOverview() {
+    const [products, orders] = await Promise.all([
+      this.prisma.marketplaceProduct.findMany({
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.marketplaceOrder.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    ]);
+
+    const mappedProducts = await Promise.all(products.map((row) => this.mapMarketplaceProduct(row)));
+    const sellers = await this.buildSellerProfiles(
+      [...new Set(products.map((item) => item.sellerId))],
+      products,
+    );
+
+    return {
+      totalProducts: mappedProducts.length,
+      products: mappedProducts,
+      items: mappedProducts,
+      categories: [...new Set(products.map((item) => item.category))],
+      sellers,
+      orders: orders.map((row) => this.mapMarketplaceOrder(row)),
+      featuredProducts: mappedProducts.slice(0, 5),
+      trendingProducts: mappedProducts
+        .slice()
+        .sort((left, right) => right.watchers - left.watchers)
+        .slice(0, 5),
+      recommendedProducts: mappedProducts
+        .slice()
+        .sort((left, right) => right.views - left.views)
+        .slice(0, 8),
+    };
+  }
+
+  async getMarketplaceCreateOptions() {
+    const products = await this.prisma.marketplaceProduct.findMany({
+      where: { deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      categories: [...new Set(products.map((item) => item.category))],
+      conditions: [...new Set(products.map((item) => item.condition).filter(Boolean))],
+      sellerProfiles: await this.buildSellerProfiles(
+        [...new Set(products.map((item) => item.sellerId))],
+        products,
+      ),
+      deliveryMethods: ['Pickup', 'Shipping', 'Local delivery'],
+      paymentMethods: ['Cash on delivery', 'Wallet', 'Card'],
+      moderationNotes: [
+        'Avoid prohibited items and misleading titles.',
+        'Use clear photos and accurate condition details.',
+      ],
+    };
+  }
+
+  async getMarketplaceProduct(id: string) {
+    const product = await this.prisma.marketplaceProduct.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!product) {
+      throw new NotFoundException(`Marketplace product ${id} not found`);
+    }
+    return this.mapMarketplaceProduct(product);
+  }
+
+  async getMarketplaceDetail(id: string) {
+    const product = await this.prisma.marketplaceProduct.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!product) {
+      throw new NotFoundException(`Marketplace product ${id} not found`);
+    }
+
+    const [related, seller, orders] = await Promise.all([
+      this.prisma.marketplaceProduct.findMany({
+        where: {
+          deletedAt: null,
+          category: product.category,
+          id: { not: id },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 6,
+      }),
+      this.buildSellerProfile(product.sellerId, [product]),
+      this.prisma.marketplaceOrder.findMany({
+        where: { productId: id },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    return {
+      product: await this.mapMarketplaceProduct(product),
+      seller,
+      relatedProducts: await Promise.all(related.map((row) => this.mapMarketplaceProduct(row))),
+      saved: false,
+      sellerFollowed: false,
+      chatMessages: [],
+      offerHistory: [],
+      orderHistory: orders.map((row) => this.mapMarketplaceOrder(row)),
+    };
+  }
+
+  async createMarketplaceProduct(body: CreateProductDto) {
+    await this.coreDatabase.getUser(body.sellerId);
+    const product = await this.prisma.marketplaceProduct.create({
+      data: {
+        id: makeId('product'),
+        sellerId: body.sellerId,
+        title: body.title,
+        description: body.description,
+        price: new Prisma.Decimal(body.price),
+        category: body.category,
+        subcategory: body.subcategory,
+        condition: body.condition,
+        location: body.location,
+        images: (body.images ?? []) as Prisma.InputJsonValue,
+        status: 'active',
+      },
+    });
+    return this.mapMarketplaceProduct(product);
+  }
+
+  async createMarketplaceOrder(
+    buyerId: string,
+    input: { productId: string; address: string; deliveryMethod: string; paymentMethod: string },
+  ) {
+    const product = await this.prisma.marketplaceProduct.findFirst({
+      where: { id: input.productId, deletedAt: null },
+    });
+    if (!product) {
+      throw new NotFoundException(`Marketplace product ${input.productId} not found`);
+    }
+
+    const order = await this.prisma.marketplaceOrder.create({
+      data: {
+        id: makeId('order'),
+        productId: product.id,
+        buyerId,
+        sellerId: product.sellerId,
+        amount: product.price,
+        address: input.address,
+        deliveryMethod: input.deliveryMethod,
+        paymentMethod: input.paymentMethod,
+        status: 'pending',
+      },
+    });
+    return this.mapMarketplaceOrder(order);
+  }
+
+  async getJobs() {
+    const jobs = await this.prisma.job.findMany({
+      where: { deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    return jobs.map((row) => this.mapJob(row));
+  }
+
+  async getJob(id: string) {
+    const job = await this.prisma.job.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!job) {
+      throw new NotFoundException(`Job ${id} not found`);
+    }
+    return this.mapJob(job);
+  }
+
+  async createJob(recruiterId: string, body: CreateJobDto) {
+    await this.coreDatabase.getUser(recruiterId);
+    const { min, max } = this.parseSalaryRange(body.salary);
+    const job = await this.prisma.job.create({
+      data: {
+        id: `job_${Date.now()}`,
+        recruiterId,
+        title: body.title,
+        company: body.company,
+        description: `${body.title} at ${body.company}`,
+        location: body.location,
+        type: body.type ?? 'remote',
+        experienceLevel: body.experienceLevel ?? 'entry',
+        salaryMin: min,
+        salaryMax: max,
+        status: 'open',
+      },
+    });
+    return this.mapJob(job);
+  }
+
+  async applyForJob(jobId: string, applicantId: string, applicantName: string) {
+    await Promise.all([this.getJob(jobId), this.coreDatabase.getUser(applicantId)]);
+    const application = await this.prisma.jobApplication.upsert({
+      where: {
+        jobId_applicantId: {
+          jobId,
+          applicantId,
+        },
+      },
+      create: {
+        id: `application_${Date.now()}`,
+        jobId,
+        applicantId,
+        applicantName,
+        status: 'submitted',
+      },
+      update: {
+        applicantName,
+        status: 'submitted',
+        updatedAt: new Date(),
+      },
+    });
+    return this.mapJobApplication(application);
+  }
+
+  async getJobApplications(applicantId?: string) {
+    const applications = await this.prisma.jobApplication.findMany({
+      where: applicantId ? { applicantId } : undefined,
+      orderBy: { createdAt: 'desc' },
+    });
+    return applications.map((row) => this.mapJobApplication(row));
+  }
+
+  async getEvents(status?: string) {
+    const normalizedStatus = status?.trim().toLowerCase();
+    const events = await this.prisma.event.findMany({
+      where: {
+        deletedAt: null,
+        status: normalizedStatus
+          ? {
+              equals: normalizedStatus,
+              mode: 'insensitive',
+            }
+          : undefined,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return events.map((row) => this.mapEvent(row));
+  }
+
+  async getEvent(id: string) {
+    const event = await this.prisma.event.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!event) {
+      throw new NotFoundException(`Event ${id} not found`);
+    }
+    return this.mapEvent(event);
+  }
+
+  async createEvent(organizerId: string, body: CreateEventDto) {
+    const organizer = await this.coreDatabase.getUser(organizerId);
+    const event = await this.prisma.event.create({
+      data: {
+        id: `event_${Date.now()}`,
+        organizerId,
+        organizerName: body.organizer || organizer.name,
+        title: body.title,
+        description: `${body.title} hosted by ${body.organizer || organizer.name}`,
+        date: body.date,
+        time: body.time,
+        location: body.location,
+        participants: body.participants ?? 0,
+        price: new Prisma.Decimal(body.price ?? 0),
+        status: (body.status ?? 'Review').toLowerCase(),
+      },
+    });
+    return this.mapEvent(event);
+  }
+
+  async toggleEventRsvp(eventId: string, userId: string) {
+    await Promise.all([this.getEvent(eventId), this.coreDatabase.getUser(userId)]);
+    const existing = await this.prisma.eventRsvp.findUnique({
+      where: {
+        eventId_userId: { eventId, userId },
+      },
+    });
+
+    if (existing?.status === 'going') {
+      await this.prisma.$transaction([
+        this.prisma.eventRsvp.update({
+          where: {
+            eventId_userId: { eventId, userId },
+          },
+          data: { status: 'cancelled', updatedAt: new Date() },
+        }),
+        this.prisma.event.update({
+          where: { id: eventId },
+          data: { participants: { decrement: 1 }, updatedAt: new Date() },
+        }),
+      ]);
+      return { success: true, attending: false, status: 'cancelled' };
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.eventRsvp.upsert({
+        where: {
+          eventId_userId: { eventId, userId },
+        },
+        create: { eventId, userId, status: 'going' },
+        update: { status: 'going', updatedAt: new Date() },
+      }),
+      this.prisma.event.update({
+        where: { id: eventId },
+        data: { participants: { increment: existing ? 0 : 1 }, updatedAt: new Date() },
+      }),
+    ]);
+
+    return { success: true, attending: true, status: 'going' };
+  }
+
+  async toggleEventSave(eventId: string, userId: string) {
+    await Promise.all([this.getEvent(eventId), this.coreDatabase.getUser(userId)]);
+    const existing = await this.prisma.eventRsvp.findUnique({
+      where: {
+        eventId_userId: { eventId, userId },
+      },
+    });
+    const nextSaved = !existing?.saved;
+
+    await this.prisma.$transaction([
+      this.prisma.eventRsvp.upsert({
+        where: {
+          eventId_userId: { eventId, userId },
+        },
+        create: { eventId, userId, status: 'saved', saved: true },
+        update: { saved: nextSaved, updatedAt: new Date() },
+      }),
+      this.prisma.event.update({
+        where: { id: eventId },
+        data: {
+          savedCount: nextSaved ? { increment: 1 } : { decrement: 1 },
+          updatedAt: new Date(),
+        },
+      }),
+    ]);
+
+    return { success: true, saved: nextSaved };
+  }
+
+  async getCommunities() {
+    const communities = await this.prisma.community.findMany({
+      where: { deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    return communities.map((row) => this.mapCommunity(row));
+  }
+
+  async getCommunity(id: string) {
+    const community = await this.prisma.community.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!community) {
+      throw new NotFoundException(`Community ${id} not found`);
+    }
+    const members = await this.prisma.communityMember.findMany({
+      where: { communityId: id },
+      orderBy: { createdAt: 'asc' },
+    });
+    const events = await this.prisma.event.findMany({
+      where: { organizerId: community.ownerId, deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
+
+    return {
+      ...this.mapCommunity(community),
+      members: await Promise.all(members.map((row) => this.mapCommunityMember(row))),
+      posts: [],
+      events: events.map((row) => this.mapEvent(row)),
+      pinnedPosts: [],
+      trendingPosts: [],
+      announcements: [],
+    };
+  }
+
+  async joinCommunity(id: string, userId: string, role = 'member') {
+    await Promise.all([this.getCommunity(id), this.coreDatabase.getUser(userId)]);
+    const existing = await this.prisma.communityMember.findUnique({
+      where: {
+        communityId_userId: { communityId: id, userId },
+      },
+    });
+
+    if (existing?.status === 'active') {
+      const community = await this.getCommunity(id);
+      return { joined: true, memberCount: community.memberCount, community };
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.communityMember.upsert({
+        where: {
+          communityId_userId: { communityId: id, userId },
+        },
+        create: { communityId: id, userId, role, status: 'active' },
+        update: { role, status: 'active' },
+      }),
+      this.prisma.community.update({
+        where: { id },
+        data: {
+          memberCount: { increment: existing ? 0 : 1 },
+          updatedAt: new Date(),
+        },
+      }),
+    ]);
+
+    const community = await this.getCommunity(id);
+    return { joined: true, memberCount: community.memberCount, community };
+  }
+
+  async leaveCommunity(id: string, userId: string) {
+    const existing = await this.prisma.communityMember.findUnique({
+      where: {
+        communityId_userId: { communityId: id, userId },
+      },
+    });
+    if (!existing || existing.status !== 'active') {
+      const community = await this.getCommunity(id);
+      return { joined: false, memberCount: community.memberCount, community };
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.communityMember.update({
+        where: {
+          communityId_userId: { communityId: id, userId },
+        },
+        data: { status: 'left' },
+      }),
+      this.prisma.community.update({
+        where: { id },
+        data: {
+          memberCount: { decrement: 1 },
+          updatedAt: new Date(),
+        },
+      }),
+    ]);
+
+    const community = await this.getCommunity(id);
+    return { joined: false, memberCount: community.memberCount, community };
+  }
+
+  async createCommunity(input: {
+    ownerId: string;
+    ownerName?: string;
+    name: string;
+    description: string;
+    privacy?: string;
+    category?: string;
+    location?: string;
+    tags?: string[];
+    rules?: string[];
+    links?: string[];
+    contactInfo?: string;
+    coverColors?: number[];
+    avatarColor?: number;
+    approvalRequired?: boolean;
+    allowEvents?: boolean;
+    allowLive?: boolean;
+    allowPolls?: boolean;
+    allowMarketplace?: boolean;
+    allowChatRoom?: boolean;
+    notificationLevel?: string;
+  }) {
+    const owner = await this.coreDatabase.getUser(input.ownerId);
+    const community = await this.prisma.community.create({
+      data: {
+        id: `community_${Date.now()}`,
+        ownerId: input.ownerId,
+        ownerName: input.ownerName ?? owner.name,
+        name: input.name,
+        description: input.description,
+        privacy: input.privacy ?? 'public',
+        category: input.category ?? null,
+        location: input.location ?? null,
+        tags: (input.tags ?? []) as Prisma.InputJsonValue,
+        rules: (input.rules ?? []) as Prisma.InputJsonValue,
+        links: (input.links ?? []) as Prisma.InputJsonValue,
+        contactInfo: input.contactInfo ?? null,
+        coverColors: (input.coverColors ?? []) as Prisma.InputJsonValue,
+        avatarColor: input.avatarColor ?? null,
+        approvalRequired: input.approvalRequired ?? false,
+        allowEvents: input.allowEvents ?? true,
+        allowLive: input.allowLive ?? false,
+        allowPolls: input.allowPolls ?? true,
+        allowMarketplace: input.allowMarketplace ?? false,
+        allowChatRoom: input.allowChatRoom ?? true,
+        notificationLevel: input.notificationLevel ?? 'all',
+        memberCount: 1,
+      },
+    });
+
+    await this.prisma.communityMember.create({
+      data: {
+        communityId: community.id,
+        userId: input.ownerId,
+        role: 'owner',
+        status: 'active',
+      },
+    });
+
+    return this.getCommunity(community.id);
+  }
+
+  async updateCommunity(
+    id: string,
+    patch: Record<string, unknown>,
+  ) {
+    const existing = await this.prisma.community.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Community ${id} not found`);
+    }
+
+    await this.prisma.community.update({
+      where: { id },
+      data: {
+        name: this.asString(patch.name) ?? undefined,
+        description: this.asString(patch.description) ?? undefined,
+        privacy: this.asString(patch.privacy) ?? undefined,
+        category: this.asString(patch.category) ?? undefined,
+        location: this.asString(patch.location) ?? undefined,
+        tags: Array.isArray(patch.tags) ? (patch.tags as Prisma.InputJsonValue) : undefined,
+        rules: Array.isArray(patch.rules) ? (patch.rules as Prisma.InputJsonValue) : undefined,
+        links: Array.isArray(patch.links) ? (patch.links as Prisma.InputJsonValue) : undefined,
+        contactInfo: this.asString(patch.contactInfo) ?? undefined,
+        coverColors: Array.isArray(patch.coverColors)
+          ? (patch.coverColors as Prisma.InputJsonValue)
+          : undefined,
+        avatarColor:
+          typeof patch.avatarColor === 'number' && Number.isFinite(patch.avatarColor)
+            ? patch.avatarColor
+            : undefined,
+        approvalRequired:
+          typeof patch.approvalRequired === 'boolean' ? patch.approvalRequired : undefined,
+        allowEvents: typeof patch.allowEvents === 'boolean' ? patch.allowEvents : undefined,
+        allowLive: typeof patch.allowLive === 'boolean' ? patch.allowLive : undefined,
+        allowPolls: typeof patch.allowPolls === 'boolean' ? patch.allowPolls : undefined,
+        allowMarketplace:
+          typeof patch.allowMarketplace === 'boolean' ? patch.allowMarketplace : undefined,
+        allowChatRoom:
+          typeof patch.allowChatRoom === 'boolean' ? patch.allowChatRoom : undefined,
+        notificationLevel: this.asString(patch.notificationLevel) ?? undefined,
+        updatedAt: new Date(),
+      },
+    });
+
+    return this.getCommunity(id);
+  }
+
+  async getPages() {
+    const pages = await this.prisma.page.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+    return pages.map((row) => this.mapPage(row));
+  }
+
+  async getPage(id: string) {
+    const page = await this.prisma.page.findUnique({ where: { id } });
+    if (!page) {
+      throw new NotFoundException(`Page ${id} not found`);
+    }
+    return this.mapPage(page);
+  }
+
+  async createPage(body: CreatePageDto) {
+    await this.coreDatabase.getUser(body.ownerId);
+    const page = await this.prisma.page.create({
+      data: {
+        id: `page_${Date.now()}`,
+        ownerId: body.ownerId,
+        name: body.name,
+        about: body.about,
+        category: body.category,
+        location: body.location ?? null,
+        contactLabel: body.contactLabel ?? null,
+      },
+    });
+    return this.mapPage(page);
+  }
+
+  async togglePageFollow(pageId: string, userId: string) {
+    await Promise.all([this.getPage(pageId), this.coreDatabase.getUser(userId)]);
+    const existing = await this.prisma.pageFollow.findUnique({
+      where: {
+        pageId_userId: { pageId, userId },
+      },
+    });
+
+    if (existing) {
+      await this.prisma.$transaction([
+        this.prisma.pageFollow.delete({
+          where: {
+            pageId_userId: { pageId, userId },
+          },
+        }),
+        this.prisma.page.update({
+          where: { id: pageId },
+          data: { followerCount: { decrement: 1 }, updatedAt: new Date() },
+        }),
+      ]);
+      return { success: true, following: false };
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.pageFollow.create({
+        data: { pageId, userId },
+      }),
+      this.prisma.page.update({
+        where: { id: pageId },
+        data: { followerCount: { increment: 1 }, updatedAt: new Date() },
+      }),
+    ]);
+
+    return { success: true, following: true };
+  }
+
+  private async buildSellerProfiles(
+    sellerIds: string[],
+    products: Array<{ sellerId: string }>,
+  ) {
+    return Promise.all(
+      sellerIds.map((sellerId) =>
+        this.buildSellerProfile(
+          sellerId,
+          products.filter((item) => item.sellerId === sellerId),
+        ),
+      ),
+    );
+  }
+
+  private async buildSellerProfile(
+    sellerId: string,
+    products: Array<{ sellerId: string }>,
+  ) {
+    const seller = await this.coreDatabase.getUser(sellerId).catch(() => null);
+    return {
+      id: seller?.id ?? sellerId,
+      name: seller?.name ?? 'Unknown Seller',
+      username: seller?.username ?? sellerId,
+      avatar: seller?.avatar ?? 'https://placehold.co/120x120',
+      bio: seller?.bio ?? '',
+      verified: seller?.verified ?? false,
+      role: seller?.role ?? 'seller',
+      followers: seller?.followers ?? 0,
+      following: seller?.following ?? 0,
+      activeListings: products.length,
+      completedOrders: Math.max(0, products.length * 12),
+      storeName: seller?.name ?? 'Unknown Seller',
+      strikeStatus: seller?.status === 'Suspended' ? 'Under review' : 'No warnings',
+    };
+  }
+
+  private mapMarketplaceProduct(row: {
+    id: string;
+    sellerId: string;
+    title: string;
+    description: string;
+    price: Prisma.Decimal;
+    category: string;
+    subcategory: string | null;
+    condition: string | null;
+    location: string | null;
+    images: Prisma.JsonValue;
+    status: string;
+    stock: number;
+    watchers: number;
+    views: number;
+    createdAt: Date;
+  }) {
+    return {
+      id: row.id,
+      sellerId: row.sellerId,
+      title: row.title,
+      description: row.description,
+      price: Number(row.price),
+      category: row.category,
+      subcategory: row.subcategory ?? '',
+      condition: row.condition ?? '',
+      location: row.location ?? '',
+      images: Array.isArray(row.images) ? row.images : [],
+      status: row.status,
+      stock: row.stock,
+      watchers: row.watchers,
+      views: row.views,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  private mapMarketplaceOrder(row: {
+    id: string;
+    productId: string;
+    buyerId: string;
+    sellerId: string;
+    amount: Prisma.Decimal;
+    address: string;
+    deliveryMethod: string;
+    paymentMethod: string;
+    status: string;
+    createdAt: Date;
+  }) {
+    return {
+      id: row.id,
+      productId: row.productId,
+      buyerId: row.buyerId,
+      sellerId: row.sellerId,
+      amount: Number(row.amount),
+      address: row.address,
+      deliveryMethod: row.deliveryMethod,
+      paymentMethod: row.paymentMethod,
+      status: row.status,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  private mapJob(row: {
+    id: string;
+    recruiterId: string;
+    title: string;
+    company: string;
+    location: string | null;
+    type: string;
+    experienceLevel: string | null;
+    salaryMin: number | null;
+    salaryMax: number | null;
+    status: string;
+    createdAt: Date;
+  }) {
+    return {
+      id: row.id,
+      recruiterId: row.recruiterId,
+      title: row.title,
+      company: row.company,
+      location: row.location ?? '',
+      type: row.type,
+      experienceLevel: row.experienceLevel ?? 'entry',
+      salary:
+        row.salaryMin != null || row.salaryMax != null
+          ? `${row.salaryMin ?? row.salaryMax ?? 0}-${row.salaryMax ?? row.salaryMin ?? 0}`
+          : '',
+      status: row.status,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  private mapJobApplication(row: {
+    id: string;
+    jobId: string;
+    applicantId: string;
+    applicantName: string;
+    status: string;
+    createdAt: Date;
+  }) {
+    return {
+      id: row.id,
+      jobId: row.jobId,
+      applicantId: row.applicantId,
+      applicantName: row.applicantName,
+      status: row.status,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  private mapEvent(row: {
+    id: string;
+    organizerId: string;
+    organizerName: string;
+    title: string;
+    date: string;
+    time: string;
+    location: string;
+    participants: number;
+    price: Prisma.Decimal;
+    status: string;
+    savedCount: number;
+    createdAt: Date;
+  }) {
+    return {
+      id: row.id,
+      organizerId: row.organizerId,
+      organizer: row.organizerName,
+      title: row.title,
+      date: row.date,
+      time: row.time,
+      location: row.location,
+      participants: row.participants,
+      price: Number(row.price),
+      status: this.titleCase(row.status),
+      savedCount: row.savedCount,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  private mapCommunity(row: {
+    id: string;
+    ownerId: string;
+    ownerName: string;
+    name: string;
+    description: string;
+    privacy: string;
+    category: string | null;
+    location: string | null;
+    tags: Prisma.JsonValue;
+    rules: Prisma.JsonValue;
+    links: Prisma.JsonValue;
+    contactInfo: string | null;
+    coverColors: Prisma.JsonValue;
+    avatarColor: number | null;
+    approvalRequired: boolean;
+    allowEvents: boolean;
+    allowLive: boolean;
+    allowPolls: boolean;
+    allowMarketplace: boolean;
+    allowChatRoom: boolean;
+    notificationLevel: string;
+    memberCount: number;
+  }) {
+    return {
+      id: row.id,
+      ownerId: row.ownerId,
+      ownerName: row.ownerName,
+      name: row.name,
+      description: row.description,
+      privacy: row.privacy,
+      category: row.category,
+      location: row.location,
+      tags: Array.isArray(row.tags) ? row.tags : [],
+      rules: Array.isArray(row.rules) ? row.rules : [],
+      links: Array.isArray(row.links) ? row.links : [],
+      contactInfo: row.contactInfo,
+      coverColors: Array.isArray(row.coverColors) ? row.coverColors : [],
+      avatarColor: row.avatarColor,
+      approvalRequired: row.approvalRequired,
+      allowEvents: row.allowEvents,
+      allowLive: row.allowLive,
+      allowPolls: row.allowPolls,
+      allowMarketplace: row.allowMarketplace,
+      allowChatRoom: row.allowChatRoom,
+      notificationLevel: row.notificationLevel,
+      memberCount: row.memberCount,
+    };
+  }
+
+  private async mapCommunityMember(row: {
+    userId: string;
+    role: string;
+    status: string;
+    createdAt: Date;
+  }) {
+    const user = await this.coreDatabase.getUser(row.userId);
+    return {
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      avatar: user.avatar,
+      role: row.role,
+      status: row.status,
+      joinedAt: row.createdAt.toISOString(),
+    };
+  }
+
+  private mapPage(row: {
+    id: string;
+    ownerId: string;
+    name: string;
+    about: string;
+    category: string;
+    location: string | null;
+    contactLabel: string | null;
+    followerCount: number;
+    createdAt: Date;
+  }) {
+    return {
+      id: row.id,
+      ownerId: row.ownerId,
+      name: row.name,
+      about: row.about,
+      category: row.category,
+      location: row.location ?? '',
+      contactLabel: row.contactLabel ?? '',
+      followerCount: row.followerCount,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  private parseSalaryRange(value: string) {
+    const matches = value.match(/\d+/g)?.map((item) => Number(item)) ?? [];
+    if (matches.length === 0) {
+      return { min: null, max: null };
+    }
+    return {
+      min: matches[0] ?? null,
+      max: matches[1] ?? matches[0] ?? null,
+    };
+  }
+
+  private titleCase(value: string) {
+    return value
+      .split(/[\s_-]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(' ');
+  }
+
+  private asString(value: unknown) {
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  }
+}

@@ -78,6 +78,8 @@ model AppUser {
   eventRsvps          EventRsvp[]
   ownedCommunities    Community[]
   communityMemberships CommunityMember[]
+  ownedPages          Page[]
+  pageFollows         PageFollow[]
   subscriptions       Subscription[]
 
   @@map("app_users")
@@ -762,6 +764,35 @@ model CommunityMember {
 
   @@id([communityId, userId])
   @@map("app_community_members")
+}
+
+model Page {
+  id            String       @id @map("id")
+  ownerId       String       @map("owner_id")
+  name          String       @map("name")
+  about         String       @map("about")
+  category      String       @map("category")
+  location      String?      @map("location")
+  contactLabel  String?      @map("contact_label")
+  followerCount Int          @default(0) @map("follower_count")
+  createdAt     DateTime     @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt     DateTime     @default(now()) @db.Timestamptz(6) @map("updated_at")
+  owner         AppUser      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  followers     PageFollow[]
+
+  @@index([ownerId, createdAt(sort: Desc)])
+  @@map("app_pages")
+}
+
+model PageFollow {
+  pageId     String   @map("page_id")
+  userId     String   @map("user_id")
+  createdAt  DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  page       Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  user       AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([pageId, userId])
+  @@map("app_page_follows")
 }
 
 model Subscription {

@@ -1,53 +1,51 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
-import { AppExtensionsDataService } from '../data/app-extensions-data.service';
-import { ExtendedDataService } from '../data/extended-data.service';
-import { PlatformDataService } from '../data/platform-data.service';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { CreateEventDto, EventActorDto } from '../dto/api.dto';
+import { CoreDatabaseService } from '../services/core-database.service';
+import { ExperienceDatabaseService } from '../services/experience-database.service';
 
 @ApiTags('events')
 @Controller('events')
 export class EventsController {
   constructor(
-    private readonly platformData: PlatformDataService,
-    private readonly extendedData: ExtendedDataService,
-    private readonly appExtensionsData: AppExtensionsDataService,
+    private readonly experienceDatabase: ExperienceDatabaseService,
+    private readonly coreDatabase: CoreDatabaseService,
   ) {}
 
   @Get()
   @ApiQuery({ name: 'status', required: false, enum: ['Featured', 'Approved', 'Review'] })
   getEvents(@Query('status') status?: 'Featured' | 'Approved' | 'Review') {
-    return this.platformData.getEvents(status);
+    return this.experienceDatabase.getEvents(status);
   }
 
   @Get('create')
   getEventCreateOptions() {
     return {
-      categories: this.extendedData.getMasterData().eventCategories,
+      categories: ['conference', 'meetup', 'workshop', 'community'],
       defaultStatuses: ['Review', 'Approved', 'Featured'],
-      recommendedLocations: this.extendedData.getMasterData().cities,
+      recommendedLocations: ['Dhaka', 'Remote', 'Online'],
     };
   }
 
   @Get('pool/create')
   getEventPoolCreateOptions() {
-    const polls = this.appExtensionsData.getPollsAndSurveys();
     return {
-      categories: this.extendedData.getMasterData().eventCategories,
-      pollTemplates: polls.quickTemplates,
-      activePolls: polls.activeEntries,
-      draftPolls: polls.draftEntries,
+      categories: ['conference', 'meetup', 'workshop', 'community'],
+      pollTemplates: [],
+      activePolls: [],
+      draftPolls: [],
     };
   }
 
   @Get('detail')
   getEventDetail(@Query('id') id: string) {
-    return this.platformData.getEvent(id);
+    return this.experienceDatabase.getEvent(id);
   }
 
   @Get(':id')
   getEvent(@Param('id') id: string) {
-    return this.platformData.getEvent(id);
+    return this.experienceDatabase.getEvent(id);
   }
 
   @Post('create')
@@ -64,27 +62,41 @@ export class EventsController {
     };
   }
 
+  @UseGuards(SessionAuthGuard)
   @Post()
-  createEvent(@Body() body: CreateEventDto) {
-    return this.platformData.createEvent({
-      title: body.title,
-      organizer: body.organizer,
-      date: body.date,
-      time: body.time,
-      location: body.location,
-      participants: body.participants ?? 0,
-      price: body.price ?? 0,
-      status: body.status,
-    });
+  async createEvent(
+    @Body() body: CreateEventDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const organizer = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return this.experienceDatabase.createEvent(organizer.id, body);
   }
 
+  @UseGuards(SessionAuthGuard)
   @Patch(':id/rsvp')
-  toggleEventRsvp(@Param('id') id: string, @Body() body: EventActorDto) {
-    return this.platformData.toggleEventRsvp(id, body.userId);
+  async toggleEventRsvp(
+    @Param('id') id: string,
+    @Body() body: EventActorDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    return this.experienceDatabase.toggleEventRsvp(id, user.id);
   }
 
+  @UseGuards(SessionAuthGuard)
   @Patch(':id/save')
-  toggleEventSave(@Param('id') id: string, @Body() body: EventActorDto) {
-    return this.platformData.toggleEventSave(id, body.userId);
+  async toggleEventSave(
+    @Param('id') id: string,
+    @Body() body: EventActorDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    return this.experienceDatabase.toggleEventSave(id, user.id);
   }
 }
