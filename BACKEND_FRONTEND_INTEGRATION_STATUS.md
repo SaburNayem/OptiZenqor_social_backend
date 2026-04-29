@@ -31,7 +31,7 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 | Blocks/reports/settings state | Yes | Yes | Pending | Partial | Partial | Persistent account-state tables/services exist. |
 | Discovery/search/trending | Yes | Yes | Pending | Partial | Partial | `discovery.controller.ts` now reads search/trending/hashtags from DB-backed services instead of seeded ecosystem/platform services. |
 | Profiles/dashboards | Yes | Yes | Pending | Partial | Partial | `profiles.controller.ts` now reads profile, tagged/mention history, and business/seller/recruiter/creator dashboard payloads from DB-backed services. |
-| Preferences/support/app extensions | Partial | Partial | Pending | Partial | Partial | `settings` and `preferences` now read user-scoped state from DB-backed services for core settings flows, and support tickets are now persisted; several support/app-extension utility routes still rely on snapshot-backed services. |
+| Preferences/support/app extensions | Partial | Partial | Pending | Partial | Partial | `settings` and `preferences` now read user-scoped state from DB-backed services, support tickets are persisted, and account switching/activity sessions/verification request are now durable; several utility routes still rely on snapshot-backed services. |
 | Realtime calls/live/presence | Partial | Partial | Pending | No | Partial | Socket auth exists, but snapshot-backed session state and fallback auth paths remain. |
 
 ## Remaining Mock or Snapshot Hotspots
@@ -54,6 +54,10 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 - `src/controllers/profiles.controller.ts`
 - `src/services/support-database.service.ts`
 - `src/controllers/support.controller.ts`
+- `src/services/app-extensions-database.service.ts`
+- `src/controllers/account-switching.controller.ts`
+- `src/controllers/activity-sessions.controller.ts`
+- `src/controllers/verification-request.controller.ts`
 
 ## Endpoints Now DB-Backed
 
@@ -88,6 +92,20 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 - `GET /blocked-muted-accounts`
 - `GET /support/tickets`
 - `POST /support/tickets`
+- `GET /account-switching`
+- `GET /account-switching/active`
+- `PATCH /account-switching/active`
+- `POST /account-switching/active`
+- `GET /activity-sessions`
+- `GET /activity-sessions/history`
+- `POST /activity-sessions/logout-others`
+- `DELETE /activity-sessions/:id`
+- `GET /verification-request`
+- `GET /verification-request/status`
+- `GET /verification-request/documents`
+- `PATCH /verification-request/documents`
+- `POST /verification-request/submit`
+- `PATCH /verification-request/status`
 
 ## Frontend Impact
 
@@ -95,6 +113,7 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 - Profile routes keep the same wrapper aliases (`user`, `profile`, `data`, `items`, `results`) while removing seeded ecosystem/profile dashboard dependencies for the completed endpoints.
 - Support and realtime feature screens still depend on seeded/snapshot-backed routes and remain migration targets.
 - Support ticket list/create routes are now durable, but FAQ/chat/mail utility payloads are still configuration-backed rather than fully modeled in Prisma.
+- Account switching, activity session management, and verification request screens can now rely on authenticated DB-backed state instead of snapshot-backed app extension memory.
 
 ## Latest Verification
 
@@ -120,6 +139,7 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 - On 2026-04-29, `settings.controller.ts` and `preferences.controller.ts` were moved off mutable seeded state for their main user-scoped reads and updates by introducing `SettingsDatabaseService`.
 - On 2026-04-29, `discovery.controller.ts` and `profiles.controller.ts` were moved off seeded ecosystem/platform lookups for their main read flows by introducing `DiscoveryDatabaseService` and `ProfilesDatabaseService`.
 - On 2026-04-29, `support.controller.ts` moved ticket persistence off in-memory ecosystem state by introducing `SupportDatabaseService`.
+- On 2026-04-29, `account-switching.controller.ts`, `activity-sessions.controller.ts`, and `verification-request.controller.ts` moved off snapshot-backed app extension state by introducing `AppExtensionsDatabaseService`.
 - The backend currently uses a deliberate hybrid database access style: Prisma for many newer modules and raw `pg` for the core social/auth layer.
 - Remaining seeded dependencies for the current target slice are concentrated in `chat.controller.ts`, `realtime.controller.ts`, and the broader app-utility controller set still importing `src/data/*`.
 - Latest verification for completed areas: `npm.cmd install`, `npx.cmd prisma generate`, `npm.cmd run typecheck`, and `npm.cmd run build` all pass.

@@ -1,29 +1,51 @@
-import { Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { Controller, Delete, Get, Headers, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { AppExtensionsDataService } from '../data/app-extensions-data.service';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
+import { AppExtensionsDatabaseService } from '../services/app-extensions-database.service';
+import { CoreDatabaseService } from '../services/core-database.service';
 
 @ApiTags('activity-sessions')
 @Controller('activity-sessions')
 export class ActivitySessionsController {
-  constructor(private readonly appExtensionsData: AppExtensionsDataService) {}
+  constructor(
+    private readonly appExtensionsDatabase: AppExtensionsDatabaseService,
+    private readonly coreDatabase: CoreDatabaseService,
+  ) {}
 
+  @UseGuards(SessionAuthGuard)
   @Get()
-  getActivitySessions() {
-    return this.appExtensionsData.getActivitySessions();
+  async getActivitySessions(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return this.appExtensionsDatabase.getActivitySessions(user.id, authorization);
   }
 
+  @UseGuards(SessionAuthGuard)
   @Get('history')
-  getActivityHistory() {
-    return this.appExtensionsData.getActivitySessions().activities;
+  async getActivityHistory(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const history = await this.appExtensionsDatabase.getActivityHistory(user.id);
+    return {
+      success: true,
+      history,
+      items: history,
+      data: history,
+    };
   }
 
+  @UseGuards(SessionAuthGuard)
   @Post('logout-others')
-  logoutOtherDevices() {
-    return this.appExtensionsData.logoutOtherDevices();
+  async logoutOtherDevices(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return this.appExtensionsDatabase.logoutOtherDevices(user.id, authorization);
   }
 
+  @UseGuards(SessionAuthGuard)
   @Delete(':id')
-  revokeSession(@Param('id') id: string) {
-    return this.appExtensionsData.revokeSession(id);
+  async revokeSession(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return this.appExtensionsDatabase.revokeSession(user.id, id, authorization);
   }
 }

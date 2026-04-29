@@ -25,6 +25,7 @@ import { SettingsDatabaseService } from '../services/settings-database.service';
 import { DiscoveryDatabaseService } from '../services/discovery-database.service';
 import { ProfilesDatabaseService } from '../services/profiles-database.service';
 import { SupportDatabaseService } from '../services/support-database.service';
+import { AppExtensionsDatabaseService } from '../services/app-extensions-database.service';
 
 @Global()
 @Module({
@@ -55,6 +56,7 @@ import { SupportDatabaseService } from '../services/support-database.service';
     DiscoveryDatabaseService,
     ProfilesDatabaseService,
     SupportDatabaseService,
+    AppExtensionsDatabaseService,
   ],
   exports: [
     PlatformDataService,
@@ -83,6 +85,7 @@ import { SupportDatabaseService } from '../services/support-database.service';
     DiscoveryDatabaseService,
     ProfilesDatabaseService,
     SupportDatabaseService,
+    AppExtensionsDatabaseService,
   ],
 })
 export class DataModule {}

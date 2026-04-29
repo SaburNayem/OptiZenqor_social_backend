@@ -57,6 +57,7 @@ This means the backend is database-backed, but not yet a pure Prisma-only codeba
 - Discovery/search/trending moved off seeded ecosystem/platform services
 - Profiles and dashboard profile surfaces moved off seeded ecosystem services
 - Support tickets moved out of in-memory ecosystem state and into a real database table
+- Account switching, activity sessions, and verification request routes moved off snapshot-backed `AppExtensionsDataService`
 
 ## Remaining static dependency hotspots
 
@@ -81,18 +82,14 @@ This means the backend is database-backed, but not yet a pure Prisma-only codeba
 - `src/controllers/localization-support.controller.ts`
 - `src/controllers/polls-surveys.controller.ts`
 - `src/controllers/app-update-flow.controller.ts`
-- `src/controllers/account-switching.controller.ts`
-- `src/controllers/activity-sessions.controller.ts`
 - `src/controllers/share-repost.controller.ts`
-- `src/controllers/verification-request.controller.ts`
 
 ## Priority order for remaining migration
 
 1. Chat adjunct and realtime durable state
-2. Support/help remaining utility surfaces
-3. Admin and moderation utility routes
-4. Story/post detail adjunct state
-5. Utility app surfaces still backed by `src/data/*`
+2. Admin and moderation utility routes
+3. Story/post detail adjunct state
+4. Utility app surfaces still backed by `src/data/*`
 
 ## Practical production rule
 

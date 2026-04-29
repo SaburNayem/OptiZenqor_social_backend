@@ -1215,6 +1215,14 @@ export class UpdateVerificationStatusDto {
   status!: 'notRequested' | 'pending' | 'approved' | 'rejected';
 }
 
+export class SubmitVerificationRequestDto {
+  @ApiProperty({ required: false, type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  documents?: string[];
+}
+
 export class SubmitReportDto {
   @ApiProperty()
   @IsString()

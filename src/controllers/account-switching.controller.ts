@@ -1,30 +1,49 @@
-import { Body, Controller, Get, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { AppExtensionsDataService } from '../data/app-extensions-data.service';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { SetActiveAccountDto } from '../dto/api.dto';
+import { AppExtensionsDatabaseService } from '../services/app-extensions-database.service';
+import { CoreDatabaseService } from '../services/core-database.service';
 
 @ApiTags('account-switching')
 @Controller('account-switching')
 export class AccountSwitchingController {
-  constructor(private readonly appExtensionsData: AppExtensionsDataService) {}
+  constructor(
+    private readonly appExtensionsDatabase: AppExtensionsDatabaseService,
+    private readonly coreDatabase: CoreDatabaseService,
+  ) {}
 
+  @UseGuards(SessionAuthGuard)
   @Get()
-  getAccounts() {
-    return this.appExtensionsData.getAccountSwitching();
+  async getAccounts(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return this.appExtensionsDatabase.getAccountSwitching(user.id);
   }
 
+  @UseGuards(SessionAuthGuard)
   @Get('active')
-  getActiveAccount() {
-    return this.appExtensionsData.getActiveAccount();
+  async getActiveAccount(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return this.appExtensionsDatabase.getActiveAccount(user.id);
   }
 
+  @UseGuards(SessionAuthGuard)
   @Patch('active')
-  setActiveAccount(@Body() body: SetActiveAccountDto) {
-    return this.appExtensionsData.setActiveAccount(body.accountId);
+  async setActiveAccount(
+    @Body() body: SetActiveAccountDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return this.appExtensionsDatabase.setActiveAccount(user.id, body.accountId);
   }
 
+  @UseGuards(SessionAuthGuard)
   @Post('active')
-  setActiveAccountPost(@Body() body: SetActiveAccountDto) {
-    return this.appExtensionsData.setActiveAccount(body.accountId);
+  async setActiveAccountPost(
+    @Body() body: SetActiveAccountDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return this.appExtensionsDatabase.setActiveAccount(user.id, body.accountId);
   }
 }
