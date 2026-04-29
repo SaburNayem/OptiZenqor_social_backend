@@ -10,6 +10,7 @@ import { QueryResultRow } from 'pg';
 import { makeId } from '../common/id.util';
 import { coreSeedCommentReactions, coreSeedFollows, coreSeedMessages, coreSeedNotifications, coreSeedPostComments, coreSeedPostReactions, coreSeedPosts, coreSeedThreads, coreSeedUsers } from '../database/core-seed';
 import { DatabaseService } from './database.service';
+import { JwtLikePayload, JwtTokenService } from './jwt-token.service';
 
 type UserRow = QueryResultRow & {
   id: string;
@@ -142,7 +143,10 @@ type SerializedComment = {
 
 @Injectable()
 export class CoreDatabaseService implements OnModuleInit {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly jwtTokens: JwtTokenService,
+  ) {}
 
   private getTokenTtlSeconds(value: string | undefined, fallbackSeconds: number) {
     const normalized = value?.trim().toLowerCase();
@@ -390,6 +394,7 @@ export class CoreDatabaseService implements OnModuleInit {
   }
 
   async refreshUserToken(refreshToken: string) {
+    const claims = this.verifyRefreshToken(refreshToken);
     const { rows } = await this.database.query<QueryResultRow & { user_id: string }>(
       `
       select user_id
@@ -401,7 +406,7 @@ export class CoreDatabaseService implements OnModuleInit {
       [refreshToken],
     );
     const session = rows[0];
-    if (!session) {
+    if (!session || session.user_id !== claims.sub) {
       throw new UnauthorizedException('Invalid refresh token.');
     }
     await this.database.query(`delete from auth_sessions where refresh_token = $1`, [refreshToken]);
@@ -429,6 +434,12 @@ export class CoreDatabaseService implements OnModuleInit {
     if (!accessToken) {
       return null;
     }
+    let claims: JwtLikePayload;
+    try {
+      claims = this.verifyAccessToken(accessToken);
+    } catch {
+      return null;
+    }
     const { rows } = await this.database.query<QueryResultRow & { user_id: string }>(
       `
       select user_id
@@ -440,7 +451,7 @@ export class CoreDatabaseService implements OnModuleInit {
       [accessToken],
     );
     const session = rows[0];
-    if (!session) {
+    if (!session || session.user_id !== claims.sub) {
       return null;
     }
     return this.getUser(session.user_id);
@@ -2262,10 +2273,9 @@ export class CoreDatabaseService implements OnModuleInit {
   }
 
   private async issueTokens(userId: string) {
-    const accessToken = `atk_${randomUUID().replace(/-/g, '')}${randomBytes(8).toString('hex')}`;
-    const refreshToken = `rtk_${randomUUID().replace(/-/g, '')}${randomBytes(8).toString('hex')}`;
     const sessionId = `ses_${randomUUID().replace(/-/g, '')}`;
     const createdAt = new Date().toISOString();
+    const user = await this.getUser(userId);
     const accessTtlSeconds = this.getTokenTtlSeconds(
       process.env.SESSION_ACCESS_EXPIRES_IN,
       60 * 60,
@@ -2276,6 +2286,28 @@ export class CoreDatabaseService implements OnModuleInit {
     );
     const accessExpiresAt = new Date(Date.now() + accessTtlSeconds * 1000).toISOString();
     const refreshExpiresAt = new Date(Date.now() + refreshTtlSeconds * 1000).toISOString();
+    const accessToken = this.jwtTokens.signToken(
+      {
+        sub: userId,
+        sid: sessionId,
+        type: 'access',
+        role: String(user.role ?? ''),
+        email: String(user.email ?? ''),
+      },
+      accessTtlSeconds,
+      this.readJwtSecret('JWT_SECRET'),
+    );
+    const refreshToken = this.jwtTokens.signToken(
+      {
+        sub: userId,
+        sid: sessionId,
+        type: 'refresh',
+        role: String(user.role ?? ''),
+        email: String(user.email ?? ''),
+      },
+      refreshTtlSeconds,
+      this.readJwtSecret('JWT_REFRESH_SECRET', 'JWT_SECRET'),
+    );
 
     await this.database.query(
       `insert into auth_sessions (
@@ -2303,6 +2335,35 @@ export class CoreDatabaseService implements OnModuleInit {
       refreshExpiresInSeconds: refreshTtlSeconds,
       tokenType: 'Bearer',
     };
+  }
+
+  private verifyAccessToken(token: string) {
+    return this.jwtTokens.verifyToken(
+      token,
+      this.readJwtSecret('JWT_SECRET'),
+      'access',
+    );
+  }
+
+  private verifyRefreshToken(token: string) {
+    return this.jwtTokens.verifyToken(
+      token,
+      this.readJwtSecret('JWT_REFRESH_SECRET', 'JWT_SECRET'),
+      'refresh',
+    );
+  }
+
+  private readJwtSecret(primaryKey: string, fallbackKey?: string) {
+    const primary = process.env[primaryKey]?.trim();
+    const fallback = fallbackKey ? process.env[fallbackKey]?.trim() : undefined;
+    const resolved = primary || fallback;
+    if (resolved) {
+      return resolved;
+    }
+    if ((process.env.NODE_ENV ?? '').trim().toLowerCase() === 'production') {
+      throw new UnauthorizedException(`${primaryKey} is required in production.`);
+    }
+    return 'dev-only-jwt-secret-change-me';
   }
 
   private buildSessionPayload(

@@ -5,11 +5,13 @@ import { EcosystemDataService } from '../data/ecosystem-data.service';
 import { ExtendedDataService } from '../data/extended-data.service';
 import { PlatformDataService } from '../data/platform-data.service';
 import { SettingsDataService } from '../data/settings-data.service';
+import { RolesGuard } from '../auth/roles.guard';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { CloudinaryUploadService } from '../services/cloudinary-upload.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { DatabaseService } from '../services/database.service';
 import { ExperienceDatabaseService } from '../services/experience-database.service';
+import { JwtTokenService } from '../services/jwt-token.service';
 import { MailService } from '../services/mail.service';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { RealtimeStateService } from '../services/realtime-state.service';
@@ -28,10 +30,12 @@ import { UploadsDatabaseService } from '../services/uploads-database.service';
     AdminOpsDataService,
     AppExtensionsDataService,
     SettingsDataService,
+    RolesGuard,
     SessionAuthGuard,
     CloudinaryUploadService,
     DatabaseService,
     PrismaService,
+    JwtTokenService,
     CoreDatabaseService,
     ExperienceDatabaseService,
     RealtimeStateService,
@@ -49,10 +53,12 @@ import { UploadsDatabaseService } from '../services/uploads-database.service';
     AdminOpsDataService,
     AppExtensionsDataService,
     SettingsDataService,
+    RolesGuard,
     SessionAuthGuard,
     CloudinaryUploadService,
     DatabaseService,
     PrismaService,
+    JwtTokenService,
     CoreDatabaseService,
     ExperienceDatabaseService,
     RealtimeStateService,

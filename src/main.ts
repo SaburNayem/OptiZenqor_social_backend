@@ -26,7 +26,7 @@ function parseCorsOrigins() {
 }
 
 function assertStartupEnv() {
-  const requiredInProduction = ['DATABASE_URL'];
+  const requiredInProduction = ['DATABASE_URL', 'JWT_SECRET', 'JWT_REFRESH_SECRET'];
   const missing = requiredInProduction.filter((key) => !process.env[key]?.trim());
   if ((process.env.NODE_ENV ?? '').trim().toLowerCase() === 'production' && missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
@@ -91,9 +91,9 @@ async function bootstrap() {
       {
         type: 'http',
         scheme: 'bearer',
-        bearerFormat: 'session-token',
+        bearerFormat: 'JWT',
         description:
-          'Opaque bearer session token. Get it from /auth/login.',
+          'JWT bearer access token. Get it from /auth/login.',
       },
       'user-bearer',
     )
