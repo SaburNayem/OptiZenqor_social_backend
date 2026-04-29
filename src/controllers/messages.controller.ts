@@ -24,18 +24,15 @@ export class MessagesController {
     @Body() body: CreateMessageDto,
     @Headers('authorization') authorization?: string,
   ) {
-    const senderId = await this.resolveSenderId(body.senderId, authorization);
-    return this.coreDatabase.createMessage(id, senderId, body.text, {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.senderId,
+    );
+    return this.coreDatabase.createMessage(id, actor.id, body.text, {
       attachments: body.attachments,
       replyToMessageId: body.replyToMessageId,
       kind: body.kind,
       mediaPath: body.mediaPath,
     });
-  }
-
-  private async resolveSenderId(senderId?: string, authorization?: string) {
-    const token = authorization?.replace(/^Bearer\s+/i, '');
-    const user = await this.coreDatabase.resolveUserFromAccessToken(token);
-    return user?.id ?? senderId ?? 'u1';
   }
 }

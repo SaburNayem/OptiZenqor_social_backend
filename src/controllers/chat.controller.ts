@@ -77,16 +77,16 @@ export class ChatController {
     @Body() body: CreateChatThreadDto,
     @Headers('authorization') authorization?: string,
   ) {
-    const actorId = await this.resolveActorId(
-      [body.userId, body.actorId],
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
       authorization,
+      body.userId?.trim() || body.actorId?.trim(),
     );
     const participantIds = body.participantIds?.length
       ? body.participantIds
       : body.targetUserId
         ? [body.targetUserId]
         : [];
-    const thread = await this.coreDatabase.createOrOpenThread(actorId, participantIds);
+    const thread = await this.coreDatabase.createOrOpenThread(actor.id, participantIds);
     return {
       success: true,
       message: 'Thread created successfully.',
@@ -127,8 +127,11 @@ export class ChatController {
     @Body() body: CreateMessageDto,
     @Headers('authorization') authorization?: string,
   ) {
-    const senderId = await this.resolveActorId([body.senderId], authorization);
-    const message = await this.coreDatabase.createMessage(id, senderId, body.text, {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.senderId,
+    );
+    const message = await this.coreDatabase.createMessage(id, actor.id, body.text, {
       attachments: body.attachments,
       replyToMessageId: body.replyToMessageId,
       kind: body.kind,
@@ -146,11 +149,14 @@ export class ChatController {
   @Post('threads/:id/read')
   async markRead(
     @Param('id') id: string,
-    @Body() body: { userId: string },
+    @Body() body: { userId?: string },
     @Headers('authorization') authorization?: string,
   ) {
-    const actorId = await this.resolveActorId([body.userId], authorization);
-    const result = await this.coreDatabase.markThreadMessagesRead(id, actorId);
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    const result = await this.coreDatabase.markThreadMessagesRead(id, actor.id);
     return {
       success: true,
       message: 'Thread marked as read successfully.',
@@ -237,21 +243,5 @@ export class ChatController {
       data: preferences,
       preferences,
     };
-  }
-
-  private async resolveActorId(
-    candidates: Array<string | undefined>,
-    authorization?: string,
-  ) {
-    for (const candidate of candidates) {
-      const normalized = candidate?.trim();
-      if (normalized) {
-        return normalized;
-      }
-    }
-
-    const token = authorization?.replace(/^Bearer\s+/i, '');
-    const user = await this.coreDatabase.resolveUserFromAccessToken(token);
-    return user?.id ?? candidates.find((item) => item?.trim())?.trim() ?? 'u1';
   }
 }

@@ -92,8 +92,16 @@ export class NotificationsController {
 
   @Patch(':id/read')
   @Post(':id/read')
-  async markRead(@Param('id') id: string, @Body() body: MarkNotificationReadDto) {
-    const notification = await this.coreDatabase.markNotificationRead(id, body.userId);
+  async markRead(
+    @Param('id') id: string,
+    @Body() body: MarkNotificationReadDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    const notification = await this.coreDatabase.markNotificationRead(id, actor.id);
     return {
       success: true,
       message: 'Notification marked as read successfully.',
