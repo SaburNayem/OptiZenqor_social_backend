@@ -22,6 +22,8 @@ import { StateSnapshotService } from '../services/state-snapshot.service';
 import { StoriesDatabaseService } from '../services/stories-database.service';
 import { UploadsDatabaseService } from '../services/uploads-database.service';
 import { SettingsDatabaseService } from '../services/settings-database.service';
+import { DiscoveryDatabaseService } from '../services/discovery-database.service';
+import { ProfilesDatabaseService } from '../services/profiles-database.service';
 
 @Global()
 @Module({
@@ -49,6 +51,8 @@ import { SettingsDatabaseService } from '../services/settings-database.service';
     UploadsDatabaseService,
     ReelsDatabaseService,
     SettingsDatabaseService,
+    DiscoveryDatabaseService,
+    ProfilesDatabaseService,
   ],
   exports: [
     PlatformDataService,
@@ -74,6 +78,8 @@ import { SettingsDatabaseService } from '../services/settings-database.service';
     UploadsDatabaseService,
     ReelsDatabaseService,
     SettingsDatabaseService,
+    DiscoveryDatabaseService,
+    ProfilesDatabaseService,
   ],
 })
 export class DataModule {}

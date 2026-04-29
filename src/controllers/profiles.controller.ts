@@ -1,9 +1,9 @@
 import { Body, Controller, Get, Headers, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
-import { EcosystemDataService } from '../data/ecosystem-data.service';
 import { FollowUserDto, UpdateUserDto } from '../dto/api.dto';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { ProfilesDatabaseService } from '../services/profiles-database.service';
 import { listResponse, successResponse } from '../utils/api-response.util';
 
 @ApiTags('profiles')
@@ -11,35 +11,12 @@ import { listResponse, successResponse } from '../utils/api-response.util';
 export class ProfilesController {
   constructor(
     private readonly coreDatabase: CoreDatabaseService,
-    private readonly ecosystemData: EcosystemDataService,
+    private readonly profilesDatabase: ProfilesDatabaseService,
     private readonly accountStateDatabase: AccountStateDatabaseService,
   ) {}
 
   private async buildProfilePayload(id: string) {
-    const user = await this.coreDatabase.getUser(id);
-    const posts = await this.coreDatabase.getPosts(id);
-
-    return {
-      user,
-      stats: {
-        followers: user.followers,
-        following: user.following,
-        posts: posts.length,
-      },
-      tabs: ['posts', 'reels', 'about', 'tagged'],
-      links: [
-        {
-          label: 'Public profile',
-          url: `https://optizenqor.app/${user.username}`,
-        },
-      ],
-      recentPosts: posts.slice(0, 6),
-      profilePreview: {
-        badge: user.verification,
-        role: user.role,
-        health: user.health,
-      },
-    };
+    return this.profilesDatabase.buildProfilePayload(id);
   }
 
   @Get('profile')
@@ -66,7 +43,7 @@ export class ProfilesController {
   async getTaggedPosts(@Param('id') id: string) {
     return this.wrapListResponse(
       'Tagged posts fetched successfully.',
-      this.ecosystemData.getTaggedPostSummaries(id),
+      await this.profilesDatabase.getTaggedPosts(id),
     );
   }
 
@@ -74,7 +51,7 @@ export class ProfilesController {
   async getMentionHistory(@Param('id') id: string) {
     return this.wrapListResponse(
       'Mention history fetched successfully.',
-      this.ecosystemData.getMentionHistory(id),
+      await this.profilesDatabase.getMentionHistory(id),
     );
   }
 
@@ -235,34 +212,33 @@ export class ProfilesController {
 
   @Get('creator-dashboard')
   async getCreatorDashboard(@Headers('authorization') authorization?: string) {
-    const viewerId = (await this.resolveViewerId(authorization)) ?? 'u1';
+    const viewerId = await this.resolveTargetId(undefined, authorization);
     return successResponse('Creator dashboard fetched successfully.', {
-      ...this.ecosystemData.getProfessionalProfiles().creatorTools,
-      analytics: await this.accountStateDatabase.getCreatorAnalytics(viewerId),
+      ...(await this.profilesDatabase.getCreatorDashboard(viewerId)),
     });
   }
 
   @Get('business-profile')
-  getBusinessProfile() {
+  async getBusinessProfile() {
     return successResponse(
       'Business profile fetched successfully.',
-      this.ecosystemData.getProfessionalProfiles().businessProfile,
+      await this.profilesDatabase.getBusinessProfile(),
     );
   }
 
   @Get('seller-profile')
-  getSellerProfile() {
+  async getSellerProfile() {
     return successResponse(
       'Seller profile fetched successfully.',
-      this.ecosystemData.getProfessionalProfiles().sellerProfile,
+      await this.profilesDatabase.getSellerProfile(),
     );
   }
 
   @Get('recruiter-profile')
-  getRecruiterProfile() {
+  async getRecruiterProfile() {
     return successResponse(
       'Recruiter profile fetched successfully.',
-      this.ecosystemData.getProfessionalProfiles().recruiterProfile,
+      await this.profilesDatabase.getRecruiterProfile(),
     );
   }
 
@@ -273,7 +249,12 @@ export class ProfilesController {
     }
 
     const viewerId = await this.resolveViewerId(authorization);
-    return viewerId ?? 'u1';
+    if (viewerId) {
+      return viewerId;
+    }
+
+    const users = await this.coreDatabase.getUsers();
+    return users[0]?.id ?? 'u1';
   }
 
   private async resolveActorId(body: FollowUserDto, authorization?: string) {
@@ -292,7 +273,12 @@ export class ProfilesController {
       }
     }
 
-    return (await this.resolveViewerId(authorization)) ?? 'u1';
+    const viewerId = await this.resolveViewerId(authorization);
+    if (viewerId) {
+      return viewerId;
+    }
+    const users = await this.coreDatabase.getUsers();
+    return users[0]?.id ?? 'u1';
   }
 
   private async resolveViewerId(authorization?: string) {

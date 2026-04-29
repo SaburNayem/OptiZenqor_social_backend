@@ -29,6 +29,8 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 | Events | Yes | Yes | Pending | Partial | Partial | Prisma models and `ExperienceDatabaseService` exist. |
 | Communities/pages | Yes | Yes | Pending | Partial | Partial | Prisma models and `ExperienceDatabaseService` exist. |
 | Blocks/reports/settings state | Yes | Yes | Pending | Partial | Partial | Persistent account-state tables/services exist. |
+| Discovery/search/trending | Yes | Yes | Pending | Partial | Partial | `discovery.controller.ts` now reads search/trending/hashtags from DB-backed services instead of seeded ecosystem/platform services. |
+| Profiles/dashboards | Yes | Yes | Pending | Partial | Partial | `profiles.controller.ts` now reads profile, tagged/mention history, and business/seller/recruiter/creator dashboard payloads from DB-backed services. |
 | Preferences/support/app extensions | Partial | Partial | Pending | Partial | Partial | `settings` and `preferences` now read user-scoped state from DB-backed services for core settings flows, but several support/app-extension routes still rely on snapshot-backed services. |
 | Realtime calls/live/presence | Partial | Partial | Pending | No | Partial | Socket auth exists, but snapshot-backed session state and fallback auth paths remain. |
 
@@ -41,19 +43,74 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 - `src/data/settings-data.service.ts`
 - `src/services/state-snapshot.service.ts`
 
+## Latest Completed Files
+
+- `src/services/settings-database.service.ts`
+- `src/controllers/settings.controller.ts`
+- `src/controllers/preferences.controller.ts`
+- `src/services/discovery-database.service.ts`
+- `src/controllers/discovery.controller.ts`
+- `src/services/profiles-database.service.ts`
+- `src/controllers/profiles.controller.ts`
+
+## Endpoints Now DB-Backed
+
+- `GET /hashtags`
+- `GET /trending`
+- `GET /search`
+- `GET /global-search`
+- `GET /search-discovery`
+- `GET /profile`
+- `GET /profile/:id`
+- `GET /profile/:id/tagged-posts`
+- `GET /profile/:id/mention-history`
+- `GET /user-profile`
+- `GET /user-profile/:id`
+- `GET /creator-dashboard`
+- `GET /business-profile`
+- `GET /seller-profile`
+- `GET /recruiter-profile`
+- `GET /settings`
+- `GET /settings/sections`
+- `GET /settings/items`
+- `GET /settings/items/:itemKey`
+- `GET /settings/:sectionKey`
+- `PATCH /settings/items/:itemKey`
+- `PATCH /settings/:sectionKey`
+- `GET /advanced-privacy-controls`
+- `GET /safety-privacy`
+- `GET /accessibility-support`
+- `GET /explore-recommendation`
+- `GET /push-notification-preferences`
+- `GET /legal-compliance`
+- `GET /blocked-muted-accounts`
+
+## Frontend Impact
+
+- Discovery and search screens should continue to receive the same top-level keys (`success`, `query`, `results`, `sections`, `count`, `items`, `data`) while now reflecting DB-backed users, posts, jobs, pages, communities, marketplace items, and events.
+- Profile routes keep the same wrapper aliases (`user`, `profile`, `data`, `items`, `results`) while removing seeded ecosystem/profile dashboard dependencies for the completed endpoints.
+- Support and realtime feature screens still depend on seeded/snapshot-backed routes and remain migration targets.
+
+## Latest Verification
+
+- `npm.cmd run typecheck`: pass
+- `npm.cmd run build`: pass
+
 ## High-Priority Controller Migration Targets
 
-1. `src/controllers/discovery.controller.ts`
-2. `src/controllers/chat.controller.ts`
-3. `src/controllers/posts.controller.ts`
-4. `src/controllers/stories.controller.ts`
-5. `src/controllers/auth.controller.ts`
-6. `src/controllers/profiles.controller.ts`
-7. `src/controllers/support.controller.ts`
-8. `src/controllers/realtime.controller.ts`
+1. `src/controllers/chat.controller.ts`
+2. `src/controllers/support.controller.ts`
+3. `src/controllers/realtime.controller.ts`
+4. `src/controllers/posts.controller.ts`
+5. `src/controllers/stories.controller.ts`
+6. `src/controllers/auth.controller.ts`
+7. `src/controllers/notifications.controller.ts`
+8. `src/controllers/marketplace.controller.ts`
 
 ## Notes
 
 - Public docs in the GitHub repo describe an older state than the current local schema and service layer.
 - On 2026-04-29, `settings.controller.ts` and `preferences.controller.ts` were moved off mutable seeded state for their main user-scoped reads and updates by introducing `SettingsDatabaseService`.
-- The next backend-first goal should be replacing the remaining `src/data/*` dependencies feature by feature, starting with discovery, chat adjunct routes, support, and realtime surfaces.
+- On 2026-04-29, `discovery.controller.ts` and `profiles.controller.ts` were moved off seeded ecosystem/platform lookups for their main read flows by introducing `DiscoveryDatabaseService` and `ProfilesDatabaseService`.
+- Remaining seeded dependencies for the current target slice are concentrated in `support.controller.ts`, `chat.controller.ts`, and `realtime.controller.ts`.
+- Latest verification for completed areas: `npm.cmd run typecheck` and `npm.cmd run build` must pass after each patch.
