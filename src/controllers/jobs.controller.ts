@@ -26,20 +26,22 @@ export class JobsController {
   }
 
   @Get('jobs-networking')
-  async getJobsNetworking() {
-    const jobsPayload = await this.experienceDatabase.getJobs();
-    const jobs = jobsPayload.jobs;
+  async getJobsNetworking(@Headers('authorization') authorization?: string) {
+    const viewer = await this.resolveViewer(authorization);
+    const payload = await this.experienceDatabase.getJobsNetworkingOverview(viewer?.id);
     return {
-      success: true,
-      message: 'Jobs networking overview fetched successfully.',
-      totalJobs: jobs.length,
-      openJobs: jobs.filter((job) => job.status === 'open').length,
-      jobs,
-      data: {
-        totalJobs: jobs.length,
-        openJobs: jobs.filter((job) => job.status === 'open').length,
-        jobs,
-      },
+      ...successResponse('Jobs networking overview fetched successfully.', payload),
+      totalJobs: payload.totalJobs,
+      openJobs: payload.openJobs,
+      jobs: payload.jobs,
+      myJobs: payload.myJobs,
+      applications: payload.applications,
+      alerts: payload.alerts,
+      companies: payload.companies,
+      profile: payload.profile,
+      employerStats: payload.employerStats,
+      employerProfile: payload.employerProfile,
+      applicants: payload.applicants,
     };
   }
 
@@ -139,47 +141,92 @@ export class JobsController {
   }
 
   @Get('jobs/alerts')
-  getJobAlerts() {
-    return successResponse('Job alerts fetched successfully.', {
-      items: [],
-      results: [],
-      alerts: [],
-    });
+  async getJobAlerts(
+    @Headers('authorization') authorization?: string,
+    @Query('userId') userId?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization, userId);
+    const alerts = await this.experienceDatabase.getJobAlerts(user.id);
+    return {
+      ...successResponse('Job alerts fetched successfully.', {
+        items: alerts,
+        results: alerts,
+        alerts,
+      }),
+      items: alerts,
+      results: alerts,
+      alerts,
+    };
   }
 
   @Get('jobs/companies')
   async getCompanies() {
-    const jobs = (await this.experienceDatabase.getJobs()).jobs;
-    const companies = [...new Set(jobs.map((job) => job.company))];
-    return successResponse('Job companies fetched successfully.', {
+    const companies = await this.experienceDatabase.getJobCompanies();
+    return {
+      ...successResponse('Job companies fetched successfully.', {
+        items: companies,
+        results: companies,
+        companies,
+      }),
       items: companies,
       results: companies,
       companies,
-    });
+    };
   }
 
   @Get('jobs/profile')
-  getCareerProfile() {
-    return { message: 'Career profile will be populated from profile and applications data.' };
+  async getCareerProfile(
+    @Headers('authorization') authorization?: string,
+    @Query('userId') userId?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization, userId);
+    return successResponse(
+      'Career profile fetched successfully.',
+      await this.experienceDatabase.getCareerProfile(user.id),
+    );
   }
 
   @Get('jobs/employer-stats')
-  async getEmployerStats() {
-    const jobs = (await this.experienceDatabase.getJobs()).jobs;
-    return successResponse('Employer stats fetched successfully.', {
-      totalJobs: jobs.length,
-      openJobs: jobs.filter((job) => job.status === 'open').length,
-    });
+  async getEmployerStats(
+    @Headers('authorization') authorization?: string,
+    @Query('userId') userId?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization, userId);
+    return successResponse(
+      'Employer stats fetched successfully.',
+      await this.experienceDatabase.getEmployerStats(user.id),
+    );
   }
 
   @Get('jobs/employer-profile')
-  getEmployerProfile() {
-    return { message: 'Employer profile will be composed from user and job data.' };
+  async getEmployerProfile(
+    @Headers('authorization') authorization?: string,
+    @Query('userId') userId?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization, userId);
+    return successResponse(
+      'Employer profile fetched successfully.',
+      await this.experienceDatabase.getEmployerProfile(user.id),
+    );
   }
 
   @Get('jobs/applicants')
-  getApplicants() {
-    return this.experienceDatabase.getJobApplications();
+  async getApplicants(
+    @Headers('authorization') authorization?: string,
+    @Query('userId') userId?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization, userId);
+    const applicants = await this.experienceDatabase.getApplicantsForRecruiter(user.id);
+    return {
+      ...successResponse('Job applicants fetched successfully.', {
+        items: applicants,
+        results: applicants,
+        applicants,
+      }),
+      items: applicants,
+      results: applicants,
+      applicants,
+    };
   }
 
   @Get('jobs/:id')
@@ -188,7 +235,19 @@ export class JobsController {
   }
 
   @Get('professional-profiles')
-  getProfessionalProfiles() {
-    return { message: 'Professional profile presets are now expected from real user/profile data.' };
+  async getProfessionalProfiles(
+    @Headers('authorization') authorization?: string,
+    @Query('userId') userId?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization, userId);
+    return successResponse(
+      'Professional profile fetched successfully.',
+      await this.experienceDatabase.getCareerProfile(user.id),
+    );
+  }
+
+  private async resolveViewer(authorization?: string) {
+    const token = authorization?.replace(/^Bearer\s+/i, '');
+    return this.coreDatabase.resolveUserFromAccessToken(token);
   }
 }

@@ -167,6 +167,19 @@ curl -X POST http://localhost:3000/marketplace/checkout ^
 ```bash
 curl http://localhost:3000/jobs
 curl "http://localhost:3000/jobs?page=1&limit=10&status=open&type=fullTime&search=flutter"
+curl http://localhost:3000/jobs-networking ^
+  -H "Authorization: Bearer <accessToken>"
+curl http://localhost:3000/jobs/alerts ^
+  -H "Authorization: Bearer <accessToken>"
+curl http://localhost:3000/jobs/profile ^
+  -H "Authorization: Bearer <accessToken>"
+curl http://localhost:3000/jobs/employer-stats ^
+  -H "Authorization: Bearer <accessToken>"
+curl http://localhost:3000/jobs/employer-profile ^
+  -H "Authorization: Bearer <accessToken>"
+curl http://localhost:3000/jobs/applicants ^
+  -H "Authorization: Bearer <accessToken>"
+curl http://localhost:3000/jobs/companies
 
 curl -X POST http://localhost:3000/jobs/create ^
   -H "Authorization: Bearer <accessToken>" ^

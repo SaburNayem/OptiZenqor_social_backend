@@ -75,11 +75,11 @@ These controllers still rely on non-Prisma runtime data sources:
 These routes exist, but the returned data is still incomplete versus the Flutter feature models:
 
 - `GET /jobs/alerts`
-  - Backend returns an empty list, while Flutter expects persisted alert records.
+  - Fixed in this pass. The route now resolves the authenticated user, persists alert state in `app_user_settings.settings.jobs.alerts`, and returns `items`, `results`, and `alerts`.
 - `GET /jobs/profile`
-  - Backend returns a placeholder message, while Flutter expects a structured `CareerProfileModel`.
+  - Fixed in this pass. The route now returns a DB-derived `CareerProfileModel` shape and persists the snapshot in `app_user_settings.settings.jobs.careerProfile`.
 - `GET /jobs/employer-profile`
-  - Backend returns a placeholder message, while Flutter expects `EmployerProfileModel`.
+  - Fixed in this pass. The route now returns a DB-derived `EmployerProfileModel` shape and persists the snapshot in `app_user_settings.settings.jobs.employerProfile`.
 - `GET /marketplace/detail/:id`
   - Product is persisted, but `saved`, `sellerFollowed`, `chatMessages`, and `offerHistory` are still placeholders.
 - `GET /communities/:id`
@@ -200,10 +200,26 @@ New backend behavior:
 - `PATCH /saved-collections/:id` now updates persisted collection metadata and items.
 - `DELETE /saved-collections/:id` now deletes a persisted collection.
 
+Jobs profile/dashboard routes are now database-backed instead of placeholder controller responses.
+
+Additional files changed for this fix:
+
+- `src/services/experience-database.service.ts`
+- `src/controllers/jobs.controller.ts`
+
+Additional backend behavior:
+
+- `GET /jobs-networking` now returns a composed DB-backed dashboard payload with `jobs`, `companies`, and authenticated user sections like `myJobs`, `applications`, `alerts`, `profile`, `employerStats`, `employerProfile`, and `applicants`.
+- `GET /jobs/alerts` now persists and returns job alerts from `app_user_settings`.
+- `GET /jobs/companies` now returns structured company payloads derived from persisted jobs and recruiters instead of bare company strings.
+- `GET /jobs/profile` now returns a DB-derived career profile instead of a placeholder message.
+- `GET /jobs/employer-stats` now aggregates persisted jobs, applications, and thread participation counts.
+- `GET /jobs/employer-profile` now returns a DB-derived employer profile instead of a placeholder message.
+- `GET /jobs/applicants` now returns recruiter-scoped applicant records built from persisted job applications.
+
 ## Recommended next backend passes
 
-1. Replace jobs placeholders with persisted job alerts, career profiles, employer profiles, and applicant datasets.
-2. Replace support/help static services with Prisma-backed support tickets and support conversations.
-3. Replace realtime live-stream and group-chat static services with Prisma-backed models.
-4. Replace chat preference/archive/mute/pin helper state with persisted tables or structured user settings.
-5. Replace discovery/trending/hashtags static services with query-driven persisted or derived data.
+1. Replace support/help static services with Prisma-backed support tickets and support conversations.
+2. Replace realtime live-stream and group-chat static services with Prisma-backed models.
+3. Replace chat preference/archive/mute/pin helper state with persisted tables or structured user settings.
+4. Replace discovery/trending/hashtags static services with query-driven persisted or derived data.

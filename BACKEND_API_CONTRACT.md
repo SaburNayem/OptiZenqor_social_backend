@@ -198,6 +198,14 @@ List responses return `data.products`, `data.items`, and `data.results` plus pag
 ### Jobs
 
 - `GET /jobs`
+- `GET /jobs-networking`
+- `GET /jobs/applications`
+- `GET /jobs/alerts`
+- `GET /jobs/companies`
+- `GET /jobs/profile`
+- `GET /jobs/employer-stats`
+- `GET /jobs/employer-profile`
+- `GET /jobs/applicants`
 - `GET /jobs/:id`
 - `POST /jobs/create`
 - `POST /jobs/:id/apply`
@@ -205,6 +213,10 @@ List responses return `data.products`, `data.items`, and `data.results` plus pag
 These now use database-backed job and application models.
 
 List responses return `data.jobs`, `data.items`, and `data.results` plus pagination metadata. Query support includes `page`, `limit`, `search`, `status`, `type`, `userId`, `sort`, and `order`.
+
+`GET /jobs-networking` now returns a composed database-backed dashboard payload with `jobs`, `companies`, and, when authenticated, `myJobs`, `applications`, `alerts`, `profile`, `employerStats`, `employerProfile`, and `applicants`.
+
+`GET /jobs/alerts`, `GET /jobs/profile`, `GET /jobs/employer-stats`, `GET /jobs/employer-profile`, and `GET /jobs/applicants` resolve the current user from the bearer token and return standardized `{ success, message, data }` responses. Compatibility aliases remain in place for collection endpoints like alerts and applicants.
 
 ### Events
 

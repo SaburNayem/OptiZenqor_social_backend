@@ -144,12 +144,23 @@ The intent is:
 ## Jobs
 
 ### `GET /jobs`
+### `GET /jobs-networking`
+### `GET /jobs/applications`
+### `GET /jobs/alerts`
+### `GET /jobs/companies`
+### `GET /jobs/profile`
+### `GET /jobs/employer-stats`
+### `GET /jobs/employer-profile`
+### `GET /jobs/applicants`
 ### `GET /jobs/:id`
 ### `POST /jobs/create`
 ### `POST /jobs/:id/apply`
 - Purpose: database-backed jobs and applications
 - `GET /jobs` returns `data.jobs`, `data.items`, `data.results`, and pagination metadata
 - Query support: `page`, `limit`, `search`, `status`, `type`, `userId`, `sort`, `order`
+- `GET /jobs-networking` now returns the full jobs dashboard aggregate expected by Flutter, including `jobs`, `companies`, and authenticated user blocks like `myJobs`, `applications`, `alerts`, `profile`, `employerStats`, `employerProfile`, and `applicants`
+- `GET /jobs/alerts` and `GET /jobs/applicants` keep `data.items`, `data.results`, and feature-specific aliases (`alerts`, `applicants`)
+- `GET /jobs/profile`, `GET /jobs/employer-stats`, and `GET /jobs/employer-profile` now return persisted or DB-derived user-scoped payloads instead of placeholder messages
 
 ## Events
 

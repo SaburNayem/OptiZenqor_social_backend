@@ -300,6 +300,45 @@ export class ExperienceDatabaseService {
     };
   }
 
+  async getJobsNetworkingOverview(userId?: string) {
+    const [jobsPayload, companies] = await Promise.all([
+      this.getJobs(),
+      this.getJobCompanies(),
+    ]);
+
+    const jobs = jobsPayload.jobs;
+    const payload: Record<string, unknown> = {
+      totalJobs: jobs.length,
+      openJobs: jobs.filter((job) => job.status === 'open').length,
+      jobs,
+      companies,
+    };
+
+    if (userId?.trim()) {
+      const normalizedUserId = userId.trim();
+      const [myJobsPayload, applications, alerts, profile, employerStats, employerProfile, applicants] =
+        await Promise.all([
+          this.getJobs({ userId: normalizedUserId, limit: 50 }),
+          this.getJobApplications(normalizedUserId),
+          this.getJobAlerts(normalizedUserId),
+          this.getCareerProfile(normalizedUserId),
+          this.getEmployerStats(normalizedUserId),
+          this.getEmployerProfile(normalizedUserId),
+          this.getApplicantsForRecruiter(normalizedUserId),
+        ]);
+
+      payload.myJobs = myJobsPayload.jobs;
+      payload.applications = applications;
+      payload.alerts = alerts;
+      payload.profile = profile;
+      payload.employerStats = employerStats;
+      payload.employerProfile = employerProfile;
+      payload.applicants = applicants;
+    }
+
+    return payload;
+  }
+
   async getJob(id: string) {
     const job = await this.prisma.job.findFirst({
       where: { id, deletedAt: null },
@@ -345,6 +384,9 @@ export class ExperienceDatabaseService {
         jobId,
         applicantId,
         applicantName,
+        coverLetter: null,
+        resumeUrl: null,
+        metadata: {} as Prisma.InputJsonValue,
         status: 'submitted',
       },
       update: {
@@ -359,9 +401,281 @@ export class ExperienceDatabaseService {
   async getJobApplications(applicantId?: string) {
     const applications = await this.prisma.jobApplication.findMany({
       where: applicantId ? { applicantId } : undefined,
+      include: {
+        job: true,
+        applicant: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
-    return applications.map((row) => this.mapJobApplication(row));
+    return applications.map((row) =>
+      this.mapJobApplication({
+        ...row,
+        jobTitle: row.job.title,
+        company: row.job.company,
+        applicantSkills: this.jsonStringArray(row.applicant.interests),
+      }),
+    );
+  }
+
+  async getJobAlerts(userId: string) {
+    const [user, settings] = await Promise.all([
+      this.coreDatabase.getUser(userId),
+      this.getUserSettingsState(userId),
+    ]);
+    const jobsState = this.readJobsState(settings);
+    const storedAlerts = Array.isArray(jobsState.alerts)
+      ? jobsState.alerts
+          .map((item: unknown, index: number) => this.normalizeJobAlert(item, index, user.location))
+          .filter((item): item is ReturnType<ExperienceDatabaseService['normalizeJobAlert']> =>
+            Boolean(item),
+          )
+      : [];
+
+    if (storedAlerts.length > 0) {
+      return storedAlerts;
+    }
+
+    const recentApplications = await this.prisma.jobApplication.findMany({
+      where: { applicantId: userId },
+      include: { job: true },
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+    });
+
+    const keywords = [
+      ...recentApplications.map((item) => item.job.title),
+      ...this.jsonStringArray(user.interests),
+    ]
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const uniqueKeywords = [...new Set(keywords)].slice(0, 3);
+    const alerts = (uniqueKeywords.length > 0 ? uniqueKeywords : ['Open roles']).map(
+      (keyword, index) => ({
+        id: `job_alert_${userId}_${index + 1}`,
+        keyword,
+        location: user.location?.trim() || recentApplications[0]?.job.location || 'Any',
+        frequency: index === 0 ? 'daily' : 'weekly',
+        enabled: true,
+      }),
+    );
+
+    await this.mergeUserSettingsState(userId, {
+      jobs: {
+        ...jobsState,
+        alerts,
+      },
+    });
+
+    return alerts;
+  }
+
+  async getCareerProfile(userId: string) {
+    const [user, settings, applications] = await Promise.all([
+      this.coreDatabase.getUser(userId),
+      this.getUserSettingsState(userId),
+      this.prisma.jobApplication.findMany({
+        where: { applicantId: userId },
+        include: { job: true },
+        orderBy: { createdAt: 'desc' },
+        take: 8,
+      }),
+    ]);
+    const jobsState = this.readJobsState(settings);
+    const storedProfile =
+      jobsState.careerProfile && typeof jobsState.careerProfile === 'object'
+        ? this.toObject(jobsState.careerProfile as Prisma.JsonValue)
+        : null;
+
+    if (storedProfile && Object.keys(storedProfile).length > 0) {
+      return storedProfile;
+    }
+
+    const experience = applications.map(
+      (item) => `${this.titleCase(item.status)} application for ${item.job.title} at ${item.job.company}`,
+    );
+    const skills = [
+      ...this.jsonStringArray(user.interests),
+      ...applications.flatMap((item) => this.jsonStringArray(item.job.skills)),
+    ];
+    const profile = {
+      name: user.name,
+      title: applications[0]?.job.title ?? this.titleCase(String(user.role ?? 'professional')),
+      skills: [...new Set(skills)].slice(0, 12),
+      experience: [...new Set(experience)].slice(0, 8),
+      education: this.readStringArray(storedProfile?.education).slice(0, 6),
+      resumeLabel:
+        this.readString(storedProfile?.resumeLabel) ??
+        this.readString(applications[0]?.metadata, 'resumeLabel') ??
+        'Primary resume',
+      portfolioLinks: this.readStringArray(storedProfile?.portfolioLinks).slice(0, 6),
+      availability:
+        this.readString(storedProfile?.availability) ??
+        (applications.length > 0 ? 'Open to work' : 'Exploring opportunities'),
+    };
+
+    await this.mergeUserSettingsState(userId, {
+      jobs: {
+        ...jobsState,
+        careerProfile: profile,
+      },
+    });
+
+    return profile;
+  }
+
+  async getEmployerStats(userId: string) {
+    const [jobs, applications, messageCount] = await Promise.all([
+      this.prisma.job.findMany({
+        where: { recruiterId: userId, deletedAt: null },
+      }),
+      this.prisma.jobApplication.findMany({
+        where: {
+          job: {
+            recruiterId: userId,
+          },
+        },
+      }),
+      this.prisma.chatThreadParticipant.count({
+        where: { userId },
+      }),
+    ]);
+
+    return {
+      totalJobs: jobs.length,
+      openJobs: jobs.filter((job) => job.status === 'open').length,
+      totalApplicants: applications.length,
+      shortlistedCandidates: applications.filter((item) =>
+        ['shortlisted', 'viewed'].includes(item.status.toLowerCase()),
+      ).length,
+      messages: messageCount,
+    };
+  }
+
+  async getEmployerProfile(userId: string) {
+    const [user, settings, jobs, stats] = await Promise.all([
+      this.coreDatabase.getUser(userId),
+      this.getUserSettingsState(userId),
+      this.prisma.job.findMany({
+        where: { recruiterId: userId, deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+      this.getEmployerStats(userId),
+    ]);
+    const jobsState = this.readJobsState(settings);
+    const storedProfile =
+      jobsState.employerProfile && typeof jobsState.employerProfile === 'object'
+        ? this.toObject(jobsState.employerProfile as Prisma.JsonValue)
+        : null;
+
+    if (storedProfile && Object.keys(storedProfile).length > 0) {
+      return storedProfile;
+    }
+
+    const latestJob = jobs[0];
+    const hiringFocus = [
+      ...jobs.flatMap((job) => this.jsonStringArray(job.skills)),
+      ...jobs.map((job) => job.title),
+    ];
+    const profile = {
+      companyName: latestJob?.company || user.name,
+      hiringTitle: `${this.titleCase(String(user.role ?? 'employer'))} hiring profile`,
+      about: latestJob?.description || user.bio || `Hiring from ${user.name} on OptiZenqor.`,
+      location: user.location?.trim() || latestJob?.location || 'Remote',
+      hiringFocus: [...new Set(hiringFocus)].slice(0, 8),
+      openRoles: [...new Set(jobs.filter((job) => job.status === 'open').map((job) => job.title))].slice(
+        0,
+        8,
+      ),
+      teamHighlights: [
+        `${stats.totalJobs} roles posted`,
+        `${stats.totalApplicants} applicants in pipeline`,
+        `${stats.shortlistedCandidates} shortlisted or reviewed`,
+      ],
+    };
+
+    await this.mergeUserSettingsState(userId, {
+      jobs: {
+        ...jobsState,
+        employerProfile: profile,
+      },
+    });
+
+    return profile;
+  }
+
+  async getApplicantsForRecruiter(userId: string) {
+    const applications = await this.prisma.jobApplication.findMany({
+      where: {
+        job: {
+          recruiterId: userId,
+        },
+      },
+      include: {
+        job: true,
+        applicant: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return applications.map((row) => ({
+      id: row.applicantId,
+      applicationId: row.id,
+      name: row.applicantName || row.applicant.name,
+      title: row.job.title,
+      skills: this.jsonStringArray(row.applicant.interests),
+      status: row.status,
+      resumeLabel: this.readString(row.metadata, 'resumeLabel') ?? 'Primary resume',
+      appliedDate: row.createdAt.toISOString(),
+    }));
+  }
+
+  async getJobCompanies() {
+    const jobs = await this.prisma.job.findMany({
+      where: { deletedAt: null },
+      include: {
+        recruiter: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const companies = new Map<
+      string,
+      {
+        id: string;
+        name: string;
+        tagline: string;
+        logoInitial: string;
+        colorValue: number;
+        followers: number;
+        followed: boolean;
+        verified: boolean;
+      }
+    >();
+
+    for (const job of jobs) {
+      const key = job.company.trim().toLowerCase();
+      if (!key) {
+        continue;
+      }
+      const existing = companies.get(key);
+      const tagline = this.compactText(job.recruiter.bio || job.description, 96);
+      const next = {
+        id: existing?.id ?? `company_${this.slugify(job.company)}`,
+        name: job.company,
+        tagline: existing?.tagline || tagline || 'Hiring on OptiZenqor',
+        logoInitial: job.company.trim().charAt(0).toUpperCase() || 'C',
+        colorValue: existing?.colorValue ?? this.colorFromString(job.company),
+        followers: Math.max(existing?.followers ?? 0, job.recruiter.followers),
+        followed: false,
+        verified:
+          existing?.verified ??
+          Boolean(job.recruiter.emailVerified || `${job.recruiter.verification}`.toLowerCase().includes('verified')),
+      };
+      companies.set(key, next);
+    }
+
+    return [...companies.values()];
   }
 
   async getEvents(query: string | EventsQueryDto = {}) {
@@ -963,19 +1277,25 @@ export class ExperienceDatabaseService {
     recruiterId: string;
     title: string;
     company: string;
+    description: string;
     location: string | null;
     type: string;
     experienceLevel: string | null;
     salaryMin: number | null;
     salaryMax: number | null;
+    skills: Prisma.JsonValue;
+    metadata: Prisma.JsonValue;
     status: string;
     createdAt: Date;
   }) {
+    const metadata = this.toObject(row.metadata);
     return {
       id: row.id,
       recruiterId: row.recruiterId,
       title: row.title,
       company: row.company,
+      companyName: row.company,
+      description: row.description,
       location: row.location ?? '',
       type: row.type,
       experienceLevel: row.experienceLevel ?? 'entry',
@@ -983,6 +1303,24 @@ export class ExperienceDatabaseService {
         row.salaryMin != null || row.salaryMax != null
           ? `${row.salaryMin ?? row.salaryMax ?? 0}-${row.salaryMax ?? row.salaryMin ?? 0}`
           : '',
+      skills: this.jsonStringArray(row.skills),
+      responsibilities: this.readStringArray(metadata.responsibilities),
+      requirements: this.readStringArray(metadata.requirements),
+      benefits: this.readStringArray(metadata.benefits),
+      aboutCompany: this.readString(metadata.aboutCompany) ?? '',
+      quickApplyEnabled: this.readBoolean(metadata.quickApplyEnabled, true),
+      verifiedEmployer: this.readBoolean(metadata.verifiedEmployer, false),
+      featured: this.readBoolean(metadata.featured, false),
+      remoteFriendly:
+        this.readBoolean(metadata.remoteFriendly) ??
+        ((row.location ?? '').toLowerCase().includes('remote') ||
+          row.type.toLowerCase() === 'remote'),
+      draft: row.status.toLowerCase() === 'draft',
+      closed: row.status.toLowerCase() === 'closed',
+      externalApplyEnabled: this.readBoolean(metadata.externalApplyEnabled, false),
+      contactLink: this.readString(metadata.contactLink),
+      deadlineLabel: this.readString(metadata.deadlineLabel),
+      postedTime: this.toRelativeTime(row.createdAt),
       status: row.status,
       createdAt: row.createdAt.toISOString(),
     };
@@ -993,14 +1331,29 @@ export class ExperienceDatabaseService {
     jobId: string;
     applicantId: string;
     applicantName: string;
+    coverLetter?: string | null;
+    resumeUrl?: string | null;
+    metadata?: Prisma.JsonValue;
+    jobTitle?: string;
+    company?: string;
+    applicantSkills?: string[];
     status: string;
     createdAt: Date;
   }) {
+    const metadata = this.toObject(row.metadata ?? {});
     return {
       id: row.id,
       jobId: row.jobId,
       applicantId: row.applicantId,
       applicantName: row.applicantName,
+      title: row.jobTitle ?? '',
+      company: row.company ?? '',
+      skills: row.applicantSkills ?? [],
+      coverLetter: row.coverLetter ?? '',
+      portfolioLink: this.readString(metadata.portfolioLink) ?? '',
+      resumeLabel: this.readString(metadata.resumeLabel) ?? 'Primary resume',
+      appliedDate: row.createdAt.toISOString(),
+      timeline: this.buildApplicationTimeline(row.status, row.createdAt),
       status: row.status,
       createdAt: row.createdAt.toISOString(),
     };
@@ -1149,6 +1502,184 @@ export class ExperienceDatabaseService {
 
   private asString(value: unknown) {
     return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  }
+
+  private async getUserSettingsState(userId: string) {
+    const row = await this.prisma.userSettings.findUnique({
+      where: { userId },
+    });
+    return this.toObject(row?.settings ?? {});
+  }
+
+  private async mergeUserSettingsState(userId: string, patch: Record<string, unknown>) {
+    const current = await this.getUserSettingsState(userId);
+    const next = this.mergeObjects(current, patch);
+    await this.prisma.userSettings.upsert({
+      where: { userId },
+      create: {
+        userId,
+        settings: next as Prisma.InputJsonValue,
+      },
+      update: {
+        settings: next as Prisma.InputJsonValue,
+        updatedAt: new Date(),
+      },
+    });
+    return next;
+  }
+
+  private readJobsState(settings: Record<string, unknown>) {
+    const value = settings.jobs;
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  }
+
+  private normalizeJobAlert(item: unknown, index: number, fallbackLocation?: string) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return null;
+    }
+    const record = item as Record<string, unknown>;
+    const keyword = this.readString(record.keyword);
+    if (!keyword) {
+      return null;
+    }
+    return {
+      id: this.readString(record.id) ?? `job_alert_${index + 1}`,
+      keyword,
+      location: this.readString(record.location) ?? (fallbackLocation?.trim() || 'Any'),
+      frequency: this.normalizeAlertFrequency(this.readString(record.frequency)),
+      enabled: this.readBoolean(record.enabled, true),
+    };
+  }
+
+  private normalizeAlertFrequency(value?: string | null) {
+    const normalized = (value ?? '').trim().toLowerCase();
+    switch (normalized) {
+      case 'instant':
+      case 'weekly':
+        return normalized;
+      default:
+        return 'daily';
+    }
+  }
+
+  private buildApplicationTimeline(status: string, createdAt: Date) {
+    const submittedAt = this.toRelativeTime(createdAt);
+    const normalizedStatus = status.trim().toLowerCase();
+    const timeline = [`Application submitted ${submittedAt}`];
+    if (normalizedStatus === 'viewed' || normalizedStatus === 'shortlisted') {
+      timeline.push('Viewed by hiring team');
+    }
+    if (normalizedStatus === 'shortlisted') {
+      timeline.push('Shortlisted for next review');
+    } else if (normalizedStatus === 'rejected') {
+      timeline.push('Application closed');
+    } else if (normalizedStatus === 'submitted') {
+      timeline.push('Recruiter review pending');
+    }
+    return timeline;
+  }
+
+  private mergeObjects(
+    target: Record<string, unknown>,
+    patch: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const next: Record<string, unknown> = { ...target };
+    for (const [key, value] of Object.entries(patch)) {
+      if (
+        value &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        next[key] &&
+        typeof next[key] === 'object' &&
+        !Array.isArray(next[key])
+      ) {
+        next[key] = this.mergeObjects(
+          next[key] as Record<string, unknown>,
+          value as Record<string, unknown>,
+        );
+      } else {
+        next[key] = value;
+      }
+    }
+    return next;
+  }
+
+  private readString(value: unknown, key?: string) {
+    const candidate =
+      key && value && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Record<string, unknown>)[key]
+        : value;
+    return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : undefined;
+  }
+
+  private readStringArray(value: unknown) {
+    return Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      : [];
+  }
+
+  private readBoolean(value: unknown, fallback?: boolean) {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    return fallback;
+  }
+
+  private jsonStringArray(value: Prisma.JsonValue | unknown) {
+    return Array.isArray(value)
+      ? value
+          .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          .map((item) => item.trim())
+      : [];
+  }
+
+  private slugify(value: string) {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'company';
+  }
+
+  private colorFromString(value: string) {
+    const palette = [0xff2563eb, 0xff7c3aed, 0xfff97316, 0xff059669, 0xffdc2626];
+    const hash = [...value].reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return palette[hash % palette.length];
+  }
+
+  private compactText(value: string, maxLength: number) {
+    const normalized = value.replace(/\s+/g, ' ').trim();
+    if (!normalized) {
+      return '';
+    }
+    return normalized.length <= maxLength
+      ? normalized
+      : `${normalized.slice(0, Math.max(0, maxLength - 3)).trim()}...`;
+  }
+
+  private toRelativeTime(value: Date) {
+    const diffMs = Date.now() - value.getTime();
+    const diffMinutes = Math.max(1, Math.floor(diffMs / 60000));
+    if (diffMinutes < 60) {
+      return `${diffMinutes} minute${diffMinutes === 1 ? '' : 's'} ago`;
+    }
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) {
+      return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+    }
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) {
+      return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+    }
+    return value.toISOString();
+  }
+
+  private toObject(value: Prisma.JsonValue | unknown) {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
   }
 
   private normalizePaging(page?: number, limit?: number) {
