@@ -4,7 +4,13 @@ export type IdPrefix =
   | 'user'
   | 'story'
   | 'post'
+  | 'job'
+  | 'application'
+  | 'event'
+  | 'community'
+  | 'page'
   | 'product'
+  | 'wallet'
   | 'bookmark'
   | 'upload'
   | 'comment'
@@ -26,7 +32,9 @@ export type IdPrefix =
   | 'call_session'
   | 'call_signal'
   | 'collection'
-  | 'collection_item';
+  | 'collection_item'
+  | 'campaign'
+  | 'txn';
 
 export function makeId<T extends IdPrefix>(prefix: T): `${T}_${string}` {
   return `${prefix}_${randomUUID().replace(/-/g, '')}` as `${T}_${string}`;

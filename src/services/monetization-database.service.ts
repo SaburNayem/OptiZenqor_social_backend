@@ -17,7 +17,7 @@ export class MonetizationDatabaseService implements OnModuleInit {
     return this.prisma.walletAccount.upsert({
       where: { userId },
       create: {
-        id: `wallet_${Date.now()}`,
+        id: makeId('wallet'),
         userId,
       },
       update: {},
@@ -92,7 +92,7 @@ export class MonetizationDatabaseService implements OnModuleInit {
   }) {
     const campaign = await this.prisma.notificationCampaign.create({
       data: {
-        id: `campaign_${Date.now()}`,
+        id: makeId('campaign'),
         name: input.name,
         audience: input.audience,
         schedule: input.schedule,
@@ -155,7 +155,7 @@ export class MonetizationDatabaseService implements OnModuleInit {
         const wallet = await this.getOrCreateWalletAccount(firstUser.id);
         await this.prisma.walletTransaction.create({
           data: {
-            id: `txn_${Date.now()}`,
+            id: makeId('txn'),
             walletAccountId: wallet.id,
             userId: firstUser.id,
             type: 'credit',

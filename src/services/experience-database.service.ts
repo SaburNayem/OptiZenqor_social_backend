@@ -354,7 +354,7 @@ export class ExperienceDatabaseService {
     const { min, max } = this.parseSalaryRange(body.salary);
     const job = await this.prisma.job.create({
       data: {
-        id: `job_${Date.now()}`,
+        id: makeId('job'),
         recruiterId,
         title: body.title,
         company: body.company,
@@ -380,7 +380,7 @@ export class ExperienceDatabaseService {
         },
       },
       create: {
-        id: `application_${Date.now()}`,
+        id: makeId('application'),
         jobId,
         applicantId,
         applicantName,
@@ -743,7 +743,7 @@ export class ExperienceDatabaseService {
     const organizer = await this.coreDatabase.getUser(organizerId);
     const event = await this.prisma.event.create({
       data: {
-        id: `event_${Date.now()}`,
+        id: makeId('event'),
         organizerId,
         organizerName: body.organizer || organizer.name,
         title: body.title,
@@ -990,7 +990,7 @@ export class ExperienceDatabaseService {
     const owner = await this.coreDatabase.getUser(input.ownerId);
     const community = await this.prisma.community.create({
       data: {
-        id: `community_${Date.now()}`,
+        id: makeId('community'),
         ownerId: input.ownerId,
         ownerName: input.ownerName ?? owner.name,
         name: input.name,
@@ -1126,7 +1126,7 @@ export class ExperienceDatabaseService {
     await this.coreDatabase.getUser(body.ownerId);
     const page = await this.prisma.page.create({
       data: {
-        id: `page_${Date.now()}`,
+        id: makeId('page'),
         ownerId: body.ownerId,
         name: body.name,
         about: body.about,
