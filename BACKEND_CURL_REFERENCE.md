@@ -135,6 +135,14 @@ curl -X POST http://localhost:3000/bookmarks ^
 
 curl http://localhost:3000/drafts ^
   -H "Authorization: Bearer <accessToken>"
+
+curl http://localhost:3000/saved-collections ^
+  -H "Authorization: Bearer <accessToken>"
+
+curl -X POST http://localhost:3000/saved-collections ^
+  -H "Authorization: Bearer <accessToken>" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"name\":\"Creator references\",\"itemIds\":[\"post_xxx\",\"reel_xxx\"]}"
 ```
 
 ## Marketplace

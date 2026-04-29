@@ -172,6 +172,15 @@ Bookmarks are persisted in PostgreSQL.
 
 Draft and scheduling metadata are persisted in PostgreSQL.
 
+### `GET /saved-collections`
+### `GET /saved-collections/:id`
+### `POST /saved-collections`
+### `PATCH /saved-collections`
+### `PATCH /saved-collections/:id`
+### `DELETE /saved-collections/:id`
+
+Saved collections are now persisted in PostgreSQL through `app_collections` and `app_collection_items`.
+
 ## Experience contract
 
 ### Marketplace

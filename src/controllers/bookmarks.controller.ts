@@ -49,10 +49,32 @@ export class BookmarksController {
 
   @Post()
   async addBookmark(
-    @Body() body: AddBookmarkDto,
+    @Body() body: AddBookmarkDto & {
+      items?: Array<{
+        id: string;
+        title?: string;
+        type?: 'post' | 'reel' | 'product';
+      }>;
+    },
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+
+    if (Array.isArray(body.items) && body.items.length > 0) {
+      const bookmarks = await Promise.all(
+        body.items
+          .filter((item) => item?.id?.trim())
+          .map((item) =>
+            this.accountStateDatabase.addBookmark(user.id, {
+              entityId: item.id,
+              title: item.title,
+              type: item.type,
+            }),
+          ),
+      );
+      return successResponse('Bookmarks synced successfully.', bookmarks);
+    }
+
     return successResponse(
       'Bookmark added successfully.',
       await this.accountStateDatabase.addBookmark(user.id, {
@@ -69,12 +91,15 @@ export class BookmarksController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    const post = this.platformData.getPost(postId);
+    const post = await this.coreDatabase.getPost(postId).catch(() => null);
+    const fallbackPost = post ? null : this.platformData.getPost(postId);
+    const entityId = post?.id ?? fallbackPost?.id ?? postId;
+    const title = post?.caption ?? fallbackPost?.caption ?? postId;
     return successResponse(
       'Bookmark added successfully.',
       await this.accountStateDatabase.addBookmark(user.id, {
-        entityId: post.id,
-        title: post.caption,
+        entityId,
+        title,
         type: 'post',
       }),
     );

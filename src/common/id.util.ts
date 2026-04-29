@@ -24,7 +24,9 @@ export type IdPrefix =
   | 'buddy_request'
   | 'buddy_relation'
   | 'call_session'
-  | 'call_signal';
+  | 'call_signal'
+  | 'collection'
+  | 'collection_item';
 
 export function makeId<T extends IdPrefix>(prefix: T): `${T}_${string}` {
   return `${prefix}_${randomUUID().replace(/-/g, '')}` as `${T}_${string}`;

@@ -1,8 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { EcosystemDataService } from '../data/ecosystem-data.service';
 import { PlatformDataService } from '../data/platform-data.service';
+import { CreateSavedCollectionDto, UpdateSavedCollectionDto } from '../dto/api.dto';
+import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('discovery')
 @Controller()
@@ -11,6 +15,7 @@ export class DiscoveryController {
     private readonly ecosystemData: EcosystemDataService,
     private readonly platformData: PlatformDataService,
     private readonly coreDatabase: CoreDatabaseService,
+    private readonly accountStateDatabase: AccountStateDatabaseService,
   ) {}
 
   @Get('hashtags')
@@ -53,36 +58,108 @@ export class DiscoveryController {
   }
 
   @Get('saved-collections')
-  getCollections() {
-    return this.ecosystemData.getCollections();
+  @UseGuards(SessionAuthGuard)
+  async getCollections(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const collections = await this.accountStateDatabase.getCollections(user.id);
+    return successResponse('Saved collections fetched successfully.', {
+      collections,
+      items: collections,
+      results: collections,
+    });
   }
 
   @Get('saved-collections/:id')
-  getCollection(@Param('id') id: string) {
-    return this.ecosystemData.getCollection(id);
+  @UseGuards(SessionAuthGuard)
+  async getCollection(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const collection = await this.accountStateDatabase.getCollection(user.id, id);
+    return successResponse('Saved collection fetched successfully.', {
+      collection,
+      item: collection,
+      data: collection,
+    });
   }
 
   @Post('saved-collections')
-  createCollection(@Body() body: { name: string }) {
-    return this.ecosystemData.createCollection(body.name);
+  @UseGuards(SessionAuthGuard)
+  async createCollection(
+    @Body()
+    body: CreateSavedCollectionDto & {
+      items?: Array<{ id?: string; name: string; itemIds?: string[]; privacy?: string }>;
+    },
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    if (Array.isArray(body.items) && body.items.length > 0) {
+      const collections = await this.accountStateDatabase.syncCollections(user.id, body.items);
+      return successResponse('Saved collections synced successfully.', {
+        collections,
+        items: collections,
+        results: collections,
+      });
+    }
+
+    const collection = await this.accountStateDatabase.createCollection(user.id, {
+      name: body.name,
+      privacy: body.privacy,
+      itemIds: body.itemIds,
+    });
+    return successResponse('Saved collection created successfully.', {
+      collection,
+      item: collection,
+      data: collection,
+    });
   }
 
   @Patch('saved-collections')
-  addItemToCollection(@Body() body: { collectionId: string; itemId: string }) {
-    return this.ecosystemData.addItemToCollection(body.collectionId, body.itemId);
+  @UseGuards(SessionAuthGuard)
+  async addItemToCollection(
+    @Body() body: { collectionId: string; itemId: string; itemIds?: string[] },
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const collection = await this.accountStateDatabase.addItemsToCollection(user.id, body.collectionId, [
+      ...(body.itemIds ?? []),
+      body.itemId,
+    ]);
+    return successResponse('Saved collection updated successfully.', {
+      collection,
+      item: collection,
+      data: collection,
+    });
   }
 
   @Patch('saved-collections/:id')
-  updateCollection(
+  @UseGuards(SessionAuthGuard)
+  async updateCollection(
     @Param('id') id: string,
-    @Body() body: { name?: string; privacy?: string; itemId?: string },
+    @Body() body: UpdateSavedCollectionDto,
+    @Headers('authorization') authorization?: string,
   ) {
-    return this.ecosystemData.updateCollection(id, body);
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const collection = await this.accountStateDatabase.updateCollection(user.id, id, body);
+    return successResponse('Saved collection updated successfully.', {
+      collection,
+      item: collection,
+      data: collection,
+    });
   }
 
   @Delete('saved-collections/:id')
-  deleteCollection(@Param('id') id: string) {
-    return this.ecosystemData.deleteCollection(id);
+  @UseGuards(SessionAuthGuard)
+  async deleteCollection(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Saved collection deleted successfully.',
+      await this.accountStateDatabase.deleteCollection(user.id, id),
+    );
   }
 
   private async buildGlobalSearch(query?: string, limitQuery?: string) {

@@ -49,6 +49,164 @@ export class AccountStateDatabaseService {
     return bookmarks.map((row) => this.mapBookmark(row));
   }
 
+  async getCollections(userId: string) {
+    const collections = await this.prisma.collection.findMany({
+      where: { userId },
+      include: {
+        items: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return collections.map((row) => this.mapCollection(row));
+  }
+
+  async getCollection(userId: string, id: string) {
+    const collection = await this.prisma.collection.findFirst({
+      where: { id, userId },
+      include: {
+        items: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+    if (!collection) {
+      throw new NotFoundException(`Collection ${id} not found`);
+    }
+    return this.mapCollection(collection);
+  }
+
+  async createCollection(
+    userId: string,
+    input: { name: string; privacy?: string; itemIds?: string[] },
+  ) {
+    const collection = await this.prisma.collection.create({
+      data: {
+        id: makeId('collection'),
+        userId,
+        title: input.name,
+        visibility: this.normalizeCollectionVisibility(input.privacy),
+      },
+    });
+
+    if (input.itemIds?.length) {
+      await this.addItemsToCollection(userId, collection.id, input.itemIds);
+    }
+
+    return this.getCollection(userId, collection.id);
+  }
+
+  async syncCollections(
+    userId: string,
+    items: Array<{ id?: string; name: string; itemIds?: string[]; privacy?: string }>,
+  ) {
+    const existing = await this.prisma.collection.findMany({
+      where: { userId },
+      select: { id: true },
+    });
+    const keepIds = new Set(items.map((item) => item.id?.trim()).filter(Boolean));
+    const removeIds = existing
+      .map((item) => item.id)
+      .filter((id) => !keepIds.has(id));
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const item of items) {
+        const id = item.id?.trim() || makeId('collection');
+        await tx.collection.upsert({
+          where: { id },
+          create: {
+            id,
+            userId,
+            title: item.name,
+            visibility: this.normalizeCollectionVisibility(item.privacy),
+          },
+          update: {
+            title: item.name,
+            visibility: this.normalizeCollectionVisibility(item.privacy),
+            updatedAt: new Date(),
+          },
+        });
+
+        await tx.collectionItem.deleteMany({ where: { collectionId: id } });
+        for (const entityId of [...new Set(item.itemIds ?? [])].filter(Boolean)) {
+          await tx.collectionItem.create({
+            data: this.buildCollectionItemCreateInput(id, entityId),
+          });
+        }
+      }
+
+      if (removeIds.length > 0) {
+        await tx.collection.deleteMany({
+          where: {
+            userId,
+            id: { in: removeIds },
+          },
+        });
+      }
+    });
+
+    return this.getCollections(userId);
+  }
+
+  async addItemsToCollection(userId: string, collectionId: string, itemIds: string[]) {
+    await this.getCollection(userId, collectionId);
+    for (const entityId of [...new Set(itemIds)].filter(Boolean)) {
+      await this.prisma.collectionItem.upsert({
+        where: {
+          collectionId_entityId: {
+            collectionId,
+            entityId,
+          },
+        },
+        create: this.buildCollectionItemCreateInput(collectionId, entityId),
+        update: {},
+      });
+    }
+    await this.prisma.collection.update({
+      where: { id: collectionId },
+      data: { updatedAt: new Date() },
+    });
+    return this.getCollection(userId, collectionId);
+  }
+
+  async updateCollection(
+    userId: string,
+    id: string,
+    patch: { name?: string; privacy?: string; itemId?: string; itemIds?: string[] },
+  ) {
+    await this.getCollection(userId, id);
+    await this.prisma.collection.update({
+      where: { id },
+      data: {
+        title: patch.name?.trim() || undefined,
+        visibility: patch.privacy ? this.normalizeCollectionVisibility(patch.privacy) : undefined,
+        updatedAt: new Date(),
+      },
+    });
+
+    const itemIds = [
+      ...(patch.itemIds ?? []),
+      ...(patch.itemId?.trim() ? [patch.itemId.trim()] : []),
+    ];
+    if (itemIds.length > 0) {
+      await this.addItemsToCollection(userId, id, itemIds);
+    }
+
+    return this.getCollection(userId, id);
+  }
+
+  async deleteCollection(userId: string, id: string) {
+    const collection = await this.getCollection(userId, id);
+    await this.prisma.collection.delete({
+      where: { id },
+    });
+    return {
+      success: true,
+      removed: collection,
+    };
+  }
+
   async getBookmark(userId: string, entityId: string) {
     const bookmark = await this.prisma.bookmark.findUnique({
       where: {
@@ -572,6 +730,43 @@ export class AccountStateDatabaseService {
     };
   }
 
+  private mapCollection(row: {
+    id: string;
+    userId: string;
+    title: string;
+    description: string | null;
+    visibility: string;
+    createdAt: Date;
+    updatedAt: Date;
+    items?: Array<{
+      id: string;
+      entityId: string;
+      entityType: string;
+      createdAt: Date;
+    }>;
+  }) {
+    const items = row.items ?? [];
+    return {
+      id: row.id,
+      userId: row.userId,
+      name: row.title,
+      title: row.title,
+      description: row.description ?? '',
+      privacy: row.visibility,
+      visibility: row.visibility,
+      itemIds: items.map((item) => item.entityId),
+      items: items.map((item) => ({
+        id: item.id,
+        itemId: item.entityId,
+        entityId: item.entityId,
+        type: item.entityType,
+        createdAt: item.createdAt.toISOString(),
+      })),
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
   private mapReport(row: {
     id: string;
     reporterUserId: string;
@@ -626,5 +821,33 @@ export class AccountStateDatabaseService {
     return value && typeof value === 'object' && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : {};
+  }
+
+  private normalizeCollectionVisibility(value?: string) {
+    const normalized = value?.trim().toLowerCase();
+    if (normalized === 'public' || normalized === 'shared') {
+      return 'public';
+    }
+    return 'private';
+  }
+
+  private buildCollectionItemCreateInput(collectionId: string, entityId: string) {
+    const normalizedId = entityId.trim();
+    const lower = normalizedId.toLowerCase();
+    const entityType = lower.startsWith('reel')
+      ? 'reel'
+      : lower.startsWith('product') || lower.startsWith('market')
+        ? 'product'
+        : 'post';
+
+    return {
+      id: makeId('collection_item'),
+      collectionId,
+      entityId: normalizedId,
+      entityType,
+      postId: entityType === 'post' ? normalizedId : null,
+      reelId: entityType === 'reel' ? normalizedId : null,
+      productId: entityType === 'product' ? normalizedId : null,
+    };
   }
 }

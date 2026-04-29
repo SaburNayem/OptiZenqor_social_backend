@@ -842,6 +842,46 @@ export class AddBookmarkDto {
   type?: 'post' | 'reel' | 'product';
 }
 
+export class CreateSavedCollectionDto {
+  @ApiProperty()
+  @IsString()
+  name!: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  itemIds?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  privacy?: string;
+}
+
+export class UpdateSavedCollectionDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  privacy?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  itemId?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  itemIds?: string[];
+}
+
 export class HideItemDto {
   @ApiProperty()
   @IsString()

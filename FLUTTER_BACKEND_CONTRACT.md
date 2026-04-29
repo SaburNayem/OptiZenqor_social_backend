@@ -121,6 +121,16 @@ The intent is:
 - Purpose: persisted draft and scheduling state
 - Auth: required
 
+### `GET /saved-collections`
+### `GET /saved-collections/:id`
+### `POST /saved-collections`
+### `PATCH /saved-collections`
+### `PATCH /saved-collections/:id`
+### `DELETE /saved-collections/:id`
+- Purpose: persisted saved collections and collection items
+- Auth: required
+- `GET /saved-collections` returns `data.collections`, `data.items`, and `data.results`
+
 ## Marketplace
 
 ### `GET /marketplace/products`
