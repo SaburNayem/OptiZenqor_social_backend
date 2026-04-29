@@ -9,7 +9,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { PlatformDataService } from '../data/platform-data.service';
 import { AddBookmarkDto } from '../dto/api.dto';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
@@ -23,7 +22,6 @@ export class BookmarksController {
   constructor(
     private readonly accountStateDatabase: AccountStateDatabaseService,
     private readonly coreDatabase: CoreDatabaseService,
-    private readonly platformData: PlatformDataService,
   ) {}
 
   @Get()
@@ -91,15 +89,12 @@ export class BookmarksController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    const post = await this.coreDatabase.getPost(postId).catch(() => null);
-    const fallbackPost = post ? null : this.platformData.getPost(postId);
-    const entityId = post?.id ?? fallbackPost?.id ?? postId;
-    const title = post?.caption ?? fallbackPost?.caption ?? postId;
+    const post = await this.coreDatabase.getPost(postId);
     return successResponse(
       'Bookmark added successfully.',
       await this.accountStateDatabase.addBookmark(user.id, {
-        entityId,
-        title,
+        entityId: post.id,
+        title: post.caption,
         type: 'post',
       }),
     );
