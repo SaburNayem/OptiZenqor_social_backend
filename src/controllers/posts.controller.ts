@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, ForbiddenException } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ExtendedDataService } from '../data/extended-data.service';
 import { CreatePostDto, UpdatePostDto } from '../dto/api.dto';
@@ -60,9 +60,16 @@ export class PostsController {
   }
 
   @Post()
-  async createPost(@Body() body: CreatePostDto) {
+  async createPost(
+    @Body() body: CreatePostDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.authorId,
+    );
     const created = await this.coreDatabase.createPost({
-      authorId: body.authorId,
+      authorId: actor.id,
       caption: body.caption,
       media: body.media ?? [],
       tags: body.tags ?? [],
@@ -81,12 +88,24 @@ export class PostsController {
   }
 
   @Post('create')
-  async createPostFromAppContract(@Body() body: CreatePostDto) {
-    return this.createPost(body);
+  async createPostFromAppContract(
+    @Body() body: CreatePostDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.createPost(body, authorization);
   }
 
   @Patch(':id')
-  async updatePost(@Param('id') id: string, @Body() body: UpdatePostDto) {
+  async updatePost(
+    @Param('id') id: string,
+    @Body() body: UpdatePostDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const existing = await this.coreDatabase.getPost(id);
+    if (existing.authorId !== actor.id) {
+      throw new ForbiddenException('You can only update your own post.');
+    }
     const updated = await this.coreDatabase.updatePost(id, body);
     const post = {
       ...updated,
@@ -102,7 +121,15 @@ export class PostsController {
   }
 
   @Delete(':id')
-  async deletePost(@Param('id') id: string) {
+  async deletePost(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const existing = await this.coreDatabase.getPost(id);
+    if (existing.authorId !== actor.id) {
+      throw new ForbiddenException('You can only delete your own post.');
+    }
     return this.coreDatabase.deletePost(id);
   }
 

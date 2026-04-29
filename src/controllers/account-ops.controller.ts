@@ -2,10 +2,12 @@ import { BadRequestException, Body, Controller, Get, Headers, Patch, Post } from
 import { ApiTags } from '@nestjs/swagger';
 import { ExtendedDataService } from '../data/extended-data.service';
 import { ResendOtpDto, SendOtpDto, VerifyOtpDto } from '../dto/api.dto';
-import { PlatformDataService } from '../data/platform-data.service';
+import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { MailService } from '../services/mail.service';
+import { MonetizationDatabaseService } from '../services/monetization-database.service';
 import { RealtimeStateService } from '../services/realtime-state.service';
+import { ReelsDatabaseService } from '../services/reels-database.service';
 
 @ApiTags('account-ops')
 @Controller()
@@ -14,7 +16,9 @@ export class AccountOpsController {
     private readonly extendedData: ExtendedDataService,
     private readonly realtimeState: RealtimeStateService,
     private readonly coreDatabase: CoreDatabaseService,
-    private readonly platformData: PlatformDataService,
+    private readonly reelsDatabase: ReelsDatabaseService,
+    private readonly monetizationDatabase: MonetizationDatabaseService,
+    private readonly accountStateDatabase: AccountStateDatabaseService,
     private readonly mailService: MailService,
   ) {}
 
@@ -103,13 +107,26 @@ export class AccountOpsController {
   }
 
   @Patch('notification-preferences')
-  updateNotificationPreferences(@Body() body: Record<string, unknown>) {
-    return this.extendedData.updateNotificationPreferences(body);
+  async updateNotificationPreferences(
+    @Body() body: Record<string, unknown>,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return {
+      success: true,
+      message: 'Notification preferences updated successfully.',
+      data: await this.accountStateDatabase.updateSettingsState(user.id, body),
+    };
   }
 
   @Get('notification-preferences')
-  getNotificationPreferences() {
-    return this.extendedData.getNotificationPreferences();
+  async getNotificationPreferences(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return {
+      success: true,
+      message: 'Notification preferences fetched successfully.',
+      data: await this.accountStateDatabase.getSettingsState(user.id),
+    };
   }
 
   @Get('safety/config')
@@ -123,8 +140,13 @@ export class AccountOpsController {
   }
 
   @Get('wallet/ledger')
-  getWalletLedger() {
-    return this.extendedData.getWalletLedger();
+  async getWalletLedger(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return {
+      success: true,
+      message: 'Wallet ledger fetched successfully.',
+      data: await this.monetizationDatabase.getWalletTransactions(user.id),
+    };
   }
 
   @Get('master-data')
@@ -156,7 +178,7 @@ export class AccountOpsController {
     const userId = await this.resolveExportUserId(body.userId, authorization);
     const user = await this.coreDatabase.getUser(userId);
     const posts = await this.coreDatabase.getPosts(userId);
-    const reels = this.platformData.getReels(userId);
+    const reels = await this.reelsDatabase.getReels(userId);
     const summary = {
       username: user.username,
       posts: posts.length,

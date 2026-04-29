@@ -47,9 +47,10 @@ export class StoryMediaTransformDto {
 }
 
 export class CreatePostDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  authorId!: string;
+  authorId?: string;
 
   @ApiProperty()
   @IsString()
@@ -173,9 +174,10 @@ export class ChangePasswordRequestDto {
 }
 
 export class CreateStoryDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  userId!: string;
+  userId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -392,9 +394,10 @@ export class UpdateStoryDto {
 }
 
 export class StoryCommentDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  userId!: string;
+  userId?: string;
 
   @ApiProperty()
   @IsString()
@@ -418,9 +421,10 @@ export class UpdateUploadDto {
 }
 
 export class StoryReactionDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  userId!: string;
+  userId?: string;
 
   @ApiProperty()
   @IsString()
@@ -462,9 +466,10 @@ export class BuddyActionDto {
 }
 
 export class StoryReplyDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  userId!: string;
+  userId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -499,9 +504,10 @@ export class StoryReplyDto {
 }
 
 export class CreateReelDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  authorId!: string;
+  authorId?: string;
 
   @ApiProperty()
   @IsString()
@@ -595,9 +601,10 @@ export class UpdateReelDto {
 }
 
 export class ReelCommentDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  userId!: string;
+  userId?: string;
 
   @ApiProperty()
   @IsString()
@@ -605,9 +612,10 @@ export class ReelCommentDto {
 }
 
 export class ReelReactionDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  userId!: string;
+  userId?: string;
 
   @ApiProperty()
   @IsString()
@@ -702,9 +710,10 @@ export class CreateCommentDto {
   @IsString()
   authorId?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  author!: string;
+  author?: string;
 
   @ApiProperty()
   @IsString()
@@ -770,9 +779,10 @@ export class VerifyOtpDto {
 }
 
 export class ReactToCommentDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  userId!: string;
+  userId?: string;
 
   @ApiProperty()
   @IsString()
@@ -780,9 +790,10 @@ export class ReactToCommentDto {
 }
 
 export class PostReactionDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  userId!: string;
+  userId?: string;
 
   @ApiProperty()
   @IsString()
@@ -790,9 +801,10 @@ export class PostReactionDto {
 }
 
 export class UserActorDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  userId!: string;
+  userId?: string;
 }
 
 export class BlockUserDto {
@@ -974,9 +986,10 @@ export class LiveReactionDto {
 }
 
 export class EventActorDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  userId!: string;
+  userId?: string;
 }
 
 export class CreateTicketDto {

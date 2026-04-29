@@ -13,6 +13,7 @@ import { DatabaseService } from '../services/database.service';
 import { ExperienceDatabaseService } from '../services/experience-database.service';
 import { JwtTokenService } from '../services/jwt-token.service';
 import { MailService } from '../services/mail.service';
+import { MonetizationDatabaseService } from '../services/monetization-database.service';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { RealtimeStateService } from '../services/realtime-state.service';
 import { ReelsDatabaseService } from '../services/reels-database.service';
@@ -37,6 +38,7 @@ import { UploadsDatabaseService } from '../services/uploads-database.service';
     PrismaService,
     JwtTokenService,
     CoreDatabaseService,
+    MonetizationDatabaseService,
     ExperienceDatabaseService,
     RealtimeStateService,
     StateSnapshotService,
@@ -60,6 +62,7 @@ import { UploadsDatabaseService } from '../services/uploads-database.service';
     PrismaService,
     JwtTokenService,
     CoreDatabaseService,
+    MonetizationDatabaseService,
     ExperienceDatabaseService,
     RealtimeStateService,
     StateSnapshotService,

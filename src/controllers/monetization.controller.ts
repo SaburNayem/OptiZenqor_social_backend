@@ -1,33 +1,58 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Headers, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { PlatformDataService } from '../data/platform-data.service';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
+import { CoreDatabaseService } from '../services/core-database.service';
+import { MonetizationDatabaseService } from '../services/monetization-database.service';
 
 @ApiTags('monetization')
 @Controller('monetization')
+@UseGuards(SessionAuthGuard)
 export class MonetizationController {
-  constructor(private readonly platformData: PlatformDataService) {}
+  constructor(
+    private readonly coreDatabase: CoreDatabaseService,
+    private readonly monetizationDatabase: MonetizationDatabaseService,
+  ) {}
 
   @Get('overview')
-  getOverview() {
+  async getOverview(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
     return {
-      walletTransactions: this.platformData.getWalletTransactions(),
-      subscriptions: this.platformData.getSubscriptions(),
-      plans: this.platformData.getPlans(),
+      success: true,
+      message: 'Monetization overview fetched successfully.',
+      data: {
+        wallet: await this.monetizationDatabase.getWallet(user.id),
+        subscriptions: await this.monetizationDatabase.getSubscriptions(user.id),
+        plans: await this.monetizationDatabase.getPremiumPlans(),
+      },
     };
   }
 
   @Get('wallet')
-  getWalletTransactions() {
-    return this.platformData.getWalletTransactions();
+  async getWalletTransactions(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return {
+      success: true,
+      message: 'Wallet transactions fetched successfully.',
+      data: await this.monetizationDatabase.getWalletTransactions(user.id),
+    };
   }
 
   @Get('subscriptions')
-  getSubscriptions() {
-    return this.platformData.getSubscriptions();
+  async getSubscriptions(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return {
+      success: true,
+      message: 'Subscriptions fetched successfully.',
+      data: await this.monetizationDatabase.getSubscriptions(user.id),
+    };
   }
 
   @Get('plans')
-  getPlans() {
-    return this.platformData.getPlans();
+  async getPlans() {
+    return {
+      success: true,
+      message: 'Premium plans fetched successfully.',
+      data: await this.monetizationDatabase.getPremiumPlans(),
+    };
   }
 }

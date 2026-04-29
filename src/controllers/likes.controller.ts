@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { PostReactionDto, UserActorDto } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
@@ -15,20 +15,44 @@ export class LikesController {
   }
 
   @Post(':id/reactions')
-  async reactToPost(@Param('id') id: string, @Body() body: PostReactionDto) {
-    const result = await this.coreDatabase.reactToPost(id, body.userId, body.reaction);
+  async reactToPost(
+    @Param('id') id: string,
+    @Body() body: PostReactionDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    const result = await this.coreDatabase.reactToPost(id, actor.id, body.reaction);
     return this.wrapMutationResponse('Post reaction updated successfully.', result);
   }
 
   @Patch(':id/like')
-  async likePost(@Param('id') id: string, @Body() body: UserActorDto) {
-    const result = await this.coreDatabase.reactToPost(id, body.userId, 'like');
+  async likePost(
+    @Param('id') id: string,
+    @Body() body: UserActorDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    const result = await this.coreDatabase.reactToPost(id, actor.id, 'like');
     return this.wrapMutationResponse('Post liked successfully.', result);
   }
 
   @Patch(':id/unlike')
-  async unlikePost(@Param('id') id: string, @Body() body: UserActorDto) {
-    const result = await this.coreDatabase.unlikePost(id, body.userId);
+  async unlikePost(
+    @Param('id') id: string,
+    @Body() body: UserActorDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    const result = await this.coreDatabase.unlikePost(id, actor.id);
     return this.wrapMutationResponse('Post unliked successfully.', result);
   }
 

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { CreateCommentDto, ReactToCommentDto } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
@@ -15,9 +15,17 @@ export class CommentsController {
   }
 
   @Post()
-  async createPostComment(@Param('id') id: string, @Body() body: CreateCommentDto) {
-    const comment = await this.coreDatabase.createPostComment(id, body.author, body.message, {
-      authorId: body.authorId,
+  async createPostComment(
+    @Param('id') id: string,
+    @Body() body: CreateCommentDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.authorId,
+    );
+    const comment = await this.coreDatabase.createPostComment(id, actor.name, body.message, {
+      authorId: actor.id,
       replyTo: body.replyTo,
       mentions: body.mentions,
     });
@@ -39,9 +47,14 @@ export class CommentsController {
     @Param('id') id: string,
     @Param('commentId') commentId: string,
     @Body() body: CreateCommentDto,
+    @Headers('authorization') authorization?: string,
   ) {
-    const comment = await this.coreDatabase.createPostComment(id, body.author, body.message, {
-      authorId: body.authorId,
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.authorId,
+    );
+    const comment = await this.coreDatabase.createPostComment(id, actor.name, body.message, {
+      authorId: actor.id,
       replyTo: commentId,
       mentions: body.mentions,
     });
@@ -57,11 +70,16 @@ export class CommentsController {
     @Param('id') id: string,
     @Param('commentId') commentId: string,
     @Body() body: ReactToCommentDto,
+    @Headers('authorization') authorization?: string,
   ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
     const comment = await this.coreDatabase.reactToComment(
       id,
       commentId,
-      body.userId,
+      actor.id,
       body.reaction,
     );
     return {

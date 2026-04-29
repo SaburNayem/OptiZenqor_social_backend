@@ -1,26 +1,36 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
-import { AppExtensionsDataService } from '../data/app-extensions-data.service';
-import { PlatformDataService } from '../data/platform-data.service';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
 import {
   CreateNotificationCampaignDto,
   MarkNotificationReadDto,
 } from '../dto/api.dto';
+import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { MonetizationDatabaseService } from '../services/monetization-database.service';
 
 @ApiTags('notifications')
 @Controller('notifications')
 export class NotificationsController {
   constructor(
     private readonly coreDatabase: CoreDatabaseService,
-    private readonly platformData: PlatformDataService,
-    private readonly appExtensionsData: AppExtensionsDataService,
+    private readonly accountStateDatabase: AccountStateDatabaseService,
+    private readonly monetizationDatabase: MonetizationDatabaseService,
   ) {}
 
   @Get()
   @ApiQuery({ name: 'userId', required: false })
-  async getNotificationsOverview(@Query('userId') userId?: string) {
-    const notifications = await this.coreDatabase.getNotificationInbox(userId);
+  async getNotificationsOverview(
+    @Query('userId') userId?: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const resolvedUser =
+      userId?.trim() ||
+      (await this.coreDatabase
+        .requireUserFromAuthorization(authorization)
+        .then((user) => user.id)
+        .catch(() => undefined));
+    const notifications = await this.coreDatabase.getNotificationInbox(resolvedUser);
     return {
       success: true,
       message: 'Notifications fetched successfully.',
@@ -29,8 +39,10 @@ export class NotificationsController {
       results: notifications,
       data: notifications,
       inbox: notifications,
-      campaigns: this.platformData.getCampaigns(),
-      preferences: this.appExtensionsData.getPushNotificationPreferences(),
+      campaigns: await this.monetizationDatabase.getNotificationCampaigns(),
+      preferences: resolvedUser
+        ? await this.accountStateDatabase.getSettingsState(resolvedUser)
+        : {},
     };
   }
 
@@ -49,19 +61,33 @@ export class NotificationsController {
     };
   }
 
+  @UseGuards(SessionAuthGuard)
   @Get('preferences')
-  getPreferences() {
-    return this.appExtensionsData.getPushNotificationPreferences();
+  async getPreferences(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return {
+      success: true,
+      message: 'Notification preferences fetched successfully.',
+      data: await this.accountStateDatabase.getSettingsState(user.id),
+    };
   }
 
   @Get('campaigns')
-  getCampaigns() {
-    return this.platformData.getCampaigns();
+  async getCampaigns() {
+    return {
+      success: true,
+      message: 'Notification campaigns fetched successfully.',
+      data: await this.monetizationDatabase.getNotificationCampaigns(),
+    };
   }
 
   @Post('campaigns')
-  createCampaign(@Body() body: CreateNotificationCampaignDto) {
-    return this.platformData.createCampaign(body);
+  async createCampaign(@Body() body: CreateNotificationCampaignDto) {
+    return {
+      success: true,
+      message: 'Notification campaign created successfully.',
+      data: await this.monetizationDatabase.createNotificationCampaign(body),
+    };
   }
 
   @Patch(':id/read')
