@@ -1,6 +1,11 @@
 # Backend API Contract
 
-This contract reflects the current backend implementation after the ongoing migration from seeded/static services to database-backed `Prisma + PostgreSQL` modules.
+This contract reflects the current backend implementation after the ongoing migration from seeded/static services to database-backed PostgreSQL modules.
+
+Current local implementation uses a hybrid database access style:
+
+- Prisma Client for many newer feature modules
+- raw `pg` for the core social/auth layer and some supporting services
 
 It is intentionally concise and focused on the mobile-facing routes that are already preferred for real integration.
 
@@ -285,4 +290,4 @@ Currently exposed event families include:
 
 ## Important status note
 
-This contract covers the preferred real integration path, but the repo still contains some static helper modules outside these routes. Admin, support/help, advanced discovery/trending, and several utility surfaces still need the same database-backed replacement before the entire backend can be called fully mock-free.
+This contract covers the preferred real integration path, but the repo still contains some static helper modules outside these routes. The biggest remaining backend gaps are support/help utility surfaces, chat/realtime adjunct state, admin utility flows, and other controllers that still import from `src/data/*`.

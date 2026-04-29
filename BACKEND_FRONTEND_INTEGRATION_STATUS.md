@@ -31,7 +31,7 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 | Blocks/reports/settings state | Yes | Yes | Pending | Partial | Partial | Persistent account-state tables/services exist. |
 | Discovery/search/trending | Yes | Yes | Pending | Partial | Partial | `discovery.controller.ts` now reads search/trending/hashtags from DB-backed services instead of seeded ecosystem/platform services. |
 | Profiles/dashboards | Yes | Yes | Pending | Partial | Partial | `profiles.controller.ts` now reads profile, tagged/mention history, and business/seller/recruiter/creator dashboard payloads from DB-backed services. |
-| Preferences/support/app extensions | Partial | Partial | Pending | Partial | Partial | `settings` and `preferences` now read user-scoped state from DB-backed services for core settings flows, but several support/app-extension routes still rely on snapshot-backed services. |
+| Preferences/support/app extensions | Partial | Partial | Pending | Partial | Partial | `settings` and `preferences` now read user-scoped state from DB-backed services for core settings flows, and support tickets are now persisted; several support/app-extension utility routes still rely on snapshot-backed services. |
 | Realtime calls/live/presence | Partial | Partial | Pending | No | Partial | Socket auth exists, but snapshot-backed session state and fallback auth paths remain. |
 
 ## Remaining Mock or Snapshot Hotspots
@@ -52,6 +52,8 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 - `src/controllers/discovery.controller.ts`
 - `src/services/profiles-database.service.ts`
 - `src/controllers/profiles.controller.ts`
+- `src/services/support-database.service.ts`
+- `src/controllers/support.controller.ts`
 
 ## Endpoints Now DB-Backed
 
@@ -84,17 +86,22 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 - `GET /push-notification-preferences`
 - `GET /legal-compliance`
 - `GET /blocked-muted-accounts`
+- `GET /support/tickets`
+- `POST /support/tickets`
 
 ## Frontend Impact
 
 - Discovery and search screens should continue to receive the same top-level keys (`success`, `query`, `results`, `sections`, `count`, `items`, `data`) while now reflecting DB-backed users, posts, jobs, pages, communities, marketplace items, and events.
 - Profile routes keep the same wrapper aliases (`user`, `profile`, `data`, `items`, `results`) while removing seeded ecosystem/profile dashboard dependencies for the completed endpoints.
 - Support and realtime feature screens still depend on seeded/snapshot-backed routes and remain migration targets.
+- Support ticket list/create routes are now durable, but FAQ/chat/mail utility payloads are still configuration-backed rather than fully modeled in Prisma.
 
 ## Latest Verification
 
 - `npm.cmd run typecheck`: pass
 - `npm.cmd run build`: pass
+- `npm.cmd install`: pass
+- `npx.cmd prisma generate`: pass
 
 ## High-Priority Controller Migration Targets
 
@@ -112,5 +119,7 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 - Public docs in the GitHub repo describe an older state than the current local schema and service layer.
 - On 2026-04-29, `settings.controller.ts` and `preferences.controller.ts` were moved off mutable seeded state for their main user-scoped reads and updates by introducing `SettingsDatabaseService`.
 - On 2026-04-29, `discovery.controller.ts` and `profiles.controller.ts` were moved off seeded ecosystem/platform lookups for their main read flows by introducing `DiscoveryDatabaseService` and `ProfilesDatabaseService`.
-- Remaining seeded dependencies for the current target slice are concentrated in `support.controller.ts`, `chat.controller.ts`, and `realtime.controller.ts`.
-- Latest verification for completed areas: `npm.cmd run typecheck` and `npm.cmd run build` must pass after each patch.
+- On 2026-04-29, `support.controller.ts` moved ticket persistence off in-memory ecosystem state by introducing `SupportDatabaseService`.
+- The backend currently uses a deliberate hybrid database access style: Prisma for many newer modules and raw `pg` for the core social/auth layer.
+- Remaining seeded dependencies for the current target slice are concentrated in `chat.controller.ts`, `realtime.controller.ts`, and the broader app-utility controller set still importing `src/data/*`.
+- Latest verification for completed areas: `npm.cmd install`, `npx.cmd prisma generate`, `npm.cmd run typecheck`, and `npm.cmd run build` all pass.

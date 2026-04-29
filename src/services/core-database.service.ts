@@ -184,7 +184,11 @@ export class CoreDatabaseService implements OnModuleInit {
       return;
     }
     await this.ensureSchema();
-    await this.seedCoreData();
+    const shouldSeedDemoData = (process.env.CORE_DB_SEED ?? 'false') === 'true';
+    const isProduction = (process.env.NODE_ENV ?? '').trim().toLowerCase() === 'production';
+    if (shouldSeedDemoData && !isProduction) {
+      await this.seedCoreData();
+    }
   }
 
   async getDemoAuthAccounts() {
