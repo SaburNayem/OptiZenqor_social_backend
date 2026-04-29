@@ -75,10 +75,11 @@ export class StoriesController {
     @Body() body: CreateStoryDto,
     @Headers('authorization') authorization?: string,
   ) {
-    const token = authorization?.replace(/^Bearer\s+/i, '');
-    const authUser = await this.coreDatabase.resolveUserFromAccessToken(token);
-    const userId = authUser?.id ?? body.userId;
-    return this.storiesDatabase.createStory(userId, body);
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    return this.storiesDatabase.createStory(actor.id, body);
   }
 
   @Patch(':id')

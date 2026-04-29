@@ -562,6 +562,14 @@ Must be applied to:
 - events
 - communities
 
+Current backend implementation now applies this pattern to:
+
+- `GET /marketplace/products`
+- `GET /jobs`
+- `GET /events`
+- `GET /communities`
+- `GET /pages`
+
 ## Realtime Requirements
 
 The frontend expects live interactions beyond REST.

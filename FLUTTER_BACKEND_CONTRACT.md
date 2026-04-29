@@ -1,93 +1,202 @@
 # Flutter Backend Contract
 
-This file is the current mobile-facing backend contract for the real API-first integration path.
+This file defines the preferred backend contract for the Flutter app after the current database migration work.
 
-## Core Entry Points
+The intent is:
 
-### `GET /app/bootstrap`
-- Purpose: return app-level counters, user snapshot when authenticated, route entrypoints, and a small feed preview.
-- Auth: optional bearer token.
+- Flutter repositories call backend APIs only
+- backend returns durable PostgreSQL-backed data
+- response shapes stay compatible with older mobile screens where possible
+
+## Auth
 
 ### `POST /auth/login`
-- Purpose: exchange email/password for access token, refresh token, session metadata, and user payload.
-- Auth: none.
+- Returns: JWT-style `accessToken`, `refreshToken`, `sessionId`, `expiresInSeconds`, `user`
+- Auth: none
 
 ### `POST /auth/signup`
-- Purpose: create account, issue initial session, and trigger email verification flow.
-- Auth: none.
+- Returns: created session plus verification payload
+- Auth: none
+
+### `POST /auth/refresh-token`
+- Returns: fresh access/refresh token pair
+- Auth: none
+
+### `POST /auth/logout`
+- Purpose: revoke current persisted session
+- Auth: bearer token
 
 ### `GET /auth/me`
-- Purpose: resolve the authenticated user from bearer token.
-- Auth: required.
+- Purpose: resolve authenticated user from bearer token
+- Auth: required
 
-## Social Feed
+## App bootstrap
+
+### `GET /app/bootstrap`
+- Returns:
+  - current user snapshot when authenticated
+  - counters
+  - route entrypoints
+  - preview feed
+- Auth: optional bearer token
+
+### `POST /app/session-init`
+- Purpose: compatibility bootstrap route for app startup
+- Auth: optional bearer token
+
+## Feed and content
 
 ### `GET /feed`
-- Purpose: return database-backed feed items.
-- Auth: optional today, but intended to become authenticated-first.
+- Purpose: database-backed feed list
+- Auth: optional
+
+### `GET /posts`
+### `POST /posts`
+### `PATCH /posts/:id`
+### `DELETE /posts/:id`
+- Purpose: core post CRUD
+- Auth: create/update/delete should be authenticated in practice
 
 ### `GET /stories`
-- Purpose: return active stories from PostgreSQL/Prisma.
-- Auth: optional for public scope, bearer token recommended for buddy filtering and actions.
+### `POST /stories`
+### `POST /stories/:id/comments`
+### `POST /stories/:id/reactions`
+### `POST /stories/:id/view`
+- Purpose: database-backed stories flow
 
 ### `GET /reels`
-- Purpose: return database-backed reels.
-- Auth: optional.
+### `POST /reels`
+### `POST /reels/:id/comments`
+### `POST /reels/:id/reactions`
+- Purpose: database-backed reels flow
 
 ## Chat
 
 ### `GET /chat/threads`
-- Purpose: list chat threads for the authenticated user.
-- Auth: required.
-
 ### `GET /chat/threads/:id/messages`
-- Purpose: list messages inside a thread.
-- Auth: required.
-
 ### `POST /chat/threads/:id/messages`
-- Purpose: create a message in a thread.
-- Auth: required.
+- Purpose: database-backed chat flow
+- Auth: required
 
 ## Notifications
 
 ### `GET /notifications`
-- Purpose: fetch notification inbox.
-- Auth: optional fallback exists, bearer token recommended.
+- Purpose: notification inbox
+- Returns compatibility aliases:
+  - `notifications`
+  - `items`
+  - `results`
+  - `data`
+  - `inbox`
+
+### `PATCH /notifications/:id/read`
+- Purpose: mark notification as read
+
+### `GET /notifications/preferences`
+- Purpose: read persisted notification and settings state
+- Auth: required
 
 ## Profile
 
 ### `GET /profile/:id`
-- Purpose: fetch public profile plus profile-level feed summary.
-- Auth: optional.
+- Purpose: public profile plus summary blocks
+- Auth: optional
 
-### `PATCH /profile/me`
-- Current alias: `PATCH /user-profile/edit`
-- Purpose: update the authenticated user profile.
-- Auth: required.
+### `PATCH /user-profile/edit`
+- Preferred mobile meaning: update current authenticated profile
+- Auth: required
 
-## Commerce / Discovery
+## Saved state
+
+### `GET /bookmarks`
+### `POST /bookmarks`
+### `DELETE /bookmarks/:id`
+- Purpose: persisted saved/bookmark state
+- Auth: required
+
+### `GET /drafts`
+### `POST /drafts`
+### `PATCH /drafts/:id`
+### `DELETE /drafts/:id`
+- Purpose: persisted draft and scheduling state
+- Auth: required
+
+## Marketplace
 
 ### `GET /marketplace/products`
-- Purpose: fetch marketplace products from Prisma.
-- Auth: optional.
+### `GET /marketplace/products/:id`
+### `POST /marketplace/products`
+### `POST /marketplace/checkout`
+- Purpose: database-backed marketplace products and orders
+- `GET /marketplace/products` returns `data.products`, `data.items`, `data.results`, and pagination metadata
+- Query support: `page`, `limit`, `search`, `category`, `status`, `sellerId`, `sort`, `order`
+
+## Jobs
 
 ### `GET /jobs`
-- Purpose: fetch jobs from Prisma.
-- Auth: optional.
+### `GET /jobs/:id`
+### `POST /jobs/create`
+### `POST /jobs/:id/apply`
+- Purpose: database-backed jobs and applications
+- `GET /jobs` returns `data.jobs`, `data.items`, `data.results`, and pagination metadata
+- Query support: `page`, `limit`, `search`, `status`, `type`, `userId`, `sort`, `order`
+
+## Events
 
 ### `GET /events`
-- Purpose: fetch events from Prisma.
-- Auth: optional.
+### `GET /events/:id`
+### `POST /events`
+### `PATCH /events/:id/rsvp`
+### `PATCH /events/:id/save`
+- Purpose: database-backed event lifecycle and attendance state
+- `GET /events` returns `data.events`, `data.items`, `data.results`, and pagination metadata
+- Query support: `page`, `limit`, `search`, `status`, `category`, `userId`, `sort`, `order`
 
-## Settings
+## Communities and pages
+
+### `GET /communities`
+### `GET /communities/:id`
+### `POST /communities`
+### `POST /communities/:id/join`
+### `POST /communities/:id/leave`
+- Purpose: database-backed communities and membership
+- `GET /communities` returns `data.communities`, `data.items`, `data.results`, and pagination metadata
+- Query support: `page`, `limit`, `search`, `category`, `privacy`, `userId`, `sort`, `order`
+
+### `GET /pages`
+### `GET /pages/:id`
+### `POST /pages/create`
+### `PATCH /pages/:id/follow`
+- Purpose: database-backed pages and follows
+- `GET /pages` returns `data.pages`, `data.items`, `data.results`, and pagination metadata
+- Query support: `page`, `limit`, `search`, `category`, `ownerId`, `sort`, `order`
+
+## Settings and monetization
 
 ### `GET /settings/state`
-- Purpose: fetch persisted settings and privacy state.
-- Auth: required.
+### `PATCH /settings/state`
+- Purpose: persisted settings and privacy state
+- Auth: required
+- `GET /settings/state` remains the canonical persisted settings payload for Flutter preference screens
 
-## Integration Notes
+### `GET /wallet`
+- Purpose: wallet account and wallet transaction view
+- Auth: required
 
-- Bearer token format: `Authorization: Bearer <accessToken>`
-- Response convention: most endpoints return `{ success, message, data }`, with compatibility aliases like `items`, `results`, `user`, `profile`, or resource-specific keys where older app screens still depend on them.
-- Mobile repositories should call these backend endpoints through `http_service` or `api_service`, never from widgets or screens directly.
-- Some older routes still exist for backward compatibility, but the endpoints above are the preferred Flutter contract moving forward.
+### `GET /monetization/overview`
+- Purpose: wallet, subscriptions, premium plans in one payload
+- Auth: required
+
+### `GET /premium-plans`
+- Purpose: active premium plan catalog
+
+## Compatibility rules
+
+- Keep existing route names where possible.
+- Keep response aliases where existing Flutter code still depends on them.
+- Prefer authenticated user scope over request-body user IDs.
+- Do not use runtime mock arrays as source of truth for these routes.
+
+## Current limitation note
+
+This contract represents the preferred mobile integration path, but some backend utility/admin/discovery modules still need the same database-backed migration before the entire repo can be called fully mock-free.

@@ -1,7 +1,17 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { makeId } from '../common/id.util';
-import { CreateEventDto, CreateJobDto, CreatePageDto, CreateProductDto } from '../dto/api.dto';
+import {
+  CommunitiesQueryDto,
+  CreateEventDto,
+  CreateJobDto,
+  CreatePageDto,
+  CreateProductDto,
+  EventsQueryDto,
+  JobsQueryDto,
+  MarketplaceProductsQueryDto,
+  PagesQueryDto,
+} from '../dto/api.dto';
 import { CoreDatabaseService } from './core-database.service';
 import { PrismaService } from './prisma.service';
 
@@ -63,11 +73,32 @@ export class ExperienceDatabaseService {
     };
   }
 
-  async getMarketplaceOverview() {
-    const [products, orders] = await Promise.all([
+  async getMarketplaceOverview(query: MarketplaceProductsQueryDto = {}) {
+    const paging = this.normalizePaging(query.page, query.limit);
+    const where: Prisma.MarketplaceProductWhereInput = {
+      deletedAt: null,
+      category: query.category?.trim() || undefined,
+      sellerId: query.sellerId?.trim() || undefined,
+      status: query.status?.trim() || undefined,
+      OR: query.search?.trim()
+        ? [
+            { title: { contains: query.search.trim(), mode: 'insensitive' } },
+            { description: { contains: query.search.trim(), mode: 'insensitive' } },
+            { category: { contains: query.search.trim(), mode: 'insensitive' } },
+            { location: { contains: query.search.trim(), mode: 'insensitive' } },
+          ]
+        : undefined,
+    };
+    const orderBy = this.resolveMarketplaceOrder(query.sort, query.order);
+    const [products, totalProducts, orders] = await Promise.all([
       this.prisma.marketplaceProduct.findMany({
-        where: { deletedAt: null },
-        orderBy: { createdAt: 'desc' },
+        where,
+        orderBy,
+        skip: paging.skip,
+        take: paging.limit,
+      }),
+      this.prisma.marketplaceProduct.count({
+        where,
       }),
       this.prisma.marketplaceOrder.findMany({
         orderBy: { createdAt: 'desc' },
@@ -82,9 +113,10 @@ export class ExperienceDatabaseService {
     );
 
     return {
-      totalProducts: mappedProducts.length,
+      totalProducts,
       products: mappedProducts,
       items: mappedProducts,
+      results: mappedProducts,
       categories: [...new Set(products.map((item) => item.category))],
       sellers,
       orders: orders.map((row) => this.mapMarketplaceOrder(row)),
@@ -97,6 +129,15 @@ export class ExperienceDatabaseService {
         .slice()
         .sort((left, right) => right.views - left.views)
         .slice(0, 8),
+      pagination: this.buildPagination(totalProducts, paging.page, paging.limit),
+      filters: {
+        category: query.category?.trim() || null,
+        status: query.status?.trim() || null,
+        sellerId: query.sellerId?.trim() || null,
+        search: query.search?.trim() || null,
+        sort: query.sort?.trim() || 'createdAt',
+        order: query.order ?? 'desc',
+      },
     };
   }
 
@@ -216,12 +257,47 @@ export class ExperienceDatabaseService {
     return this.mapMarketplaceOrder(order);
   }
 
-  async getJobs() {
-    const jobs = await this.prisma.job.findMany({
-      where: { deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-    });
-    return jobs.map((row) => this.mapJob(row));
+  async getJobs(query: JobsQueryDto = {}) {
+    const paging = this.normalizePaging(query.page, query.limit);
+    const where: Prisma.JobWhereInput = {
+      deletedAt: null,
+      status: query.status?.trim() || undefined,
+      type: query.type?.trim() || undefined,
+      recruiterId: query.userId?.trim() || undefined,
+      OR: query.search?.trim()
+        ? [
+            { title: { contains: query.search.trim(), mode: 'insensitive' } },
+            { company: { contains: query.search.trim(), mode: 'insensitive' } },
+            { description: { contains: query.search.trim(), mode: 'insensitive' } },
+            { location: { contains: query.search.trim(), mode: 'insensitive' } },
+          ]
+        : undefined,
+    };
+    const orderBy = this.resolveJobOrder(query.sort, query.order);
+    const [jobs, total] = await Promise.all([
+      this.prisma.job.findMany({
+        where,
+        orderBy,
+        skip: paging.skip,
+        take: paging.limit,
+      }),
+      this.prisma.job.count({ where }),
+    ]);
+    const items = jobs.map((row) => this.mapJob(row));
+    return {
+      jobs: items,
+      items,
+      results: items,
+      pagination: this.buildPagination(total, paging.page, paging.limit),
+      filters: {
+        status: query.status?.trim() || null,
+        type: query.type?.trim() || null,
+        userId: query.userId?.trim() || null,
+        search: query.search?.trim() || null,
+        sort: query.sort?.trim() || 'createdAt',
+        order: query.order ?? 'desc',
+      },
+    };
   }
 
   async getJob(id: string) {
@@ -288,21 +364,55 @@ export class ExperienceDatabaseService {
     return applications.map((row) => this.mapJobApplication(row));
   }
 
-  async getEvents(status?: string) {
-    const normalizedStatus = status?.trim().toLowerCase();
-    const events = await this.prisma.event.findMany({
-      where: {
-        deletedAt: null,
-        status: normalizedStatus
-          ? {
-              equals: normalizedStatus,
-              mode: 'insensitive',
-            }
-          : undefined,
+  async getEvents(query: string | EventsQueryDto = {}) {
+    const queryObject =
+      typeof query === 'string' ? ({ status: query } satisfies EventsQueryDto) : query;
+    const paging = this.normalizePaging(queryObject.page, queryObject.limit);
+    const normalizedStatus = queryObject.status?.trim().toLowerCase();
+    const where: Prisma.EventWhereInput = {
+      deletedAt: null,
+      status: normalizedStatus
+        ? {
+            equals: normalizedStatus,
+            mode: 'insensitive',
+          }
+        : undefined,
+      category: queryObject.category?.trim() || undefined,
+      organizerId: queryObject.userId?.trim() || undefined,
+      OR: queryObject.search?.trim()
+        ? [
+            { title: { contains: queryObject.search.trim(), mode: 'insensitive' } },
+            { organizerName: { contains: queryObject.search.trim(), mode: 'insensitive' } },
+            { location: { contains: queryObject.search.trim(), mode: 'insensitive' } },
+            { description: { contains: queryObject.search.trim(), mode: 'insensitive' } },
+          ]
+        : undefined,
+    };
+    const orderBy = this.resolveEventOrder(queryObject.sort, queryObject.order);
+    const [events, total] = await Promise.all([
+      this.prisma.event.findMany({
+        where,
+        orderBy,
+        skip: paging.skip,
+        take: paging.limit,
+      }),
+      this.prisma.event.count({ where }),
+    ]);
+    const items = events.map((row) => this.mapEvent(row));
+    return {
+      events: items,
+      items,
+      results: items,
+      pagination: this.buildPagination(total, paging.page, paging.limit),
+      filters: {
+        status: queryObject.status?.trim() || null,
+        category: queryObject.category?.trim() || null,
+        userId: queryObject.userId?.trim() || null,
+        search: queryObject.search?.trim() || null,
+        sort: queryObject.sort?.trim() || 'createdAt',
+        order: queryObject.order ?? 'desc',
       },
-      orderBy: { createdAt: 'desc' },
-    });
-    return events.map((row) => this.mapEvent(row));
+    };
   }
 
   async getEvent(id: string) {
@@ -405,12 +515,47 @@ export class ExperienceDatabaseService {
     return { success: true, saved: nextSaved };
   }
 
-  async getCommunities() {
-    const communities = await this.prisma.community.findMany({
-      where: { deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-    });
-    return communities.map((row) => this.mapCommunity(row));
+  async getCommunities(query: CommunitiesQueryDto = {}) {
+    const paging = this.normalizePaging(query.page, query.limit);
+    const where: Prisma.CommunityWhereInput = {
+      deletedAt: null,
+      category: query.category?.trim() || undefined,
+      privacy: query.privacy?.trim() || undefined,
+      ownerId: query.userId?.trim() || undefined,
+      OR: query.search?.trim()
+        ? [
+            { name: { contains: query.search.trim(), mode: 'insensitive' } },
+            { description: { contains: query.search.trim(), mode: 'insensitive' } },
+            { category: { contains: query.search.trim(), mode: 'insensitive' } },
+            { location: { contains: query.search.trim(), mode: 'insensitive' } },
+          ]
+        : undefined,
+    };
+    const orderBy = this.resolveCommunityOrder(query.sort, query.order);
+    const [communities, total] = await Promise.all([
+      this.prisma.community.findMany({
+        where,
+        orderBy,
+        skip: paging.skip,
+        take: paging.limit,
+      }),
+      this.prisma.community.count({ where }),
+    ]);
+    const items = communities.map((row) => this.mapCommunity(row));
+    return {
+      communities: items,
+      items,
+      results: items,
+      pagination: this.buildPagination(total, paging.page, paging.limit),
+      filters: {
+        category: query.category?.trim() || null,
+        privacy: query.privacy?.trim() || null,
+        userId: query.userId?.trim() || null,
+        search: query.search?.trim() || null,
+        sort: query.sort?.trim() || 'createdAt',
+        order: query.order ?? 'desc',
+      },
+    };
   }
 
   async getCommunity(id: string) {
@@ -615,11 +760,44 @@ export class ExperienceDatabaseService {
     return this.getCommunity(id);
   }
 
-  async getPages() {
-    const pages = await this.prisma.page.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
-    return pages.map((row) => this.mapPage(row));
+  async getPages(query: PagesQueryDto = {}) {
+    const paging = this.normalizePaging(query.page, query.limit);
+    const where: Prisma.PageWhereInput = {
+      ownerId: query.ownerId?.trim() || undefined,
+      category: query.category?.trim() || undefined,
+      OR: query.search?.trim()
+        ? [
+            { name: { contains: query.search.trim(), mode: 'insensitive' } },
+            { about: { contains: query.search.trim(), mode: 'insensitive' } },
+            { category: { contains: query.search.trim(), mode: 'insensitive' } },
+            { location: { contains: query.search.trim(), mode: 'insensitive' } },
+          ]
+        : undefined,
+    };
+    const orderBy = this.resolvePageOrder(query.sort, query.order);
+    const [pages, total] = await Promise.all([
+      this.prisma.page.findMany({
+        where,
+        orderBy,
+        skip: paging.skip,
+        take: paging.limit,
+      }),
+      this.prisma.page.count({ where }),
+    ]);
+    const items = pages.map((row) => this.mapPage(row));
+    return {
+      pages: items,
+      items,
+      results: items,
+      pagination: this.buildPagination(total, paging.page, paging.limit),
+      filters: {
+        category: query.category?.trim() || null,
+        ownerId: query.ownerId?.trim() || null,
+        search: query.search?.trim() || null,
+        sort: query.sort?.trim() || 'createdAt',
+        order: query.order ?? 'desc',
+      },
+    };
   }
 
   async getPage(id: string) {
@@ -971,5 +1149,95 @@ export class ExperienceDatabaseService {
 
   private asString(value: unknown) {
     return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  }
+
+  private normalizePaging(page?: number, limit?: number) {
+    const safePage = Number.isFinite(page) && (page ?? 0) > 0 ? Math.floor(page as number) : 1;
+    const safeLimit =
+      Number.isFinite(limit) && (limit ?? 0) > 0
+        ? Math.min(100, Math.floor(limit as number))
+        : 20;
+    return {
+      page: safePage,
+      limit: safeLimit,
+      skip: (safePage - 1) * safeLimit,
+    };
+  }
+
+  private buildPagination(total: number, page: number, limit: number) {
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    return {
+      page,
+      limit,
+      total,
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPreviousPage: page > 1,
+    };
+  }
+
+  private resolveMarketplaceOrder(sort?: string, order: 'asc' | 'desc' = 'desc') {
+    const direction: Prisma.SortOrder = order === 'asc' ? 'asc' : 'desc';
+    switch (sort) {
+      case 'price':
+        return { price: direction } satisfies Prisma.MarketplaceProductOrderByWithRelationInput;
+      case 'views':
+        return { views: direction } satisfies Prisma.MarketplaceProductOrderByWithRelationInput;
+      case 'watchers':
+        return { watchers: direction } satisfies Prisma.MarketplaceProductOrderByWithRelationInput;
+      default:
+        return { createdAt: direction } satisfies Prisma.MarketplaceProductOrderByWithRelationInput;
+    }
+  }
+
+  private resolveJobOrder(sort?: string, order: 'asc' | 'desc' = 'desc') {
+    const direction: Prisma.SortOrder = order === 'asc' ? 'asc' : 'desc';
+    switch (sort) {
+      case 'salaryMin':
+      case 'salary':
+        return { salaryMin: direction } satisfies Prisma.JobOrderByWithRelationInput;
+      case 'title':
+        return { title: direction } satisfies Prisma.JobOrderByWithRelationInput;
+      default:
+        return { createdAt: direction } satisfies Prisma.JobOrderByWithRelationInput;
+    }
+  }
+
+  private resolveEventOrder(sort?: string, order: 'asc' | 'desc' = 'desc') {
+    const direction: Prisma.SortOrder = order === 'asc' ? 'asc' : 'desc';
+    switch (sort) {
+      case 'date':
+        return { date: direction } satisfies Prisma.EventOrderByWithRelationInput;
+      case 'participants':
+        return { participants: direction } satisfies Prisma.EventOrderByWithRelationInput;
+      case 'savedCount':
+        return { savedCount: direction } satisfies Prisma.EventOrderByWithRelationInput;
+      default:
+        return { createdAt: direction } satisfies Prisma.EventOrderByWithRelationInput;
+    }
+  }
+
+  private resolveCommunityOrder(sort?: string, order: 'asc' | 'desc' = 'desc') {
+    const direction: Prisma.SortOrder = order === 'asc' ? 'asc' : 'desc';
+    switch (sort) {
+      case 'memberCount':
+        return { memberCount: direction } satisfies Prisma.CommunityOrderByWithRelationInput;
+      case 'name':
+        return { name: direction } satisfies Prisma.CommunityOrderByWithRelationInput;
+      default:
+        return { createdAt: direction } satisfies Prisma.CommunityOrderByWithRelationInput;
+    }
+  }
+
+  private resolvePageOrder(sort?: string, order: 'asc' | 'desc' = 'desc') {
+    const direction: Prisma.SortOrder = order === 'asc' ? 'asc' : 'desc';
+    switch (sort) {
+      case 'followerCount':
+        return { followerCount: direction } satisfies Prisma.PageOrderByWithRelationInput;
+      case 'name':
+        return { name: direction } satisfies Prisma.PageOrderByWithRelationInput;
+      default:
+        return { createdAt: direction } satisfies Prisma.PageOrderByWithRelationInput;
+    }
   }
 }

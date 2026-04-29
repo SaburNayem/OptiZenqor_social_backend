@@ -1,10 +1,22 @@
-import { Body, Controller, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { CommunityRecord } from '../data/ecosystem-data.service';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
-import { CreatePageDto } from '../dto/api.dto';
+import { CommunitiesQueryDto, CreatePageDto, PagesQueryDto } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { ExperienceDatabaseService } from '../services/experience-database.service';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('communities')
 @Controller()
@@ -15,8 +27,14 @@ export class CommunitiesController {
   ) {}
 
   @Get('communities')
-  getCommunities() {
-    return this.experienceDatabase.getCommunities();
+  async getCommunities(@Query() query: CommunitiesQueryDto) {
+    const payload = await this.experienceDatabase.getCommunities(query);
+    return {
+      ...successResponse('Communities fetched successfully.', payload, payload.pagination),
+      items: payload.items,
+      results: payload.results,
+      communities: payload.communities,
+    };
   }
 
   @Get('communities/:id')
@@ -137,7 +155,16 @@ export class CommunitiesController {
   async updateCommunity(
     @Param('id') id: string,
     @Body() body: Record<string, unknown>,
+    @Headers('authorization') authorization?: string,
   ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      this.readString(body.ownerId) ?? this.readString(body.userId),
+    );
+    const existing = await this.experienceDatabase.getCommunity(id);
+    if (existing.ownerId !== actor.id) {
+      throw new ForbiddenException('Only the community owner can update this community.');
+    }
     const community = await this.experienceDatabase.updateCommunity(
       id,
       this.normalizeCommunityPatch(body),
@@ -151,22 +178,37 @@ export class CommunitiesController {
   }
 
   @Get('pages')
-  getPages() {
-    return this.experienceDatabase.getPages();
+  async getPages(@Query() query: PagesQueryDto) {
+    const payload = await this.experienceDatabase.getPages(query);
+    return {
+      ...successResponse('Pages fetched successfully.', payload, payload.pagination),
+      items: payload.items,
+      results: payload.results,
+      pages: payload.pages,
+    };
   }
 
   @Get('pages/create')
   async getCreatePageOptions() {
+    const payload = await this.experienceDatabase.getPages();
+    const pages = payload.pages;
     return {
+      success: true,
+      message: 'Page creation options fetched successfully.',
       categories: [
         ...new Set(
-          (await this.experienceDatabase.getPages()).map(
+          pages.map(
             (page: { category: string }) => page.category,
           ),
         ),
       ],
       ownerSuggestions: ['u1', 'u2', 'u4', 'u5'],
       locations: ['Dhaka, Bangladesh', 'Remote', 'Global'],
+      data: {
+        categories: [...new Set(pages.map((page: { category: string }) => page.category))],
+        ownerSuggestions: ['u1', 'u2', 'u4', 'u5'],
+        locations: ['Dhaka, Bangladesh', 'Remote', 'Global'],
+      },
     };
   }
 
@@ -182,8 +224,21 @@ export class CommunitiesController {
 
   @UseGuards(SessionAuthGuard)
   @Post('pages/create')
-  createPage(@Body() body: CreatePageDto) {
-    return this.experienceDatabase.createPage(body);
+  async createPage(
+    @Body() body: CreatePageDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const owner = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.ownerId,
+    );
+    return successResponse(
+      'Page created successfully.',
+      await this.experienceDatabase.createPage({
+        ...body,
+        ownerId: owner.id,
+      }),
+    );
   }
 
   @UseGuards(SessionAuthGuard)
@@ -207,13 +262,19 @@ export class CommunitiesController {
 
   @Get('groups')
   async getGroups() {
-    return (await this.experienceDatabase.getCommunities()).map((community) => ({
+    const communities = (await this.experienceDatabase.getCommunities()).communities;
+    const groups = communities.map((community) => ({
       id: community.id,
       name: community.name,
       description: community.description,
       memberCount: community.memberCount,
       privacy: community.privacy,
     }));
+    return successResponse('Groups fetched successfully.', {
+      items: groups,
+      results: groups,
+      groups,
+    });
   }
 
   @Get('groups/:id')

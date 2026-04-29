@@ -1,9 +1,10 @@
 import { Body, Controller, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
-import { CreateEventDto, EventActorDto } from '../dto/api.dto';
+import { CreateEventDto, EventActorDto, EventsQueryDto } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { ExperienceDatabaseService } from '../services/experience-database.service';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('events')
 @Controller('events')
@@ -15,8 +16,14 @@ export class EventsController {
 
   @Get()
   @ApiQuery({ name: 'status', required: false, enum: ['Featured', 'Approved', 'Review'] })
-  getEvents(@Query('status') status?: 'Featured' | 'Approved' | 'Review') {
-    return this.experienceDatabase.getEvents(status);
+  async getEvents(@Query() query: EventsQueryDto) {
+    const payload = await this.experienceDatabase.getEvents(query);
+    return {
+      ...successResponse('Events fetched successfully.', payload, payload.pagination),
+      items: payload.items,
+      results: payload.results,
+      events: payload.events,
+    };
   }
 
   @Get('create')

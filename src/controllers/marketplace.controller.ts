@@ -1,9 +1,14 @@
 import { Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
-import { CreateMarketplaceOrderDto, CreateProductDto } from '../dto/api.dto';
+import {
+  CreateMarketplaceOrderDto,
+  CreateProductDto,
+  MarketplaceProductsQueryDto,
+} from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { ExperienceDatabaseService } from '../services/experience-database.service';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('marketplace')
 @Controller('marketplace')
@@ -14,13 +19,13 @@ export class MarketplaceController {
   ) {}
 
   @Get()
-  async getMarketplaceOverview() {
-    const payload = await this.experienceDatabase.getMarketplaceOverview();
+  async getMarketplaceOverview(@Query() query: MarketplaceProductsQueryDto) {
+    const payload = await this.experienceDatabase.getMarketplaceOverview(query);
     return {
-      success: true,
-      message: 'Marketplace fetched successfully.',
-      ...payload,
-      data: payload,
+      ...successResponse('Marketplace fetched successfully.', payload, payload.pagination),
+      items: payload.items,
+      results: payload.results,
+      products: payload.products,
       result: payload,
     };
   }
@@ -70,9 +75,14 @@ export class MarketplaceController {
   }
 
   @Get('products')
-  async getProducts() {
-    const payload = await this.experienceDatabase.getMarketplaceOverview();
-    return payload.products;
+  async getProducts(@Query() query: MarketplaceProductsQueryDto) {
+    const payload = await this.experienceDatabase.getMarketplaceOverview(query);
+    return {
+      ...successResponse('Marketplace products fetched successfully.', payload, payload.pagination),
+      items: payload.items,
+      results: payload.results,
+      products: payload.products,
+    };
   }
 
   @Get('products/:id')
@@ -95,9 +105,12 @@ export class MarketplaceController {
       authorization,
       body.sellerId,
     );
-    return this.experienceDatabase.createMarketplaceProduct({
+    return successResponse(
+      'Marketplace product created successfully.',
+      await this.experienceDatabase.createMarketplaceProduct({
       ...body,
       sellerId: seller.id,
-    });
+      }),
+    );
   }
 }

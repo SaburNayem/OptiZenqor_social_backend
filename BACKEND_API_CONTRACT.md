@@ -1,666 +1,254 @@
 # Backend API Contract
 
-This contract reflects the current NestJS backend implementation in this repo after the buddy, story, chat, and realtime updates completed on April 28, 2026.
+This contract reflects the current backend implementation after the ongoing migration from seeded/static services to database-backed `Prisma + PostgreSQL` modules.
 
-## Auth
+It is intentionally concise and focused on the mobile-facing routes that are already preferred for real integration.
+
+## Global response shape
+
+Most routes should return:
+
+```json
+{
+  "success": true,
+  "message": "Human readable message",
+  "data": {}
+}
+```
+
+Compatibility aliases may also appear, including:
+
+- `items`
+- `results`
+- `user`
+- `profile`
+- `notifications`
+- `inbox`
+- `thread`
+- `posts`
+- `stories`
+- `reels`
+
+## Auth contract
+
+### `POST /auth/login`
+
+Returns:
+
+```json
+{
+  "success": true,
+  "message": "Login successful.",
+  "token": "<accessToken>",
+  "accessToken": "<accessToken>",
+  "refreshToken": "<refreshToken>",
+  "sessionId": "ses_xxx",
+  "tokenType": "Bearer",
+  "expiresInSeconds": 3600,
+  "refreshExpiresInSeconds": 2592000,
+  "sessionCreatedAt": "2026-04-29T12:00:00.000Z",
+  "isLoggedIn": true,
+  "user": {
+    "id": "user_xxx",
+    "name": "Example User",
+    "username": "example.user",
+    "email": "example@optizenqor.app"
+  },
+  "data": {
+    "accessToken": "<accessToken>",
+    "refreshToken": "<refreshToken>"
+  }
+}
+```
+
+### `POST /auth/refresh-token`
+
+Accepts:
+
+```json
+{
+  "refreshToken": "<refreshToken>"
+}
+```
+
+Returns a fresh access/refresh pair in the same session response shape.
+
+### `POST /auth/logout`
+
+Revokes the current persisted session.
 
 ### `GET /auth/me`
 
-Sample response:
+Resolves the authenticated user from bearer token.
 
-```json
-{
-  "success": true,
-  "message": "Current user fetched successfully.",
-  "user": {
-    "id": "u1",
-    "name": "Your Name",
-    "username": "yourusername",
-    "email": "your@email.com",
-    "avatar": "https://placehold.co/120x120",
-    "avatarUrl": "https://placehold.co/120x120",
-    "verified": true
-  },
-  "profile": {
-    "id": "u1",
-    "name": "Your Name",
-    "username": "yourusername",
-    "email": "your@email.com",
-    "avatar": "https://placehold.co/120x120",
-    "avatarUrl": "https://placehold.co/120x120",
-    "verified": true
-  },
-  "data": {
-    "id": "u1",
-    "name": "Your Name",
-    "username": "yourusername",
-    "email": "your@email.com",
-    "avatar": "https://placehold.co/120x120",
-    "avatarUrl": "https://placehold.co/120x120",
-    "verified": true
-  }
-}
-```
+## App bootstrap contract
 
-## Buddies
+### `GET /app/bootstrap`
 
-Actor resolution:
-- preferred: bearer token
-- fallback: `userId` or `actorId`
+Returns:
 
-### `GET /buddies`
+- `generatedAt`
+- `authenticated`
+- `user`
+- `counters`
+- `entrypoints`
+- `feedPreview`
 
-Sample response:
+This route is intended to be the first real backend call from Flutter startup.
 
-```json
-{
-  "success": true,
-  "message": "Buddies fetched successfully.",
-  "data": [
-    {
-      "id": "bud_1714327200000",
-      "status": "accepted",
-      "mutualCount": 5,
-      "createdAt": "2026-04-28T10:00:00.000Z",
-      "user": {
-        "id": "u2",
-        "name": "Sadia Noor",
-        "username": "sadia.noor",
-        "avatar": "https://placehold.co/120x120",
-        "avatarUrl": "https://placehold.co/120x120",
-        "verified": false
-      }
-    }
-  ],
-  "items": [
-    {
-      "id": "bud_1714327200000",
-      "status": "accepted"
-    }
-  ],
-  "results": [
-    {
-      "id": "bud_1714327200000",
-      "status": "accepted"
-    }
-  ],
-  "count": 1
-}
-```
+## Content contract
 
-### `GET /buddies/requests/sent`
+### `GET /feed`
 
-```json
-{
-  "success": true,
-  "message": "Sent buddy requests fetched successfully.",
-  "data": [
-    {
-      "id": "br_1714327200001",
-      "status": "pending_sent",
-      "mutualCount": 2,
-      "createdAt": "2026-04-28T10:05:00.000Z",
-      "user": {
-        "id": "u3",
-        "name": "Ariana Khan",
-        "username": "ariana.khan",
-        "avatar": "https://placehold.co/120x120",
-        "avatarUrl": "https://placehold.co/120x120",
-        "verified": false
-      }
-    }
-  ]
-}
-```
+Returns database-backed feed items from posts and related social entities.
 
-### `GET /buddies/requests/received`
+### `GET /posts`
+### `POST /posts`
+### `PATCH /posts/:id`
+### `DELETE /posts/:id`
 
-```json
-{
-  "success": true,
-  "message": "Received buddy requests fetched successfully.",
-  "data": [
-    {
-      "id": "br_1714327200002",
-      "status": "pending_received",
-      "mutualCount": 3,
-      "createdAt": "2026-04-28T10:08:00.000Z",
-      "user": {
-        "id": "u4",
-        "name": "Maya Quinn",
-        "username": "maya.quinn",
-        "avatar": "https://placehold.co/120x120",
-        "avatarUrl": "https://placehold.co/120x120",
-        "verified": true
-      }
-    }
-  ]
-}
-```
-
-### `POST /buddies/requests`
-
-Body:
-
-```json
-{
-  "targetUserId": "u2"
-}
-```
-
-Sample response:
-
-```json
-{
-  "success": true,
-  "message": "Buddy request created successfully.",
-  "id": "br_1714327200003",
-  "status": "pending_sent",
-  "mutualCount": 5,
-  "createdAt": "2026-04-28T10:10:00.000Z",
-  "user": {
-    "id": "u2",
-    "name": "Sadia Noor",
-    "username": "sadia.noor",
-    "avatar": "https://placehold.co/120x120",
-    "avatarUrl": "https://placehold.co/120x120",
-    "verified": false
-  },
-  "request": {
-    "id": "br_1714327200003",
-    "status": "pending_sent"
-  }
-}
-```
-
-### `POST /buddies/requests/{requestId}/accept`
-
-```json
-{
-  "success": true,
-  "message": "Buddy request accepted successfully.",
-  "id": "bud_1714327200004",
-  "status": "accepted",
-  "mutualCount": 5,
-  "createdAt": "2026-04-28T10:11:00.000Z",
-  "user": {
-    "id": "u2",
-    "name": "Sadia Noor",
-    "username": "sadia.noor",
-    "avatar": "https://placehold.co/120x120",
-    "avatarUrl": "https://placehold.co/120x120",
-    "verified": false
-  },
-  "buddy": {
-    "id": "bud_1714327200004",
-    "status": "accepted"
-  }
-}
-```
-
-### `POST /buddies/requests/{requestId}/reject`
-
-```json
-{
-  "success": true,
-  "message": "Buddy request rejected successfully.",
-  "id": "br_1714327200005",
-  "status": "rejected",
-  "mutualCount": 1,
-  "createdAt": "2026-04-28T10:12:00.000Z",
-  "user": {
-    "id": "u6",
-    "name": "Nayeem Hasan",
-    "username": "nayeem.hasan",
-    "avatar": "https://placehold.co/120x120",
-    "avatarUrl": "https://placehold.co/120x120",
-    "verified": false
-  }
-}
-```
-
-### `DELETE /buddies/requests/{requestId}`
-
-```json
-{
-  "success": true,
-  "requestId": "br_1714327200005",
-  "userId": "u1",
-  "deleted": true,
-  "message": "Buddy request deleted successfully."
-}
-```
-
-### `DELETE /buddies/{buddyUserId}`
-
-```json
-{
-  "success": true,
-  "userId": "u1",
-  "buddyUserId": "u2",
-  "removed": true,
-  "message": "Buddy removed successfully."
-}
-```
-
-## Stories
+Post CRUD remains available under stable route names.
 
 ### `GET /stories`
-
-Supports:
-- `GET /stories`
-- `GET /stories?userId=u1`
-- `GET /stories?scope=buddies`
-
-Sample response:
-
-```json
-{
-  "success": true,
-  "message": "Stories fetched successfully.",
-  "data": [
-    {
-      "id": "s1",
-      "userId": "u1",
-      "author": {
-        "id": "u1",
-        "name": "Your Name",
-        "username": "yourusername",
-        "avatar": "https://placehold.co/120x120"
-      },
-      "media": "https://example.com/story.jpg",
-      "mediaItems": ["https://example.com/story.jpg"],
-      "isLocalFile": false,
-      "text": "hello",
-      "music": "",
-      "backgroundColors": [4280173215, 4281053345],
-      "textColorValue": 4294967295,
-      "privacy": "Everyone",
-      "collageLayout": "grid",
-      "textOffsetDx": 0,
-      "textOffsetDy": 0,
-      "textScale": 1,
-      "mediaTransforms": [],
-      "seen": false,
-      "createdAt": "2026-04-28T10:00:00.000Z",
-      "expiresAt": "2026-04-29T10:00:00.000Z"
-    }
-  ]
-}
-```
-
+### `GET /stories/:id`
 ### `POST /stories`
+### `POST /stories/:id/comments`
+### `POST /stories/:id/reactions`
+### `POST /stories/:id/view`
 
-Body fields supported:
-- `userId`
-- `media`
-- `mediaItems`
-- `text`
-- `music`
-- `backgroundColors`
-- `textColorValue`
-- `privacy`
-- `collageLayout`
-- `textOffsetDx`
-- `textOffsetDy`
-- `textScale`
-- `mediaTransforms`
+Stories are database-backed through the stories persistence service.
 
-Sample response:
+### `GET /reels`
+### `GET /reels/:id`
+### `POST /reels`
+### `POST /reels/:id/comments`
+### `POST /reels/:id/reactions`
 
-```json
-{
-  "id": "s_new",
-  "userId": "u1",
-  "author": {
-    "id": "u1",
-    "name": "Your Name",
-    "username": "yourusername",
-    "avatar": "https://placehold.co/120x120"
-  },
-  "media": "https://example.com/story.jpg",
-  "mediaItems": ["https://example.com/story.jpg"],
-  "text": "hello",
-  "seen": false,
-  "createdAt": "2026-04-28T10:00:00.000Z"
-}
-```
+Reels are database-backed through the reels persistence service.
 
-### `DELETE /stories/{storyId}`
-
-```json
-{
-  "success": true,
-  "removed": {
-    "id": "s1"
-  },
-  "message": "Story deleted successfully."
-}
-```
-
-### `POST /stories/{storyId}/view`
-
-```json
-{
-  "success": true,
-  "storyId": "s1",
-  "userId": "u2",
-  "viewedAt": "2026-04-28T10:20:00.000Z",
-  "viewerCount": 4
-}
-```
-
-### `GET /stories/{storyId}/viewers`
-
-```json
-{
-  "success": true,
-  "message": "Story viewers fetched successfully.",
-  "data": [
-    {
-      "id": "u2",
-      "name": "Sadia Noor",
-      "username": "sadia.noor",
-      "avatar": "https://placehold.co/120x120",
-      "avatarUrl": "https://placehold.co/120x120",
-      "viewedAt": "2026-04-28T10:20:00.000Z"
-    }
-  ]
-}
-```
-
-### `POST /stories/{storyId}/reactions`
-
-```json
-{
-  "storyId": "s1",
-  "userId": "u2",
-  "reaction": "love",
-  "createdAt": "2026-04-28T10:22:00.000Z",
-  "user": {
-    "id": "u2",
-    "name": "Sadia Noor",
-    "username": "sadia.noor",
-    "avatar": "https://placehold.co/120x120"
-  }
-}
-```
-
-## Chat
+## Chat contract
 
 ### `GET /chat/threads`
+### `GET /chat/threads/:id/messages`
+### `POST /chat/threads/:id/messages`
 
-```json
-{
-  "success": true,
-  "message": "Threads fetched successfully.",
-  "data": [
-    {
-      "id": "t1",
-      "threadId": "t1",
-      "chatId": "t1",
-      "title": "Sadia Noor",
-      "participantsLabel": "2 members",
-      "summary": "Direct conversation",
-      "participantIds": ["u1", "u2"],
-      "participants": [
-        {
-          "id": "u1",
-          "name": "Me",
-          "username": "me",
-          "avatar": "https://placehold.co/120x120"
-        },
-        {
-          "id": "u2",
-          "name": "Sadia Noor",
-          "username": "sadia.noor",
-          "avatar": "https://placehold.co/120x120"
-        }
-      ],
-      "unreadCount": 1,
-      "lastMessage": {
-        "id": "m9",
-        "chatId": "t1",
-        "threadId": "t1",
-        "senderId": "u2",
-        "text": "Hi",
-        "timestamp": "2026-04-28T10:00:00.000Z",
-        "read": false,
-        "starred": false,
-        "replyToMessageId": null,
-        "deliveryState": "delivered",
-        "kind": "text",
-        "mediaPath": null
-      }
-    }
-  ]
-}
-```
+These routes are database-backed and should be treated as authenticated-first.
 
-### `POST /chat/threads`
+## Notifications contract
 
-Body:
+### `GET /notifications`
 
-```json
-{
-  "targetUserId": "u2"
-}
-```
+Returns:
 
-Sample response:
+- inbox items from `app_notifications`
+- campaign metadata from persisted notification campaigns
+- settings/preferences from persisted user settings when user context is available
 
-```json
-{
-  "success": true,
-  "message": "Thread created successfully.",
-  "thread": {
-    "id": "t1",
-    "chatId": "t1"
-  }
-}
-```
+### `PATCH /notifications/:id/read`
 
-### `GET /chat/threads/{threadId}`
+Marks a notification as read for the requesting or specified user scope.
 
-```json
-{
-  "success": true,
-  "message": "Thread fetched successfully.",
-  "thread": {
-    "id": "t1",
-    "chatId": "t1",
-    "participants": [
-      {
-        "id": "u1",
-        "name": "Me",
-        "username": "me",
-        "avatar": "https://placehold.co/120x120"
-      },
-      {
-        "id": "u2",
-        "name": "Sadia Noor",
-        "username": "sadia.noor",
-        "avatar": "https://placehold.co/120x120"
-      }
-    ],
-    "messages": []
-  }
-}
-```
+### `GET /notifications/preferences`
 
-### `GET /chat/threads/{threadId}/messages`
+Returns persisted user settings state for notification-related flags.
 
-```json
-{
-  "success": true,
-  "message": "Thread messages fetched successfully.",
-  "data": [
-    {
-      "id": "m1",
-      "chatId": "t1",
-      "threadId": "t1",
-      "senderId": "u2",
-      "text": "Hello",
-      "timestamp": "2026-04-28T10:00:00.000Z",
-      "read": false,
-      "starred": false,
-      "replyToMessageId": null,
-      "deliveryState": "sent",
-      "kind": "text",
-      "mediaPath": null
-    }
-  ]
-}
-```
+## Profile and saved state contract
 
-### `POST /chat/threads/{threadId}/messages`
+### `GET /profile/:id`
+### `PATCH /user-profile/edit`
 
-```json
-{
-  "success": true,
-  "message": "Message sent successfully.",
-  "id": "m2",
-  "chatId": "t1",
-  "threadId": "t1",
-  "senderId": "u1",
-  "text": "Hello back",
-  "timestamp": "2026-04-28T10:01:00.000Z",
-  "read": false,
-  "starred": false,
-  "replyToMessageId": null,
-  "deliveryState": "sent",
-  "kind": "text",
-  "mediaPath": null
-}
-```
+Profile reads and edits remain stable under the existing route shapes.
 
-### `POST /chat/threads/{threadId}/read`
+### `GET /bookmarks`
+### `POST /bookmarks`
+### `DELETE /bookmarks/:id`
 
-```json
-{
-  "success": true,
-  "message": "Thread marked as read successfully.",
-  "threadId": "t1",
-  "userId": "u1",
-  "updatedCount": 2,
-  "messages": []
-}
-```
+Bookmarks are persisted in PostgreSQL.
 
-### `GET /chat/presence`
+### `GET /drafts`
+### `POST /drafts`
+### `PATCH /drafts/:id`
+### `DELETE /drafts/:id`
 
-```json
-{
-  "success": true,
-  "message": "Chat presence fetched successfully.",
-  "presence": {
-    "onlineUserIds": ["u1"],
-    "users": [
-      {
-        "userId": "u1",
-        "online": true,
-        "socketCount": 1,
-        "lastSeen": "now"
-      }
-    ],
-    "threadTyping": []
-  }
-}
-```
+Draft and scheduling metadata are persisted in PostgreSQL.
 
-### `POST /chat/presence`
+## Experience contract
 
-```json
-{
-  "success": true,
-  "message": "Chat presence updated successfully.",
-  "presence": {
-    "users": [
-      {
-        "userId": "u1",
-        "online": true,
-        "lastSeen": "now",
-        "typingInThreadId": "t1"
-      }
-    ]
-  }
-}
-```
+### Marketplace
 
-### `GET /chat/preferences`
+- `GET /marketplace`
+- `GET /marketplace/products`
+- `GET /marketplace/products/:id`
+- `POST /marketplace/products`
+- `POST /marketplace/checkout`
 
-```json
-{
-  "success": true,
-  "message": "Chat preferences fetched successfully.",
-  "preferences": {
-    "conversationPreferences": [
-      {
-        "threadId": "t1",
-        "archived": false,
-        "muted": false,
-        "pinned": true,
-        "unread": true,
-        "clearedAt": null
-      }
-    ],
-    "notificationPreferences": {
-      "pushCategories": [
-        {
-          "title": "Messages",
-          "enabled": true
-        }
-      ],
-      "emailEnabled": true,
-      "pushEnabled": true
-    },
-    "safetyConfig": {
-      "reportCategories": [
-        {
-          "reason": "Harassment",
-          "status": "active"
-        }
-      ]
-    }
-  }
-}
-```
+These now use database-backed product and order models.
 
-### `PUT /chat/preferences`
+List responses return `data.products`, `data.items`, and `data.results` plus pagination metadata. Query support includes `page`, `limit`, `search`, `category`, `status`, `sellerId`, `sort`, and `order`.
 
-Body:
+### Jobs
 
-```json
-{
-  "patch": {
-    "notificationPreferences": {
-      "pushEnabled": false
-    }
-  }
-}
-```
+- `GET /jobs`
+- `GET /jobs/:id`
+- `POST /jobs/create`
+- `POST /jobs/:id/apply`
 
-Sample response:
+These now use database-backed job and application models.
 
-```json
-{
-  "success": true,
-  "message": "Chat preferences updated successfully.",
-  "preferences": {
-    "notificationPreferences": {
-      "pushEnabled": false
-    }
-  }
-}
-```
+List responses return `data.jobs`, `data.items`, and `data.results` plus pagination metadata. Query support includes `page`, `limit`, `search`, `status`, `type`, `userId`, `sort`, and `order`.
 
-### Useful extras
+### Events
 
-- `POST /chat/threads/{threadId}/archive`
-- `POST /chat/threads/{threadId}/mute`
-- `POST /chat/threads/{threadId}/pin`
+- `GET /events`
+- `GET /events/:id`
+- `POST /events`
+- `PATCH /events/:id/rsvp`
+- `PATCH /events/:id/save`
 
-## Socket events
+These now use database-backed event and RSVP models.
+
+List responses return `data.events`, `data.items`, and `data.results` plus pagination metadata. Query support includes `page`, `limit`, `search`, `status`, `category`, `userId`, `sort`, and `order`.
+
+### Communities and pages
+
+- `GET /communities`
+- `GET /communities/:id`
+- `POST /communities`
+- `POST /communities/:id/join`
+- `POST /communities/:id/leave`
+- `GET /pages`
+- `GET /pages/:id`
+- `POST /pages/create`
+- `PATCH /pages/:id/follow`
+
+These now use database-backed community/page models and membership/follow records.
+
+List responses return compatibility aliases in `data.communities` or `data.pages` alongside `data.items` and `data.results`, with pagination metadata. Community queries support `page`, `limit`, `search`, `category`, `privacy`, `userId`, `sort`, and `order`. Page queries support `page`, `limit`, `search`, `category`, `ownerId`, `sort`, and `order`.
+
+## Monetization contract
+
+### `GET /wallet`
+
+Returns the authenticated user wallet account plus transaction list.
+
+### `GET /monetization/overview`
+
+Returns:
+
+- wallet
+- subscriptions
+- premium plans
+
+### `GET /monetization/wallet`
+### `GET /monetization/subscriptions`
+### `GET /monetization/plans`
+### `GET /premium-plans`
+### `GET /premium-membership`
+### `GET /premium`
+
+These now resolve through persisted wallet, plan, subscription, and campaign models rather than static arrays.
+
+## Realtime contract
 
 Namespace:
 
@@ -668,12 +256,12 @@ Namespace:
 /realtime
 ```
 
-Server events now exposed for chat/presence:
-- `message:new`
-- `message:read`
-- `presence:update`
+Currently exposed event families include:
 
-Existing parallel events still available:
-- `chat.message.created`
-- `chat.message.read`
-- `presence.updated`
+- message create/broadcast
+- read state updates
+- presence updates
+
+## Important status note
+
+This contract covers the preferred real integration path, but the repo still contains some static helper modules outside these routes. Admin, support/help, advanced discovery/trending, and several utility surfaces still need the same database-backed replacement before the entire backend can be called fully mock-free.
