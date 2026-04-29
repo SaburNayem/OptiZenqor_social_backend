@@ -21,6 +21,7 @@ import { PrismaService } from '../services/prisma.service';
 import { StateSnapshotService } from '../services/state-snapshot.service';
 import { StoriesDatabaseService } from '../services/stories-database.service';
 import { UploadsDatabaseService } from '../services/uploads-database.service';
+import { SettingsDatabaseService } from '../services/settings-database.service';
 
 @Global()
 @Module({
@@ -47,6 +48,7 @@ import { UploadsDatabaseService } from '../services/uploads-database.service';
     StoriesDatabaseService,
     UploadsDatabaseService,
     ReelsDatabaseService,
+    SettingsDatabaseService,
   ],
   exports: [
     PlatformDataService,
@@ -71,6 +73,7 @@ import { UploadsDatabaseService } from '../services/uploads-database.service';
     StoriesDatabaseService,
     UploadsDatabaseService,
     ReelsDatabaseService,
+    SettingsDatabaseService,
   ],
 })
 export class DataModule {}

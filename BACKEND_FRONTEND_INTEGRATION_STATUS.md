@@ -29,7 +29,7 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 | Events | Yes | Yes | Pending | Partial | Partial | Prisma models and `ExperienceDatabaseService` exist. |
 | Communities/pages | Yes | Yes | Pending | Partial | Partial | Prisma models and `ExperienceDatabaseService` exist. |
 | Blocks/reports/settings state | Yes | Yes | Pending | Partial | Partial | Persistent account-state tables/services exist. |
-| Preferences/support/app extensions | Partial | Partial | Pending | No | Partial | Several routes still rely on `SettingsDataService` or `AppExtensionsDataService`. |
+| Preferences/support/app extensions | Partial | Partial | Pending | Partial | Partial | `settings` and `preferences` now read user-scoped state from DB-backed services for core settings flows, but several support/app-extension routes still rely on snapshot-backed services. |
 | Realtime calls/live/presence | Partial | Partial | Pending | No | Partial | Socket auth exists, but snapshot-backed session state and fallback auth paths remain. |
 
 ## Remaining Mock or Snapshot Hotspots
@@ -44,15 +44,16 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 ## High-Priority Controller Migration Targets
 
 1. `src/controllers/discovery.controller.ts`
-2. `src/controllers/settings.controller.ts`
-3. `src/controllers/preferences.controller.ts`
-4. `src/controllers/chat.controller.ts`
-5. `src/controllers/posts.controller.ts`
-6. `src/controllers/stories.controller.ts`
-7. `src/controllers/auth.controller.ts`
-8. `src/controllers/profiles.controller.ts`
+2. `src/controllers/chat.controller.ts`
+3. `src/controllers/posts.controller.ts`
+4. `src/controllers/stories.controller.ts`
+5. `src/controllers/auth.controller.ts`
+6. `src/controllers/profiles.controller.ts`
+7. `src/controllers/support.controller.ts`
+8. `src/controllers/realtime.controller.ts`
 
 ## Notes
 
 - Public docs in the GitHub repo describe an older state than the current local schema and service layer.
-- The next backend-first goal should be replacing the remaining `src/data/*` dependencies feature by feature, starting with user-scoped state and discovery surfaces.
+- On 2026-04-29, `settings.controller.ts` and `preferences.controller.ts` were moved off mutable seeded state for their main user-scoped reads and updates by introducing `SettingsDatabaseService`.
+- The next backend-first goal should be replacing the remaining `src/data/*` dependencies feature by feature, starting with discovery, chat adjunct routes, support, and realtime surfaces.

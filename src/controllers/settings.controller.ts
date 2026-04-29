@@ -1,9 +1,9 @@
 import { Body, Controller, Get, Headers, Param, Patch, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
-import { SettingsDataService } from '../data/settings-data.service';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { SettingsDatabaseService } from '../services/settings-database.service';
 import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('settings')
@@ -11,24 +11,32 @@ import { successResponse } from '../utils/api-response.util';
 @UseGuards(SessionAuthGuard)
 export class SettingsController {
   constructor(
-    private readonly settingsData: SettingsDataService,
+    private readonly settingsDatabase: SettingsDatabaseService,
     private readonly accountStateDatabase: AccountStateDatabaseService,
     private readonly coreDatabase: CoreDatabaseService,
   ) {}
 
   @Get()
-  getSettingsSections() {
-    return successResponse('Settings sections fetched successfully.', this.settingsData.getSections());
+  async getSettingsSections(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Settings sections fetched successfully.',
+      await this.settingsDatabase.getSections(user.id),
+    );
   }
 
   @Get('sections')
-  getSettingsSectionsAlias() {
-    return successResponse('Settings sections fetched successfully.', this.settingsData.getSections());
+  async getSettingsSectionsAlias(@Headers('authorization') authorization?: string) {
+    return this.getSettingsSections(authorization);
   }
 
   @Get('items')
-  getSettingsItems() {
-    return successResponse('Settings items fetched successfully.', this.settingsData.getItems());
+  async getSettingsItems(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Settings items fetched successfully.',
+      await this.settingsDatabase.getItems(user.id),
+    );
   }
 
   @Get('state')
@@ -41,29 +49,39 @@ export class SettingsController {
   }
 
   @Get('items/:itemKey')
-  getSettingsItem(@Param('itemKey') itemKey: string) {
+  async getSettingsItem(
+    @Param('itemKey') itemKey: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
     return successResponse(
       'Settings item fetched successfully.',
-      this.settingsData.getItem(itemKey),
+      await this.settingsDatabase.getItem(user.id, itemKey),
     );
   }
 
   @Get(':sectionKey')
-  getSettingsSection(@Param('sectionKey') sectionKey: string) {
+  async getSettingsSection(
+    @Param('sectionKey') sectionKey: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
     return successResponse(
       'Settings section fetched successfully.',
-      this.settingsData.getRouteEntry(`/settings/${sectionKey}`),
+      await this.settingsDatabase.getRouteEntry(user.id, `/settings/${sectionKey}`),
     );
   }
 
   @Patch('items/:itemKey')
-  updateSettingsItem(
+  async updateSettingsItem(
     @Param('itemKey') itemKey: string,
     @Body() body: Record<string, unknown>,
+    @Headers('authorization') authorization?: string,
   ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
     return successResponse(
       'Settings item updated successfully.',
-      this.settingsData.updateItem(itemKey, body),
+      await this.settingsDatabase.updateItem(user.id, itemKey, body),
     );
   }
 
@@ -80,13 +98,19 @@ export class SettingsController {
   }
 
   @Patch(':sectionKey')
-  updateSettingsSection(
+  async updateSettingsSection(
     @Param('sectionKey') sectionKey: string,
     @Body() body: Record<string, unknown>,
+    @Headers('authorization') authorization?: string,
   ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
     return successResponse(
       'Settings section updated successfully.',
-      this.settingsData.updateRouteEntry(`/settings/${sectionKey}`, body),
+      await this.settingsDatabase.updateRouteEntry(
+        user.id,
+        `/settings/${sectionKey}`,
+        body,
+      ),
     );
   }
 }

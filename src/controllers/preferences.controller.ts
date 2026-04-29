@@ -1,18 +1,16 @@
 import { Controller, Get, Headers, Query, UseGuards } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
-import { AppExtensionsDataService } from '../data/app-extensions-data.service';
-import { SettingsDataService } from '../data/settings-data.service';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { SettingsDatabaseService } from '../services/settings-database.service';
 import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('preferences')
 @Controller()
 export class PreferencesController {
   constructor(
-    private readonly settingsData: SettingsDataService,
-    private readonly appExtensionsData: AppExtensionsDataService,
+    private readonly settingsDatabase: SettingsDatabaseService,
     private readonly accountStateDatabase: AccountStateDatabaseService,
     private readonly coreDatabase: CoreDatabaseService,
   ) {}
@@ -21,67 +19,59 @@ export class PreferencesController {
   @UseGuards(SessionAuthGuard)
   async getAdvancedPrivacyControls(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    const item = this.settingsData.getItem('advanced-privacy-controls');
-    return {
-      success: true,
-      message: 'Advanced privacy controls fetched successfully.',
-      data: {
-        ...item,
-        data: {
-          ...item.data,
-          privacy: await this.accountStateDatabase.getPrivacySnapshot(user.id),
-        },
-      },
-    };
+    return successResponse(
+      'Advanced privacy controls fetched successfully.',
+      await this.settingsDatabase.getAdvancedPrivacyControls(user.id),
+    );
   }
 
   @Get('safety-privacy')
   @UseGuards(SessionAuthGuard)
   async getSafetyPrivacy(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    const [item, blocked] = await Promise.all([
-      Promise.resolve(this.settingsData.getItem('safety-privacy')),
-      this.accountStateDatabase.getBlockedUsers(user.id),
-    ]);
-    return successResponse('Safety and privacy fetched successfully.', {
-      ...item,
-      data: {
-        ...item.data,
-        privacy: await this.accountStateDatabase.getPrivacySnapshot(user.id),
-        blockedCount: blocked.length,
-      },
-    });
+    return successResponse(
+      'Safety and privacy fetched successfully.',
+      await this.settingsDatabase.getSafetyPrivacy(user.id),
+    );
   }
 
   @Get('accessibility-support')
-  getAccessibilitySupport() {
+  @UseGuards(SessionAuthGuard)
+  async getAccessibilitySupport(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
     return successResponse(
       'Accessibility support fetched successfully.',
-      this.appExtensionsData.getAccessibilitySupport(),
+      await this.settingsDatabase.getAccessibilitySupport(user.id),
     );
   }
 
   @Get('explore-recommendation')
-  getExploreRecommendations() {
+  @UseGuards(SessionAuthGuard)
+  async getExploreRecommendations(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
     return successResponse(
       'Explore recommendations fetched successfully.',
-      this.appExtensionsData.getExploreRecommendations(),
+      await this.settingsDatabase.getExploreRecommendations(user.id),
     );
   }
 
   @Get('push-notification-preferences')
-  getPushNotificationPreferences() {
+  @UseGuards(SessionAuthGuard)
+  async getPushNotificationPreferences(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
     return successResponse(
       'Push notification preferences fetched successfully.',
-      this.appExtensionsData.getPushNotificationPreferences(),
+      await this.settingsDatabase.getPushNotificationPreferences(user.id),
     );
   }
 
   @Get('legal-compliance')
-  getLegalCompliance() {
+  @UseGuards(SessionAuthGuard)
+  async getLegalCompliance(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
     return successResponse(
       'Legal compliance fetched successfully.',
-      this.appExtensionsData.getLegalCompliance(),
+      await this.settingsDatabase.getLegalCompliance(user.id),
     );
   }
 
@@ -96,13 +86,9 @@ export class PreferencesController {
       authorization,
       actorId,
     );
-    const blocked = await this.accountStateDatabase.getBlockedUsers(user.id);
-    const blockedMuted = this.appExtensionsData.getBlockedMutedAccounts();
-    return successResponse('Blocked and muted accounts fetched successfully.', {
-      blocked,
-      muted: blockedMuted.mutedAccounts,
-      blockedAccounts: blocked,
-      ...blockedMuted,
-    });
+    return successResponse(
+      'Blocked and muted accounts fetched successfully.',
+      await this.settingsDatabase.getBlockedMutedAccounts(user.id),
+    );
   }
 }

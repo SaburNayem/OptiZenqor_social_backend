@@ -1,0 +1,632 @@
+import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import {
+  SettingsDataService,
+  SettingsItemRecord,
+  SettingsSectionRecord,
+} from '../data/settings-data.service';
+import { AccountStateDatabaseService } from './account-state-database.service';
+import { CoreDatabaseService } from './core-database.service';
+import { MonetizationDatabaseService } from './monetization-database.service';
+import { PrismaService } from './prisma.service';
+import { UploadsDatabaseService } from './uploads-database.service';
+
+const DEFAULT_PUSH_PREFERENCES = [
+  { title: 'Likes', enabled: true },
+  { title: 'Comments', enabled: true },
+  { title: 'Mentions', enabled: true },
+  { title: 'Messages', enabled: true },
+  { title: 'Calls', enabled: false },
+  { title: 'Live alerts', enabled: false },
+] as const;
+
+type SettingsContext = {
+  user: Awaited<ReturnType<CoreDatabaseService['getUser']>>;
+  settingsState: Record<string, unknown>;
+  blockedUsers: Awaited<ReturnType<AccountStateDatabaseService['getBlockedUsers']>>;
+  bookmarks: Awaited<ReturnType<AccountStateDatabaseService['getBookmarks']>>;
+  collections: Awaited<ReturnType<AccountStateDatabaseService['getCollections']>>;
+  drafts: Awaited<ReturnType<AccountStateDatabaseService['getDrafts']>>;
+  scheduled: Awaited<ReturnType<AccountStateDatabaseService['getScheduledDrafts']>>;
+  reports: Awaited<ReturnType<AccountStateDatabaseService['getReportCenter']>>;
+  uploads: Awaited<ReturnType<UploadsDatabaseService['getUploads']>>;
+  wallet: Awaited<ReturnType<MonetizationDatabaseService['getWallet']>> | null;
+  sessions: number;
+  creatorAnalytics:
+    | Awaited<ReturnType<AccountStateDatabaseService['getCreatorAnalytics']>>
+    | null;
+};
+
+@Injectable()
+export class SettingsDatabaseService {
+  constructor(
+    private readonly settingsData: SettingsDataService,
+    private readonly accountStateDatabase: AccountStateDatabaseService,
+    private readonly coreDatabase: CoreDatabaseService,
+    private readonly monetizationDatabase: MonetizationDatabaseService,
+    private readonly prisma: PrismaService,
+    private readonly uploadsDatabase: UploadsDatabaseService,
+  ) {}
+
+  async getSections(userId: string) {
+    const context = await this.buildContext(userId);
+    const sections = this.settingsData.getSections();
+    return sections.map((section) => this.hydrateSection(section, context));
+  }
+
+  async getItems(userId: string) {
+    const sections = await this.getSections(userId);
+    return sections.flatMap((section) =>
+      section.items.map((item) => ({
+        ...item,
+        sectionKey: section.key,
+        sectionTitle: section.title,
+      })),
+    );
+  }
+
+  async getItem(userId: string, itemKey: string) {
+    const context = await this.buildContext(userId);
+    return this.hydrateItem(this.settingsData.getItem(itemKey), context);
+  }
+
+  async getRouteEntry(userId: string, routePath: string) {
+    const context = await this.buildContext(userId);
+    const entry = this.settingsData.getRouteEntry(routePath);
+    return this.isSection(entry)
+      ? this.hydrateSection(entry, context)
+      : this.hydrateItem(entry, context);
+  }
+
+  async updateItem(userId: string, itemKey: string, patch: Record<string, unknown>) {
+    await this.accountStateDatabase.updateSettingsState(userId, {
+      [`catalog.item_overrides.${itemKey}`]: patch,
+    });
+    return this.getItem(userId, itemKey);
+  }
+
+  async updateRouteEntry(userId: string, routePath: string, patch: Record<string, unknown>) {
+    const entry = this.settingsData.getRouteEntry(routePath);
+    if (this.isSection(entry)) {
+      await this.accountStateDatabase.updateSettingsState(userId, {
+        [`catalog.section_overrides.${entry.key}`]: patch,
+      });
+      return this.getRouteEntry(userId, routePath);
+    }
+
+    return this.updateItem(userId, entry.key, patch);
+  }
+
+  async getAdvancedPrivacyControls(userId: string) {
+    return this.getItem(userId, 'advanced-privacy-controls');
+  }
+
+  async getSafetyPrivacy(userId: string) {
+    return this.getItem(userId, 'safety-privacy');
+  }
+
+  async getAccessibilitySupport(userId: string) {
+    const context = await this.buildContext(userId);
+    const state = context.settingsState;
+    return {
+      options: [
+        {
+          title: 'Captions by default',
+          enabled: this.readBoolean(state['accessibility.captions'], true),
+        },
+        {
+          title: 'High contrast mode',
+          enabled: this.readBoolean(state['accessibility.high_contrast'], false),
+        },
+        {
+          title: 'Reduce motion',
+          enabled: this.readBoolean(state['accessibility.reduce_motion'], false),
+        },
+        {
+          title: 'Screen reader hints',
+          enabled: this.readBoolean(state['accessibility.screen_reader_hints'], true),
+        },
+      ],
+      previewState: {
+        screenReaderHints: this.readBoolean(
+          state['accessibility.screen_reader_hints'],
+          true,
+        ),
+        motionPreviewAvailable: this.readBoolean(
+          state['accessibility.motion_preview_available'],
+          true,
+        ),
+      },
+    };
+  }
+
+  async getExploreRecommendations(userId: string) {
+    const context = await this.buildContext(userId);
+    const recommendationScore = this.readNumber(
+      context.settingsState['explore.recommendation_score'],
+      0.81,
+    );
+    return {
+      recommendationScore,
+      resetAvailable: this.readBoolean(
+        context.settingsState['feed.reset_recommendations'],
+        false,
+      ),
+      topics: this.jsonStringArray(context.user.interests).slice(0, 6),
+      hints:
+        this.jsonStringArray(context.user.interests).length > 0
+          ? this.jsonStringArray(context.user.interests).map((item) => ({
+              type: 'interest',
+              title: item,
+              subtitle: 'Based on your saved interests',
+            }))
+          : [],
+    };
+  }
+
+  async getPushNotificationPreferences(userId: string) {
+    const context = await this.buildContext(userId);
+    return this.resolvePushPreferences(context.settingsState);
+  }
+
+  async getLegalCompliance(userId: string) {
+    const state = (await this.buildContext(userId)).settingsState;
+    return {
+      termsAccepted: this.readBoolean(state['legal.terms_accepted'], true),
+      privacyAccepted: this.readBoolean(state['legal.privacy_accepted'], true),
+      guidelinesAccepted: this.readBoolean(state['legal.guidelines_accepted'], true),
+      documents: [
+        { key: 'terms', title: 'Terms of Service', version: '2026.04' },
+        { key: 'privacy', title: 'Privacy Policy', version: '2026.04' },
+        { key: 'guidelines', title: 'Community Guidelines', version: '2026.04' },
+      ],
+    };
+  }
+
+  async getBlockedMutedAccounts(userId: string) {
+    const [blocked, rawState] = await Promise.all([
+      this.accountStateDatabase.getBlockedUsers(userId),
+      this.accountStateDatabase.getSettingsState(userId),
+    ]);
+    const state = rawState as Record<string, unknown>;
+    return {
+      blocked,
+      muted: this.readArrayObjects(state['moderation.muted_accounts']),
+      blockedAccounts: blocked,
+      mutedAccounts: this.readArrayObjects(state['moderation.muted_accounts']),
+      restrictedAccounts: this.readArrayObjects(
+        state['moderation.restricted_accounts'],
+      ),
+    };
+  }
+
+  private async buildContext(userId: string): Promise<SettingsContext> {
+    const [
+      user,
+      rawSettingsState,
+      blockedUsers,
+      bookmarks,
+      collections,
+      drafts,
+      scheduled,
+      reports,
+      uploads,
+      wallet,
+      sessions,
+    ] =
+      await Promise.all([
+        this.coreDatabase.getUser(userId),
+        this.accountStateDatabase.getSettingsState(userId),
+        this.accountStateDatabase.getBlockedUsers(userId),
+        this.accountStateDatabase.getBookmarks(userId),
+        this.accountStateDatabase.getCollections(userId),
+        this.accountStateDatabase.getDrafts(userId),
+        this.accountStateDatabase.getScheduledDrafts(userId),
+        this.accountStateDatabase.getReportCenter(userId),
+        this.uploadsDatabase.getUploads(userId),
+        this.monetizationDatabase.getWallet(userId).catch(() => null),
+        this.prisma.authSession.count({ where: { userId } }),
+      ]);
+    const settingsState = rawSettingsState as Record<string, unknown>;
+
+    const creatorAnalytics =
+      user.role?.toLowerCase() === 'creator' || user.role?.toLowerCase() === 'business'
+        ? await this.accountStateDatabase.getCreatorAnalytics(userId)
+        : null;
+
+    return {
+      user,
+      settingsState,
+      blockedUsers,
+      bookmarks,
+      collections,
+      drafts,
+      scheduled,
+      reports,
+      uploads,
+      wallet,
+      sessions,
+      creatorAnalytics,
+    };
+  }
+
+  private hydrateSection(
+    section: SettingsSectionRecord,
+    context: SettingsContext,
+  ) {
+    const sectionOverride = this.toObject(
+      context.settingsState[`catalog.section_overrides.${section.key}`],
+    );
+    return {
+      ...section,
+      ...sectionOverride,
+      items: section.items.map((item) =>
+        this.hydrateItem(
+          {
+            ...item,
+            sectionKey: section.key,
+            sectionTitle: section.title,
+          },
+          context,
+        ),
+      ),
+    };
+  }
+
+  private hydrateItem(
+    item: SettingsItemRecord & {
+      sectionKey?: string;
+      sectionTitle?: string;
+    },
+    context: SettingsContext,
+  ) {
+    const baseData = this.toObject(item.data);
+    const itemOverride = this.toObject(
+      context.settingsState[`catalog.item_overrides.${item.key}`],
+    );
+    const dynamicData = this.resolveDynamicItemData(item.key, context);
+
+    return {
+      ...item,
+      data: {
+        ...baseData,
+        ...dynamicData,
+        ...itemOverride,
+      },
+    };
+  }
+
+  private resolveDynamicItemData(
+    itemKey: string,
+    context: SettingsContext,
+  ) {
+    const state = context.settingsState;
+    const reportSummary = this.toObject(context.reports.summary);
+
+    switch (itemKey) {
+      case 'account-settings':
+        return {
+          name: context.user.name,
+          username: context.user.username,
+          accountType: String(context.user.role ?? '').toLowerCase() || 'user',
+          state: {
+            profile: {
+              name: context.user.name,
+              username: context.user.username,
+              bio: context.user.bio,
+              website: context.user.website,
+              email: context.user.email,
+              location: context.user.location,
+              profileType: String(context.user.role ?? '').toLowerCase() || 'user',
+              profileImage: context.user.avatar,
+            },
+          },
+        };
+      case 'devices-sessions':
+        return {
+          data: undefined,
+          state: {
+            currentDevice: 'Current session',
+            recentSessions: context.sessions,
+            revokeSessionEnabled: context.sessions > 1,
+          },
+          activeSessions: context.sessions,
+          suspiciousSignins: 0,
+        };
+      case 'privacy':
+        return {
+          state: {
+            profileVisibility: this.readBoolean(state['privacy.profile_private']),
+            lastSeen: this.readBoolean(state['privacy.activity_status']),
+            readReceipts: this.readBoolean(state['messages.read_receipts']),
+            tagPermissions: this.readBoolean(state['privacy.allow_tagging']),
+            mentionPermissions: this.readBoolean(state['privacy.allow_mentions']),
+            commentPermissions: this.readBoolean(state['privacy.allow_comments']),
+            repostPermissions: this.readBoolean(state['privacy.allow_reposts']),
+            sensitiveContent: this.readBoolean(state['privacy.hide_sensitive']),
+            discoverability: {
+              byEmail: this.readBoolean(state['privacy.searchable_by_email'], false),
+              byPhone: this.readBoolean(state['privacy.searchable_by_phone'], false),
+            },
+          },
+        };
+      case 'advanced-privacy-controls':
+        return {
+          data: undefined,
+          privacy: {
+            profilePrivate: this.readBoolean(state['privacy.profile_private']),
+            activityStatus: this.readBoolean(state['privacy.activity_status']),
+            allowTagging: this.readBoolean(state['privacy.allow_tagging']),
+            allowMentions: this.readBoolean(state['privacy.allow_mentions']),
+            allowReposts: this.readBoolean(state['privacy.allow_reposts']),
+            allowComments: this.readBoolean(state['privacy.allow_comments']),
+            hideSensitive: this.readBoolean(state['privacy.hide_sensitive']),
+            hideLikes: this.readBoolean(state['privacy.hide_likes']),
+          },
+          state: {
+            controls: [
+              {
+                title: 'Private account',
+                value: this.readBoolean(state['privacy.profile_private']),
+              },
+              {
+                title: 'Allow mentions',
+                value: this.readBoolean(state['privacy.allow_mentions']),
+              },
+              {
+                title: 'Allow comments from everyone',
+                value: this.readBoolean(state['privacy.allow_comments']),
+              },
+              {
+                title: 'Sensitive content filter',
+                value: this.readBoolean(state['privacy.hide_sensitive']),
+              },
+              {
+                title: 'Hide like counts',
+                value: this.readBoolean(state['privacy.hide_likes']),
+              },
+            ],
+          },
+        };
+      case 'blocked-muted-accounts':
+        return {
+          blockedCount: context.blockedUsers.length,
+        };
+      case 'safety-privacy':
+        return {
+          privacy: {
+            profilePrivate: this.readBoolean(state['privacy.profile_private']),
+            activityStatus: this.readBoolean(state['privacy.activity_status']),
+            allowTagging: this.readBoolean(state['privacy.allow_tagging']),
+            allowMentions: this.readBoolean(state['privacy.allow_mentions']),
+            allowComments: this.readBoolean(state['privacy.allow_comments']),
+            hideSensitive: this.readBoolean(state['privacy.hide_sensitive']),
+          },
+          blockedCount: context.blockedUsers.length,
+        };
+      case 'report-center':
+        return {
+          openReports: this.readNumber(reportSummary.openReports, 0),
+          resolvedReports: this.readNumber(reportSummary.resolvedReports, 0),
+        };
+      case 'notifications':
+        return {
+          state: {
+            pushEnabled: this.readBoolean(state['notifications.push_enabled']),
+            emailEnabled: this.readBoolean(state['notifications.email_enabled']),
+            inAppSounds: this.readBoolean(state['notifications.in_app_sounds']),
+            marketing: this.readBoolean(state['notifications.marketing']),
+          },
+        };
+      case 'notification-categories':
+        return {
+          state: {
+            categories: this.resolvePushPreferences(state),
+          },
+        };
+      case 'messages-calls':
+        return {
+          state: {
+            messageRequests: this.readBoolean(state['messages.message_requests']),
+            readReceipts: this.readBoolean(state['messages.read_receipts']),
+            allowCalls: this.readBoolean(state['messages.allow_calls']),
+            autoDownloadMedia: this.readBoolean(state['messages.auto_download']),
+          },
+        };
+      case 'feed-content-preferences':
+        return {
+          state: {
+            autoplay: this.readBoolean(state['feed.autoplay']),
+            dataSaver: this.readBoolean(state['feed.data_saver']),
+            hideTopics: this.readStringArray(state['feed.hide_topics']),
+            resetRecommendations: this.readBoolean(
+              state['feed.reset_recommendations'],
+            ),
+          },
+        };
+      case 'saved-collections':
+        return {
+          collectionCount: context.collections.length,
+          bookmarkCount: context.bookmarks.length,
+        };
+      case 'drafts-scheduling':
+        return {
+          drafts: context.drafts.length,
+          scheduled: context.scheduled.length,
+          uploadQueue: context.uploads.length,
+        };
+      case 'creator-professional-tools':
+        return {
+          state: {
+            professionalDashboard: this.readBoolean(
+              state['creator.professional_dashboard'],
+            ),
+            brandedContent: this.readBoolean(state['creator.branded_content']),
+            tips: this.readBoolean(state['creator.tips']),
+          },
+        };
+      case 'creator-dashboard':
+        return context.creatorAnalytics
+          ? {
+              period: '7d',
+              reach: String(context.creatorAnalytics.engagement.views),
+              storyReplies: String(context.creatorAnalytics.totals.stories),
+            }
+          : {};
+      case 'wallet-payments':
+        return context.wallet
+          ? {
+              available: context.wallet.balance,
+              pending: 0,
+              defaultPayoutMethod: 'wallet',
+            }
+          : {};
+      case 'communities-groups':
+        return {
+          state: {
+            communityInvites: this.readBoolean(state['communities.invites'], true),
+            groupMentions: this.readBoolean(
+              state['communities.group_mentions'],
+              true,
+            ),
+            eventsReminders: this.readBoolean(
+              state['communities.events_reminders'],
+              true,
+            ),
+          },
+        };
+      case 'language-region':
+        return {
+          state: {
+            language: this.readString(state['locale.language']) ?? 'English',
+            region: this.readString(state['locale.region']) ?? 'Bangladesh',
+          },
+        };
+      case 'accessibility':
+        return {
+          state: {
+            captions: this.readBoolean(state['accessibility.captions'], true),
+            highContrast: this.readBoolean(
+              state['accessibility.high_contrast'],
+              false,
+            ),
+            reduceMotion: this.readBoolean(
+              state['accessibility.reduce_motion'],
+              false,
+            ),
+            textSize: this.readString(state['accessibility.text_size']) ?? 'Default',
+          },
+        };
+      case 'localization-support':
+        return {
+          supportedLocales:
+            this.readStringArray(state['locale.supported_locales']).length > 0
+              ? this.readStringArray(state['locale.supported_locales'])
+              : ['en', 'bn'],
+          fallbackLocale:
+            this.readString(state['locale.fallback_locale']) ?? 'en',
+        };
+      case 'accessibility-support':
+        return {
+          ...{
+            screenReaderHints: this.readBoolean(
+              state['accessibility.screen_reader_hints'],
+              true,
+            ),
+            motionPreviewAvailable: this.readBoolean(
+              state['accessibility.motion_preview_available'],
+              true,
+            ),
+          },
+        };
+      case 'data-privacy-center':
+        return {
+          state: {
+            exportRequested: this.readBoolean(state['data.export_requested'], false),
+            adPersonalization: this.readBoolean(
+              state['data.ad_personalization'],
+              false,
+            ),
+            dataCollection: this.readBoolean(state['data.data_collection'], true),
+          },
+        };
+      case 'legal-compliance':
+        return {
+          termsAccepted: this.readBoolean(state['legal.terms_accepted'], true),
+          privacyAccepted: this.readBoolean(state['legal.privacy_accepted'], true),
+          guidelinesAccepted: this.readBoolean(
+            state['legal.guidelines_accepted'],
+            true,
+          ),
+        };
+      default:
+        return {};
+    }
+  }
+
+  private resolvePushPreferences(settingsState: Record<string, unknown>) {
+    const stored = settingsState['preferences.push_categories'];
+    if (Array.isArray(stored)) {
+      return stored.filter(
+        (item): item is { title: string; enabled: boolean } =>
+          Boolean(item) &&
+          typeof item === 'object' &&
+          !Array.isArray(item) &&
+          typeof (item as Record<string, unknown>).title === 'string' &&
+          typeof (item as Record<string, unknown>).enabled === 'boolean',
+      );
+    }
+    return [...DEFAULT_PUSH_PREFERENCES];
+  }
+
+  private isSection(
+    value: SettingsSectionRecord | (SettingsItemRecord & { sectionKey?: string }),
+  ): value is SettingsSectionRecord {
+    return Array.isArray((value as SettingsSectionRecord).items);
+  }
+
+  private toObject(value: unknown) {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  }
+
+  private readBoolean(value: unknown, fallback = false) {
+    return typeof value === 'boolean' ? value : fallback;
+  }
+
+  private readNumber(value: unknown, fallback = 0) {
+    return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  }
+
+  private readString(value: unknown) {
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  }
+
+  private readStringArray(value: unknown) {
+    return Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      : [];
+  }
+
+  private readArrayObjects(value: unknown) {
+    return Array.isArray(value)
+      ? value.filter(
+          (item): item is Record<string, unknown> =>
+            Boolean(item) && typeof item === 'object' && !Array.isArray(item),
+        )
+      : [];
+  }
+
+  private readArrayLength(value: unknown) {
+    return Array.isArray(value) ? value.length : 0;
+  }
+
+  private jsonStringArray(value: Prisma.JsonValue | unknown) {
+    return Array.isArray(value)
+      ? value
+          .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          .map((item) => item.trim())
+      : [];
+  }
+}
