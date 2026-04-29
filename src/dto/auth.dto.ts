@@ -16,15 +16,15 @@ import {
 export class LoginDto {
   @ApiProperty({
     example: 'maya@optizenqor.app',
-    description: 'Use one of the seeded demo emails.',
+    description: 'Registered account email address.',
   })
   @IsNotEmpty()
   @IsEmail()
   email!: string;
 
   @ApiProperty({
-    example: '123456',
-    description: 'Seeded demo password for all user demo accounts in this mock backend.',
+    example: 'Password123',
+    description: 'Registered account password.',
   })
   @IsNotEmpty()
   @IsString()
@@ -224,7 +224,7 @@ export class AdminLoginDto {
 
   @ApiProperty({
     example: 'admin123',
-    description: 'Seeded admin password for dashboard demo access.',
+    description: 'Registered admin password.',
   })
   @IsNotEmpty()
   @IsString()

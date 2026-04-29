@@ -2,7 +2,7 @@
 
 NestJS backend API for the Flutter app `OptiZenqor_social`.
 
-This repo is in active migration from seeded/static demo flows to a real `Prisma + PostgreSQL` backend. The goal is for Flutter to use the backend as the single source of truth, with no runtime mock or in-memory state for production features.
+This repo is in active migration from older seeded/static demo flows to a real `Prisma + PostgreSQL` backend. The goal is for Flutter to use the backend as the single source of truth, with no runtime mock or in-memory state for production features.
 
 ## Current state
 
@@ -31,7 +31,6 @@ Still partially or fully static/mock-backed:
 - admin dashboard and admin auth flows
 - support/help/legal flows
 - discovery/trending recommendation flows
-- account switching and activity sessions
 - some accessibility/localization/preference helper surfaces
 - advanced moderation and audit trails
 - live/call/session persistence beyond the current realtime layer
@@ -39,7 +38,7 @@ Still partially or fully static/mock-backed:
 ## Main backend rules
 
 - PostgreSQL is the source of truth for production data.
-- Seed data is allowed only through development seeding, not runtime arrays.
+- Seed data is allowed only through the optional development seed script, not runtime startup.
 - Existing mobile route names are kept where possible.
 - Responses should follow `{ success, message, data }` with compatibility aliases where Flutter still needs them.
 
@@ -48,7 +47,9 @@ Still partially or fully static/mock-backed:
 ```bash
 npm install
 npm run prisma:generate
+npm run prisma:migrate
 npm run typecheck
+npm run seed:dev
 npm run start:dev
 ```
 
@@ -79,6 +80,7 @@ Optional but recommended:
 - CORS origins
 - frontend URLs
 - rate-limit configuration
+- `AUTH_EXPOSE_TEST_ACCOUNTS=true` only for controlled local QA if `/auth/demo-accounts` is explicitly needed
 
 ## Key routes
 

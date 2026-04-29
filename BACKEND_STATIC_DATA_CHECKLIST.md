@@ -46,9 +46,9 @@ This means the backend is database-backed, but not yet a pure Prisma-only codeba
 
 ## Seed safety
 
-- Runtime demo seed data is gated by `CORE_DB_SEED=true`
-- Production startup must not depend on runtime demo seeding
-- `CoreDatabaseService` now avoids demo seeding in production even if the env flag is mis-set
+- Runtime startup no longer seeds demo data
+- Development seeding should use the explicit `npm run seed:dev` script
+- Production startup does not depend on seeded arrays or startup-time mock inserts
 
 ## Completed migrations
 
@@ -58,6 +58,7 @@ This means the backend is database-backed, but not yet a pure Prisma-only codeba
 - Profiles and dashboard profile surfaces moved off seeded ecosystem services
 - Support tickets moved out of in-memory ecosystem state and into a real database table
 - Account switching, activity sessions, and verification request routes moved off snapshot-backed `AppExtensionsDataService`
+- Auth password hashing moved to `argon2`, and demo-account exposure is now opt-in via env instead of implied by the normal auth flow
 
 ## Remaining static dependency hotspots
 

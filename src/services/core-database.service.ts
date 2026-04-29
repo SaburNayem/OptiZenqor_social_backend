@@ -5,10 +5,10 @@ import {
   OnModuleInit,
   UnauthorizedException,
 } from '@nestjs/common';
-import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'crypto';
+import * as argon2 from 'argon2';
+import { randomUUID, scryptSync, timingSafeEqual } from 'crypto';
 import { QueryResultRow } from 'pg';
 import { makeId } from '../common/id.util';
-import { coreSeedCommentReactions, coreSeedFollows, coreSeedMessages, coreSeedNotifications, coreSeedPostComments, coreSeedPostReactions, coreSeedPosts, coreSeedThreads, coreSeedUsers } from '../database/core-seed';
 import { DatabaseService } from './database.service';
 import { JwtLikePayload, JwtTokenService } from './jwt-token.service';
 
@@ -184,11 +184,6 @@ export class CoreDatabaseService implements OnModuleInit {
       return;
     }
     await this.ensureSchema();
-    const shouldSeedDemoData = (process.env.CORE_DB_SEED ?? 'false') === 'true';
-    const isProduction = (process.env.NODE_ENV ?? '').trim().toLowerCase() === 'production';
-    if (shouldSeedDemoData && !isProduction) {
-      await this.seedCoreData();
-    }
   }
 
   async getDemoAuthAccounts() {
@@ -201,7 +196,6 @@ export class CoreDatabaseService implements OnModuleInit {
       username: row.username,
       email: row.email,
       role: row.role,
-      password: '123456',
       emailVerified: row.email_verified,
     }));
   }
@@ -237,9 +231,7 @@ export class CoreDatabaseService implements OnModuleInit {
     );
     const row = rows[0];
     if (!row) {
-      throw new UnauthorizedException(
-        'Invalid credentials. Use one of the seeded demo emails shown in /auth/demo-accounts.',
-      );
+      throw new UnauthorizedException('Invalid email or password.');
     }
     return row;
   }
@@ -265,7 +257,7 @@ export class CoreDatabaseService implements OnModuleInit {
   }) {
     await this.assertEmailAndUsernameAvailable(input.email, input.username);
     const id = makeId('user');
-    const passwordHash = this.hashPassword(input.password);
+    const passwordHash = await this.hashPassword(input.password);
     const interests = [...new Set((input.interests ?? []).map((interest) => interest.trim()).filter(Boolean))];
     await this.database.query(
       `insert into app_users (
@@ -313,8 +305,14 @@ export class CoreDatabaseService implements OnModuleInit {
 
   async authenticateUser(input: { email: string; password: string }) {
     const userRow = await this.getUserByEmail(input.email);
-    if (!this.verifyPassword(input.password, userRow.password_hash)) {
-      throw new UnauthorizedException('Invalid password. Demo password is 123456.');
+    if (!(await this.verifyPassword(input.password, userRow.password_hash))) {
+      throw new UnauthorizedException('Invalid email or password.');
+    }
+    if (!this.isArgonHash(userRow.password_hash)) {
+      await this.database.query(
+        `update app_users set password_hash = $2, updated_at = now() where id = $1`,
+        [userRow.id, await this.hashPassword(input.password)],
+      );
     }
     if (!userRow.email_verified) {
       throw new UnauthorizedException(
@@ -377,7 +375,7 @@ export class CoreDatabaseService implements OnModuleInit {
           'just now',
           true,
           false,
-          this.hashPassword(randomUUID()),
+          await this.hashPassword(randomUUID()),
         ],
       );
       const { rows } = await this.database.query<UserRow>(
@@ -527,12 +525,12 @@ export class CoreDatabaseService implements OnModuleInit {
 
   async changePassword(input: { email: string; oldPassword: string; newPassword: string }) {
     const userRow = await this.getUserByEmail(input.email);
-    if (!this.verifyPassword(input.oldPassword, userRow.password_hash)) {
+    if (!(await this.verifyPassword(input.oldPassword, userRow.password_hash))) {
       throw new UnauthorizedException('Old password is incorrect.');
     }
     await this.database.query(
       `update app_users set password_hash = $2, updated_at = now() where id = $1`,
-      [userRow.id, this.hashPassword(input.newPassword)],
+      [userRow.id, await this.hashPassword(input.newPassword)],
     );
     return {
       success: true,
@@ -546,7 +544,7 @@ export class CoreDatabaseService implements OnModuleInit {
     const userRow = await this.getUserByEmail(email);
     await this.database.query(
       `update app_users set password_hash = $2, updated_at = now() where id = $1`,
-      [userRow.id, this.hashPassword(newPassword)],
+      [userRow.id, await this.hashPassword(newPassword)],
     );
     return {
       success: true,
@@ -1911,186 +1909,6 @@ export class CoreDatabaseService implements OnModuleInit {
     `);
   }
 
-  private async seedCoreData() {
-    const shouldSeedDemoData = (process.env.CORE_DB_SEED ?? 'false') === 'true';
-    if (!shouldSeedDemoData) {
-      return;
-    }
-
-    const existingUsers = await this.database.query<QueryResultRow & { count: string }>(
-      `select count(*)::text as count from app_users`,
-    );
-    if (Number(existingUsers.rows[0]?.count ?? '0') > 0) {
-      return;
-    }
-
-    for (const user of coreSeedUsers) {
-      await this.database.query(
-        `insert into app_users (
-          id, name, username, email, avatar, bio, role, verification, status,
-          followers, following, wallet_summary, health, reports, last_active,
-          email_verified, blocked, password_hash, created_at, updated_at
-        ) values (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,
-          $10,$11,$12,$13,$14,$15,
-          $16,$17,$18,$19,$20
-        )`,
-        [
-          user.id,
-          user.name,
-          user.username,
-          user.email,
-          user.avatar,
-          user.bio,
-          user.role,
-          user.verification,
-          user.status,
-          user.followers,
-          user.following,
-          user.walletSummary,
-          user.health,
-          user.reports,
-          user.lastActive,
-          user.emailVerified,
-          user.blocked,
-          this.hashPassword(user.password),
-          new Date().toISOString(),
-          new Date().toISOString(),
-        ],
-      );
-    }
-
-    for (const relation of coreSeedFollows) {
-      await this.database.query(
-        `insert into app_follow_relations (follower_id, target_id, created_at) values ($1, $2, $3)`,
-        [relation.followerId, relation.targetId, new Date().toISOString()],
-      );
-    }
-
-    for (const post of coreSeedPosts) {
-      await this.database.query(
-        `insert into app_posts (
-          id, author_id, caption, media, tags, likes, comments, shares, views, status, type, created_at
-        ) values (
-          $1,$2,$3,$4::jsonb,$5::jsonb,$6,$7,$8,$9,$10,$11,$12
-        )`,
-        [
-          post.id,
-          post.authorId,
-          post.caption,
-          JSON.stringify(post.media),
-          JSON.stringify(post.tags),
-          post.likes,
-          post.comments,
-          post.shares,
-          post.views,
-          post.status,
-          post.type,
-          post.createdAt,
-        ],
-      );
-    }
-
-    for (const reaction of coreSeedPostReactions) {
-      await this.database.query(
-        `insert into app_post_reactions (post_id, user_id, reaction, created_at) values ($1, $2, $3, $4)`,
-        [reaction.postId, reaction.userId, reaction.reaction, reaction.createdAt],
-      );
-    }
-
-    for (const comment of coreSeedPostComments) {
-      await this.database.query(
-        `insert into app_post_comments (
-          id, post_id, author_id, author, message, reply_to, created_at, like_count,
-          is_liked_by_me, is_reported, is_edited, mentions
-        ) values (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb
-        )`,
-        [
-          comment.id,
-          comment.postId,
-          comment.authorId,
-          comment.author,
-          comment.message,
-          comment.replyTo,
-          comment.createdAt,
-          comment.likeCount,
-          comment.isLikedByMe,
-          comment.isReported,
-          comment.isEdited,
-          JSON.stringify(comment.mentions),
-        ],
-      );
-    }
-
-    for (const reaction of coreSeedCommentReactions) {
-      await this.database.query(
-        `insert into app_post_comment_reactions (comment_id, user_id, reaction, created_at) values ($1, $2, $3, $4)`,
-        [reaction.commentId, reaction.userId, reaction.reaction, reaction.createdAt],
-      );
-    }
-
-    for (const thread of coreSeedThreads) {
-      await this.database.query(
-        `insert into chat_threads (id, title, participants_label, flag, summary, created_at)
-         values ($1,$2,$3,$4,$5,$6)`,
-        [thread.id, thread.title, thread.participantsLabel, thread.flag, thread.summary, new Date().toISOString()],
-      );
-      for (const participantId of thread.participantIds) {
-        await this.database.query(
-          `insert into chat_thread_participants (thread_id, user_id, created_at) values ($1,$2,$3)`,
-          [thread.id, participantId, new Date().toISOString()],
-        );
-      }
-    }
-
-    for (const message of coreSeedMessages) {
-      await this.database.query(
-        `insert into chat_messages (
-          id, thread_id, sender_id, text, read, timestamp, attachments,
-          reply_to_message_id, delivery_state, kind, media_path
-        ) values (
-          $1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11
-        )`,
-        [
-          message.id,
-          message.threadId,
-          message.senderId,
-          message.text,
-          message.read,
-          message.timestamp,
-          JSON.stringify(message.attachments),
-          message.replyToMessageId,
-          message.deliveryState,
-          message.kind,
-          message.mediaPath,
-        ],
-      );
-    }
-
-    for (const notification of coreSeedNotifications) {
-      await this.database.query(
-        `insert into app_notifications (
-          id, recipient_id, title, body, created_at, read, type, route_name, entity_id, metadata
-        ) values (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb
-        )`,
-        [
-          notification.id,
-          notification.recipientId,
-          notification.title,
-          notification.body,
-          notification.createdAt,
-          notification.read,
-          notification.type,
-          notification.routeName,
-          notification.entityId,
-          JSON.stringify(notification.metadata),
-        ],
-      );
-    }
-  }
-
   private async getThreadParticipants(threadId: string) {
     const { rows } = await this.database.query<UserRow>(
       `select u.* from chat_thread_participants tp
@@ -2390,13 +2208,19 @@ export class CoreDatabaseService implements OnModuleInit {
     };
   }
 
-  private hashPassword(password: string) {
-    const salt = randomBytes(16).toString('hex');
-    const hash = scryptSync(password, salt, 64).toString('hex');
-    return `${salt}:${hash}`;
+  private async hashPassword(password: string) {
+    return argon2.hash(password, {
+      type: argon2.argon2id,
+      memoryCost: 19_456,
+      timeCost: 2,
+      parallelism: 1,
+    });
   }
 
-  private verifyPassword(password: string, storedHash: string) {
+  private async verifyPassword(password: string, storedHash: string) {
+    if (this.isArgonHash(storedHash)) {
+      return argon2.verify(storedHash, password);
+    }
     const [salt, key] = storedHash.split(':');
     if (!salt || !key) {
       return false;
@@ -2404,6 +2228,10 @@ export class CoreDatabaseService implements OnModuleInit {
     const derived = scryptSync(password, salt, 64);
     const target = Buffer.from(key, 'hex');
     return target.length === derived.length && timingSafeEqual(derived, target);
+  }
+
+  private isArgonHash(storedHash: string) {
+    return storedHash.startsWith('$argon2');
   }
 
   private mapUser(row: UserRow) {

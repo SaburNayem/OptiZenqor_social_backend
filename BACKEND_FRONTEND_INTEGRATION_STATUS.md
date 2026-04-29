@@ -14,7 +14,7 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 
 | Feature Area | DB-backed | Endpoint Ready | Frontend Connected | Mock Removed | Tested | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| Auth core users/sessions | Partial | Partial | Pending | No | Partial | Core DB and JWT services exist, but demo/seeded auth flows still exist in controllers/docs. |
+| Auth core users/sessions | Partial | Partial | Pending | Partial | Partial | Core DB and JWT services exist, runtime startup seeding is removed, and auth docs are no longer demo-oriented; the core service still uses raw `pg` instead of pure Prisma. |
 | Feed/posts/comments/reactions | Yes | Yes | Pending | Partial | Partial | Core post data is DB-backed; some detail/adjacent routes still touch mock-backed services. |
 | Stories | Yes | Yes | Pending | Partial | Partial | Prisma models and DB service exist; some controller-adjacent flows still reference old data services. |
 | Reels | Yes | Yes | Pending | Partial | Partial | Prisma models and DB service exist. |

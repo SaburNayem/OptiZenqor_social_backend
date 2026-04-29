@@ -1,17 +1,11 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Prisma, Subscription } from '@prisma/client';
 import { makeId } from '../common/id.util';
 import { PrismaService } from './prisma.service';
 
 @Injectable()
-export class MonetizationDatabaseService implements OnModuleInit {
+export class MonetizationDatabaseService {
   constructor(private readonly prisma: PrismaService) {}
-
-  async onModuleInit() {
-    if ((process.env.CORE_DB_SEED ?? 'false') === 'true') {
-      await this.ensureDevelopmentSeed();
-    }
-  }
 
   async getOrCreateWalletAccount(userId: string) {
     return this.prisma.walletAccount.upsert({
@@ -109,69 +103,6 @@ export class MonetizationDatabaseService implements OnModuleInit {
       createdAt: campaign.createdAt.toISOString(),
       updatedAt: campaign.updatedAt.toISOString(),
     };
-  }
-
-  async ensureDevelopmentSeed() {
-    const [planCount, transactionCount] = await Promise.all([
-      this.prisma.premiumPlan.count(),
-      this.prisma.walletTransaction.count(),
-    ]);
-
-    if (planCount === 0) {
-      await this.prisma.premiumPlan.createMany({
-        data: [
-          {
-            id: 'plan_monthly',
-            code: 'monthly',
-            name: 'Monthly Premium',
-            description: 'Monthly access to premium features.',
-            price: new Prisma.Decimal(299),
-            currency: 'BDT',
-            billingInterval: 'monthly',
-            features: ['ad-light feed', 'creator tools', 'priority support'] as unknown as Prisma.InputJsonValue,
-            isActive: true,
-          },
-          {
-            id: 'plan_yearly',
-            code: 'yearly',
-            name: 'Yearly Premium',
-            description: 'Yearly access to premium features.',
-            price: new Prisma.Decimal(2999),
-            currency: 'BDT',
-            billingInterval: 'yearly',
-            features: ['ad-light feed', 'creator tools', 'priority support'] as unknown as Prisma.InputJsonValue,
-            isActive: true,
-          },
-        ],
-      });
-    }
-
-    if (transactionCount === 0) {
-      const firstUser = await this.prisma.appUser.findFirst({
-        orderBy: { createdAt: 'asc' },
-      });
-
-      if (firstUser) {
-        const wallet = await this.getOrCreateWalletAccount(firstUser.id);
-        await this.prisma.walletTransaction.create({
-          data: {
-            id: makeId('txn'),
-            walletAccountId: wallet.id,
-            userId: firstUser.id,
-            type: 'credit',
-            amount: new Prisma.Decimal(500),
-            currency: 'BDT',
-            status: 'completed',
-            description: 'Welcome wallet credit',
-            metadata: { source: 'development_seed' },
-          },
-        });
-        await this.prisma.walletAccount.update({
-          where: { id: wallet.id },
-          data: { balance: new Prisma.Decimal(500) },
-        });
-      }
-    }
   }
 
   private mapPlan(item: {

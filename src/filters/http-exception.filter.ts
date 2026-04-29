@@ -23,10 +23,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
       : 'Internal server error';
 
     let message = 'Request failed';
-    let errors: string[] = [];
+    let error = 'Request failed';
 
     if (typeof exceptionResponse === 'string') {
       message = exceptionResponse;
+      error = exceptionResponse;
     } else if (
       exceptionResponse &&
       typeof exceptionResponse === 'object'
@@ -37,22 +38,21 @@ export class HttpExceptionFilter implements ExceptionFilter {
       };
 
       if (Array.isArray(responseObject.message)) {
-        errors = responseObject.message;
         message = responseObject.message[0] ?? 'Validation failed';
+        error = responseObject.error ?? 'Validation failed';
       } else if (typeof responseObject.message === 'string') {
         message = responseObject.message;
+        error = responseObject.error ?? responseObject.message;
       }
     }
 
     response.status(status).json({
       success: false,
       message,
-      errors,
-      meta: {
-        statusCode: status,
-        path: request.url,
-        timestamp: new Date().toISOString(),
-      },
+      error,
+      statusCode: status,
+      path: request.url,
+      timestamp: new Date().toISOString(),
     });
   }
 }

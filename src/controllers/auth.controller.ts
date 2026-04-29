@@ -25,7 +25,6 @@ import {
   SignupDto,
   VerifyEmailConfirmDto,
 } from '../dto/auth.dto';
-import { ExtendedDataService } from '../data/extended-data.service';
 import { MailService } from '../services/mail.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { UploadsDatabaseService } from '../services/uploads-database.service';
@@ -36,32 +35,33 @@ export class AuthController {
   constructor(
     private readonly coreDatabase: CoreDatabaseService,
     private readonly mailService: MailService,
-    private readonly extendedData: ExtendedDataService,
     private readonly uploadsDatabase: UploadsDatabaseService,
   ) {}
 
   @Get('demo-accounts')
   @ApiOperation({
-    summary: 'List seeded demo login accounts',
+    summary: 'List registered test accounts when explicitly enabled',
     description:
-      'Use these original seeded emails or usernames to log in from Swagger. All seeded user passwords are 123456.',
+      'This route is disabled by default and should not be exposed in production. It returns registered accounts without passwords only when AUTH_EXPOSE_TEST_ACCOUNTS=true.',
   })
   @ApiOkResponse({
-    description: 'Seeded demo user accounts for Swagger login testing.',
+    description: 'Registered accounts visible for controlled local testing.',
   })
   async getDemoAccounts() {
+    if ((process.env.AUTH_EXPOSE_TEST_ACCOUNTS ?? 'false') !== 'true') {
+      throw new UnauthorizedException('Test account listing is disabled.');
+    }
     return {
       success: true,
-      message: 'Demo login accounts fetched successfully.',
+      message: 'Test accounts fetched successfully.',
       data: await this.coreDatabase.getDemoAuthAccounts(),
     };
   }
 
   @Post('login')
   @ApiOperation({
-    summary: 'Login with original seeded email and password',
-    description:
-      'Use one of the original seeded emails from GET /auth/demo-accounts. Demo password is 123456.',
+    summary: 'Login with email and password',
+    description: 'Authenticates against registered PostgreSQL-backed user accounts.',
   })
   @ApiBody({ type: LoginDto })
   @ApiOkResponse({ description: 'User login successful.' })
@@ -75,7 +75,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Login or signup with Google',
     description:
-      'Creates or logs in a user using Google account data. This seeded backend does not validate the Google token externally yet.',
+      'Creates or logs in a user using Google account data. Google token verification is still application-managed and should be hardened with provider-side validation for production.',
   })
   @ApiBody({ type: GoogleAuthDto })
   async googleAuth(@Body() body: GoogleAuthDto) {

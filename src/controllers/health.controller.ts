@@ -17,18 +17,26 @@ export class HealthController {
   @Get('health')
   health() {
     return {
-      status: 'ok',
-      service: 'socity-backend',
-      timestamp: new Date().toISOString(),
-      database: this.databaseService.getHealth(),
-      uploads: {
-        cloudinaryConfigured: this.cloudinaryUploadService.isConfigured(),
+      success: true,
+      message: 'Service health fetched successfully.',
+      data: {
+        status: 'ok',
+        service: 'socity-backend',
+        timestamp: new Date().toISOString(),
+        database: this.databaseService.getHealth(),
+        uploads: {
+          cloudinaryConfigured: this.cloudinaryUploadService.isConfigured(),
+        },
       },
     };
   }
 
   @Get('health/database')
   healthDatabase() {
-    return this.databaseService.getHealth();
+    return {
+      success: true,
+      message: 'Database health fetched successfully.',
+      data: this.databaseService.getHealth(),
+    };
   }
 }
