@@ -44,6 +44,8 @@ model AppUser {
   postComments        AppPostComment[]
   postCommentReactions AppPostCommentReaction[]
   threadParticipants  ChatThreadParticipant[]
+  chatThreadPreferences ChatThreadPreference[]
+  chatPreferences     ChatUserPreference?
   sentMessages        ChatMessage[]
   notifications       AppNotification[]
   buddyRequestsSent   BuddyRequest[]       @relation("BuddyRequester")
@@ -83,6 +85,11 @@ model AppUser {
   walletAccount       WalletAccount?
   walletTransactions  WalletTransaction[]
   subscriptions       Subscription[]
+  hiddenEntities      UserHiddenEntity[]
+  archivedEntities    UserArchivedEntity[]
+  hostedLiveStreams   LiveStreamSession[]     @relation("LiveStreamHost")
+  liveStreamComments  LiveStreamComment[]
+  liveStreamReactions LiveStreamReaction[]
 
   @@map("app_users")
 }
@@ -233,6 +240,8 @@ model ChatThread {
   createdAt         DateTime                @default(now()) @db.Timestamptz(6) @map("created_at")
   participants      ChatThreadParticipant[]
   messages          ChatMessage[]
+  preferences       ChatThreadPreference[]
+  liveStreams       LiveStreamSession[]
 
   @@map("chat_threads")
 }
@@ -268,6 +277,38 @@ model ChatMessage {
 
   @@index([threadId, timestamp(sort: Asc)])
   @@map("chat_messages")
+}
+
+model ChatUserPreference {
+  userId                   String   @id @map("user_id")
+  notificationPreferences  Json     @default("{}") @map("notification_preferences")
+  safetyConfig             Json     @default("{}") @map("safety_config")
+  preferences              Json     @default("{}") @map("preferences")
+  updatedAt                DateTime @default(now()) @db.Timestamptz(6) @map("updated_at")
+  user                     AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("chat_user_preferences")
+}
+
+model ChatThreadPreference {
+  id         String     @id @map("id")
+  userId     String     @map("user_id")
+  threadId    String    @map("thread_id")
+  archived   Boolean    @default(false) @map("archived")
+  muted      Boolean    @default(false) @map("muted")
+  pinned     Boolean    @default(false) @map("pinned")
+  unread     Boolean    @default(false) @map("unread")
+  clearedAt  DateTime?  @db.Timestamptz(6) @map("cleared_at")
+  metadata   Json       @default("{}") @map("metadata")
+  createdAt  DateTime   @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt  DateTime   @default(now()) @db.Timestamptz(6) @map("updated_at")
+  user       AppUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  thread     ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, threadId])
+  @@index([userId, pinned, updatedAt(sort: Desc)])
+  @@index([threadId, updatedAt(sort: Desc)])
+  @@map("chat_thread_preferences")
 }
 
 model AppNotification {
@@ -879,4 +920,88 @@ model Subscription {
 
   @@index([userId, createdAt(sort: Desc)])
   @@map("app_subscriptions")
+}
+
+model UserHiddenEntity {
+  id         String   @id @map("id")
+  userId     String   @map("user_id")
+  targetId   String   @map("target_id")
+  targetType String   @map("target_type")
+  reason     String?  @map("reason")
+  createdAt  DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  user       AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetId, targetType])
+  @@index([userId, targetType, createdAt(sort: Desc)])
+  @@map("app_user_hidden_entities")
+}
+
+model UserArchivedEntity {
+  id         String   @id @map("id")
+  userId     String   @map("user_id")
+  targetId   String   @map("target_id")
+  targetType String   @map("target_type")
+  createdAt  DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  user       AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetId, targetType])
+  @@index([userId, targetType, createdAt(sort: Desc)])
+  @@map("app_user_archived_entities")
+}
+
+model LiveStreamSession {
+  id            String               @id @map("id")
+  hostId        String               @map("host_id")
+  threadId      String?              @map("thread_id")
+  title         String               @map("title")
+  description   String               @default("") @map("description")
+  category      String               @default("Live") @map("category")
+  location      String?              @map("location")
+  audience      String               @default("public") @map("audience")
+  status        String               @default("scheduled") @map("status")
+  viewerCount   Int                  @default(0) @map("viewer_count")
+  quickOptions  Json                 @default("[]") @map("quick_options")
+  previewImageUrl String?            @map("preview_image_url")
+  metadata      Json                 @default("{}") @map("metadata")
+  startedAt     DateTime?            @db.Timestamptz(6) @map("started_at")
+  endedAt       DateTime?            @db.Timestamptz(6) @map("ended_at")
+  createdAt     DateTime             @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt     DateTime             @default(now()) @db.Timestamptz(6) @map("updated_at")
+  host          AppUser              @relation("LiveStreamHost", fields: [hostId], references: [id], onDelete: Cascade)
+  thread        ChatThread?          @relation(fields: [threadId], references: [id], onDelete: SetNull)
+  comments      LiveStreamComment[]
+  reactions     LiveStreamReaction[]
+
+  @@index([hostId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@map("app_live_stream_sessions")
+}
+
+model LiveStreamComment {
+  id            String            @id @map("id")
+  streamId       String           @map("stream_id")
+  userId         String           @map("user_id")
+  message        String           @map("message")
+  username       String           @map("username")
+  avatarUrl      String?          @map("avatar_url")
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6) @map("created_at")
+  stream         LiveStreamSession @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  user           AppUser          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([streamId, createdAt(sort: Desc)])
+  @@map("app_live_stream_comments")
+}
+
+model LiveStreamReaction {
+  id            String            @id @map("id")
+  streamId       String           @map("stream_id")
+  userId         String           @map("user_id")
+  type           String           @map("type")
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6) @map("created_at")
+  stream         LiveStreamSession @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  user           AppUser          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([streamId, createdAt(sort: Desc)])
+  @@index([streamId, type, createdAt(sort: Desc)])
+  @@map("app_live_stream_reactions")
 }

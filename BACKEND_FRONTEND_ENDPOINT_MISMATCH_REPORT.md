@@ -24,6 +24,20 @@ This report compares the current frontend endpoint contract in `../OptiZenqor_so
 | `GET /calls/:id` | Exists | Returns active/persisted call session payload. |
 | `POST /calls/sessions` | Exists | Authenticated call session creation path is active. |
 | `PATCH /calls/sessions/:id/end` | Exists | Authenticated call session end path is active. |
+| `GET /chat/preferences` | Exists | Now DB-backed through durable chat preference tables. |
+| `PATCH/POST /chat/threads/:id/archive` | Exists | Now persisted per user in PostgreSQL. |
+| `PATCH/POST /chat/threads/:id/mute` | Exists | Now persisted per user in PostgreSQL. |
+| `PATCH/POST /chat/threads/:id/pin` | Exists | Now persisted per user in PostgreSQL. |
+| `GET /live-stream` | Exists | Now reads durable PostgreSQL live stream sessions. |
+| `GET /live-stream/setup` | Exists | Now resolves authenticated DB-backed setup payloads. |
+| `GET /live-stream/studio` | Exists | Now resolves authenticated DB-backed studio payloads. |
+| `GET/POST /live-stream/:id/comments` | Exists | Now persisted in PostgreSQL. |
+| `GET/POST /live-stream/:id/reactions` | Exists | Now persisted in PostgreSQL. |
+| `GET /archive/posts` | Exists | Now reads user-scoped archived post state from PostgreSQL. |
+| `GET /archive/stories` | Exists | Now reads user-scoped archived story state from PostgreSQL. |
+| `GET /archive/reels` | Exists | Now reads user-scoped archived reel state from PostgreSQL. |
+| `GET /hide/posts/all` | Exists | Now reads user-scoped hidden post state from PostgreSQL. |
+| `GET /hidden-posts` | Exists | Now reads user-scoped hidden post state from PostgreSQL. |
 | `POST /group-chat` | Exists | Group chat creation is now database-backed. |
 | `PATCH /group-chat/:id` | Exists | Group rename/update is now database-backed. |
 | `DELETE /group-chat/:id` | Exists | Group delete is now database-backed. |
@@ -38,19 +52,10 @@ This report compares the current frontend endpoint contract in `../OptiZenqor_so
 
 | Frontend Endpoint Area | Backend Route Status | Mismatch Type | Notes |
 | --- | --- | --- | --- |
-| `/chat/preferences` | Exists | Persistence mismatch | Still tied to snapshot-backed utility services instead of a fully durable DB-backed preferences flow. |
-| `/chat/threads/:id/archive` | Exists | Persistence mismatch | Chat thread archive/mute/pin helpers still need full DB-backed migration. |
-| `/chat/threads/:id/mute` | Exists | Persistence mismatch | Uses mixed data-service path. |
-| `/chat/threads/:id/pin` | Exists | Persistence mismatch | Uses mixed data-service path. |
-| `/live-stream` | Exists | Persistence mismatch | Still served from `EcosystemDataService`, not durable Prisma-backed models. |
-| `/live-stream/setup` | Exists | Persistence mismatch | Still static/service-backed. |
-| `/live-stream/studio` | Exists | Persistence mismatch | Still static/service-backed. |
-| `/live-stream/:id/comments` | Exists | Persistence mismatch | Still not stored in DB-backed live stream models. |
-| `/live-stream/:id/reactions` | Exists | Persistence mismatch | Still not stored in DB-backed live stream models. |
 | `/support/chat` | Exists | Response source mismatch | Utility/support assistant payload remains configuration-backed, not fully modeled. |
 | `/onboarding/*` | Exists | Persistence mismatch | Routes are still part of the broader utility migration set. |
-| `/hide/*` and `/hidden-posts/*` | Exists | Persistence mismatch | Feature contract exists but several flows still rely on older service layers. |
-| `/archive/posts`, `/archive/stories`, `/archive/reels` | Exists | Persistence mismatch | Archive-related responses still need a stricter DB-only path review. |
+| `/live-stream` lifecycle mutations beyond comments/reactions | Partial | Capability gap | Durable reads, comments, and reactions are live, but the start/end/studio moderation workflow is still not a full mobile CRUD slice. |
+| `/hide/*` for non-post targets | Partial | Capability gap | Post hide/unhide is durable; other target types still need end-to-end mobile coverage. |
 
 ## Backend-Only Hardening Completed
 
@@ -68,6 +73,10 @@ This report compares the current frontend endpoint contract in `../OptiZenqor_so
   - Replaced backend-placeholder mutation behavior with live group create/member API calls.
 - `../OptiZenqor_social/lib/feature/subscriptions/repository/subscriptions_repository.dart`
   - Replaced local active-plan-only persistence with backend subscription plan mutation calls.
+- `../OptiZenqor_social/lib/feature/wallet_payments/repository/wallet_payments_repository.dart`
+  - Removed fake wallet balances and transaction history from shipped flows.
+- `../OptiZenqor_social/lib/feature/safety_privacy/repository/safety_privacy_repository.dart`
+  - Removed local-only persistence and now reads/writes safety state through backend endpoints.
 - `../OptiZenqor_social/lib/feature/calls/controller/calls_controller.dart`
   - Added async loading and backend error state handling.
 - `../OptiZenqor_social/lib/feature/calls/screen/calls_screen.dart`
@@ -75,7 +84,7 @@ This report compares the current frontend endpoint contract in `../OptiZenqor_so
 
 ## Highest Priority Remaining Work
 
-1. Move `chat.controller.ts` archive/mute/pin/preferences paths fully onto DB-backed services.
-2. Replace `live-stream*` handlers in `realtime.controller.ts` with real Prisma-backed persistence.
-3. Migrate the remaining app-utility controllers still reading from `src/data/*`.
+1. Finish the live-stream lifecycle beyond the now-durable list/detail/comment/reaction slice.
+2. Migrate the remaining app-utility controllers still reading from `src/data/*`.
+3. Remove the remaining frontend local-only hidden/archive state and wire those screens to the new backend routes.
 4. Expand this report from the current high-risk slices to the full frontend endpoint surface.

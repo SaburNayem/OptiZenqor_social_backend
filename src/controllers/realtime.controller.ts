@@ -1,8 +1,7 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
-import { EcosystemDataService } from '../data/ecosystem-data.service';
 import {
   CreateGroupChatDto,
   CreateCallSessionDto,
@@ -10,18 +9,20 @@ import {
   GroupChatMemberDto,
   LiveCommentDto,
   LiveReactionDto,
+  PaginationQueryDto,
   UpdateGroupChatDto,
 } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { RealtimeStateService } from '../services/realtime-state.service';
+import { SocialStateDatabaseService } from '../services/social-state-database.service';
 
 @ApiTags('realtime')
 @Controller()
 export class RealtimeController {
   constructor(
-    private readonly ecosystemData: EcosystemDataService,
     private readonly coreDatabase: CoreDatabaseService,
     private readonly realtimeState: RealtimeStateService,
+    private readonly socialStateDatabase: SocialStateDatabaseService,
   ) {}
 
   private mapGroupChat(thread: Awaited<ReturnType<CoreDatabaseService['getThread']>>) {
@@ -258,43 +259,131 @@ export class RealtimeController {
   }
 
   @Get('live-stream')
-  getLiveStreams() {
-    return this.ecosystemData.getLiveStreams();
+  async getLiveStreams(
+    @Query() query: PaginationQueryDto,
+    @Query('status') status?: string,
+    @Query('userId') userId?: string,
+  ) {
+    const payload = await this.socialStateDatabase.listLiveStreams({
+      ...query,
+      status,
+      userId,
+    });
+    return {
+      success: true,
+      message: 'Live streams fetched successfully.',
+      ...payload,
+      streams: payload.items,
+    };
   }
 
+  @UseGuards(SessionAuthGuard)
   @Get('live-stream/setup')
-  getLiveStreamSetup() {
-    return this.ecosystemData.getLiveStreamStudio();
+  async getLiveStreamSetup(@CurrentUser() user: { id: string }) {
+    const setup = await this.socialStateDatabase.getLiveStreamSetup(user.id);
+    return {
+      success: true,
+      message: 'Live stream setup fetched successfully.',
+      data: setup,
+      setup,
+    };
   }
 
+  @UseGuards(SessionAuthGuard)
   @Get('live-stream/studio')
-  getLiveStreamStudio() {
-    return this.ecosystemData.getLiveStreamStudio();
+  async getLiveStreamStudio(@CurrentUser() user: { id: string }) {
+    const studio = await this.socialStateDatabase.getLiveStreamStudio(user.id);
+    return {
+      success: true,
+      message: 'Live stream studio fetched successfully.',
+      data: studio,
+      studio,
+    };
   }
 
   @Get('live-stream/:id/comments')
-  getLiveStreamComments(@Param('id') id: string) {
-    return this.ecosystemData.getLiveStream(id).comments ?? [];
+  async getLiveStreamComments(
+    @Param('id') id: string,
+    @Query() query: PaginationQueryDto,
+  ) {
+    const payload = await this.socialStateDatabase.listLiveStreamComments(id, query);
+    return {
+      success: true,
+      message: 'Live stream comments fetched successfully.',
+      ...payload,
+      comments: payload.items,
+    };
   }
 
+  @UseGuards(SessionAuthGuard)
   @Post('live-stream/:id/comments')
-  createLiveStreamComment(@Param('id') id: string, @Body() body: LiveCommentDto) {
-    return this.ecosystemData.addLiveStreamComment(id, body);
+  async createLiveStreamComment(
+    @Param('id') id: string,
+    @Body() body: LiveCommentDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    const comment = await this.socialStateDatabase.createLiveStreamComment(
+      id,
+      actor.id,
+      body.message,
+    );
+    return {
+      success: true,
+      message: 'Live stream comment created successfully.',
+      data: comment,
+      comment,
+    };
   }
 
   @Get('live-stream/:id/reactions')
-  getLiveStreamReactions(@Param('id') id: string) {
-    return this.ecosystemData.getLiveStream(id).reactions ?? [];
+  async getLiveStreamReactions(
+    @Param('id') id: string,
+    @Query() query: PaginationQueryDto,
+  ) {
+    const payload = await this.socialStateDatabase.listLiveStreamReactions(id, query);
+    return {
+      success: true,
+      message: 'Live stream reactions fetched successfully.',
+      ...payload,
+      reactions: payload.items,
+    };
   }
 
+  @UseGuards(SessionAuthGuard)
   @Post('live-stream/:id/reactions')
-  createLiveStreamReaction(@Param('id') id: string, @Body() body: LiveReactionDto) {
-    return this.ecosystemData.addLiveStreamReaction(id, body.type);
+  async createLiveStreamReaction(
+    @Param('id') id: string,
+    @Body() body: LiveReactionDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const payload = await this.socialStateDatabase.createLiveStreamReaction(
+      id,
+      actor.id,
+      body.type,
+    );
+    return {
+      success: true,
+      message: 'Live stream reaction created successfully.',
+      data: payload,
+      reaction: payload.reaction,
+      summary: payload.summary,
+    };
   }
 
   @Get('live-stream/:id')
-  getLiveStream(@Param('id') id: string) {
-    return this.ecosystemData.getLiveStream(id);
+  async getLiveStream(@Param('id') id: string) {
+    const stream = await this.socialStateDatabase.getLiveStream(id);
+    return {
+      success: true,
+      message: 'Live stream fetched successfully.',
+      data: stream,
+      stream,
+    };
   }
 
   @Get('socket/contract')

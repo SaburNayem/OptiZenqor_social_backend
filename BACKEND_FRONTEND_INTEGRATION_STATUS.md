@@ -18,7 +18,7 @@ This is a backend-first audit of the current `Socity_backend` workspace, now cro
 | Feed/posts/comments/reactions | Yes | Yes | Pending | Partial | Partial | Core post data is DB-backed; some detail/adjacent routes still touch mock-backed services. |
 | Stories | Yes | Yes | Pending | Partial | Partial | Prisma models and DB service exist; some controller-adjacent flows still reference old data services. |
 | Reels | Yes | Yes | Pending | Partial | Partial | Prisma models and DB service exist. |
-| Chat/messages | Yes | Yes | Partial | Partial | Partial | Core threads/messages are DB-backed; chat archive/mute/pin/preferences still mix snapshot-backed services. |
+| Chat/messages | Yes | Yes | Partial | Partial | Partial | Core threads/messages plus archive/mute/pin/preferences are now DB-backed; frontend hidden/archive UI state still needs full endpoint usage. |
 | Notifications | Yes | Yes | Pending | Partial | Partial | Inbox is DB-backed; some campaign/preferences flows still mix static or snapshot data. |
 | Bookmarks | Yes | Yes | Pending | In Progress | Partial | Persistent bookmark storage exists in Prisma. Controller fallback to `PlatformDataService` removed on 2026-04-29. |
 | Collections | Yes | Yes | Pending | Partial | Partial | Backed by `AccountStateDatabaseService`. |
@@ -32,7 +32,7 @@ This is a backend-first audit of the current `Socity_backend` workspace, now cro
 | Discovery/search/trending | Yes | Yes | Pending | Partial | Partial | `discovery.controller.ts` now reads search/trending/hashtags from DB-backed services instead of seeded ecosystem/platform services. |
 | Profiles/dashboards | Yes | Yes | Pending | Partial | Partial | `profiles.controller.ts` now reads profile, tagged/mention history, and business/seller/recruiter/creator dashboard payloads from DB-backed services. |
 | Preferences/support/app extensions | Partial | Partial | Pending | Partial | Partial | `settings` and `preferences` now read user-scoped state from DB-backed services, support tickets are persisted, and account switching/activity sessions/verification request are now durable; several utility routes still rely on snapshot-backed services. |
-| Realtime calls/live/presence | Partial | Partial | Partial | Partial | Partial | Calls history/session creation now use authenticated backend routes and frontend calls UI is API-backed; group chat create/member mutations are now durable too, while live streams and some presence flows still rely on snapshot/static services. |
+| Realtime calls/live/presence | Partial | Partial | Partial | Partial | Partial | Calls history/session creation remain durable, and live-stream list/setup/studio/comments/reactions are now DB-backed; full live lifecycle mutations and some presence flows still need more work. |
 | Subscriptions | Yes | Yes | Partial | Partial | Partial | Read flows were already live; plan change/cancel/renew routes are now durable and the frontend subscription selector posts to backend. |
 
 ## Remaining Mock or Snapshot Hotspots
@@ -71,6 +71,7 @@ This is a backend-first audit of the current `Socity_backend` workspace, now cro
 - `src/controllers/discovery.controller.ts`
 - `src/services/profiles-database.service.ts`
 - `src/controllers/profiles.controller.ts`
+- `src/services/social-state-database.service.ts`
 - `src/services/support-database.service.ts`
 - `src/controllers/support.controller.ts`
 - `src/services/app-extensions-database.service.ts`
@@ -127,6 +128,33 @@ This is a backend-first audit of the current `Socity_backend` workspace, now cro
 - `PATCH /verification-request/status`
 - `GET /group-chat`
 - `GET /group-chat/:id`
+- `GET /chat/preferences`
+- `PUT /chat/preferences`
+- `PATCH /chat/threads/:id/archive`
+- `PATCH /chat/threads/:id/mute`
+- `PATCH /chat/threads/:id/pin`
+- `PATCH /chat/threads/:id/unread`
+- `DELETE /chat/threads/:id/clear`
+- `GET /live-stream`
+- `GET /live-stream/:id`
+- `GET /live-stream/setup`
+- `GET /live-stream/studio`
+- `GET /live-stream/:id/comments`
+- `POST /live-stream/:id/comments`
+- `GET /live-stream/:id/reactions`
+- `POST /live-stream/:id/reactions`
+- `GET /archive/posts`
+- `POST /archive/posts`
+- `GET /archive/stories`
+- `POST /archive/stories`
+- `GET /archive/reels`
+- `POST /archive/reels`
+- `GET /hide/posts/all`
+- `POST /hide/posts/:postId`
+- `DELETE /hide/posts/:postId`
+- `GET /hidden-posts`
+- `GET /hidden-posts/:targetId`
+- `DELETE /hidden-posts/:targetId`
 - `GET /calls`
 - `GET /calls/:id`
 - `GET /calls/sessions`
@@ -150,7 +178,7 @@ This is a backend-first audit of the current `Socity_backend` workspace, now cro
 - Calls screens no longer need local mock history; the current repository/controller/UI path loads authenticated call history from `/calls` and creates sessions through `/calls/sessions`.
 - Group chat screen no longer stops at a backend-placeholder error for create/add/remove actions; it now posts to durable group chat mutation routes.
 - Subscription plan selection no longer stays device-local only; it now posts to `/subscriptions/change-plan` before updating local cache.
-- Support and remaining realtime feature screens still depend on seeded/snapshot-backed routes and remain migration targets.
+- Support utility payloads still include configuration-backed helper data, and the remaining live-stream lifecycle UI is still a migration target.
 - Support ticket list/create routes are now durable, but FAQ/chat/mail utility payloads are still configuration-backed rather than fully modeled in Prisma.
 - Account switching, activity session management, and verification request screens can now rely on authenticated DB-backed state instead of snapshot-backed app extension memory.
 
@@ -160,21 +188,21 @@ This is a backend-first audit of the current `Socity_backend` workspace, now cro
 - `npm.cmd run build`: pass
 - `npm.cmd install`: pass
 - `npx.cmd prisma generate`: pass
-- `npx.cmd prisma migrate dev`: pass (`Already in sync, no schema change or pending migration was found.`)
+- `npx.cmd prisma migrate dev`: blocked in this environment on 2026-04-30 because the Neon PostgreSQL host was unreachable; migration SQL was added manually under `prisma/migrations/20260430_social_state_persistence/`
 - `flutter pub get`: pass
 - `dart format` on updated calls files: pass
 - `dart analyze lib --no-fatal-warnings`: pass with existing warnings only
 
 ## High-Priority Controller Migration Targets
 
-1. `src/controllers/chat.controller.ts`
-2. `src/controllers/support.controller.ts`
-3. `src/controllers/realtime.controller.ts`
-4. `src/controllers/posts.controller.ts`
-5. `src/controllers/stories.controller.ts`
-6. `src/controllers/auth.controller.ts`
-7. `src/controllers/notifications.controller.ts`
-8. `src/controllers/marketplace.controller.ts`
+1. `src/controllers/support.controller.ts`
+2. `src/controllers/account-ops.controller.ts`
+3. `src/controllers/posts.controller.ts`
+4. `src/controllers/stories.controller.ts`
+5. `src/controllers/auth.controller.ts`
+6. `src/controllers/notifications.controller.ts`
+7. `src/controllers/marketplace.controller.ts`
+8. Remaining live-stream lifecycle mutation surfaces
 
 ## Notes
 
@@ -186,5 +214,5 @@ This is a backend-first audit of the current `Socity_backend` workspace, now cro
 - On 2026-04-30, `realtime.controller.ts` moved `group-chat` and `calls` reads plus call session creation/end flows onto authenticated backend state instead of seeded ecosystem payloads, and the frontend calls feature was switched from local repository data to the backend API.
 - On 2026-04-30, `realtime.controller.ts` gained durable group-chat create/update/delete/member-management routes and `engagement.controller.ts` gained durable subscription change/cancel/renew routes, with matching frontend repository integrations.
 - The backend currently uses a deliberate hybrid database access style: Prisma for many newer modules and raw `pg` for the core social/auth layer.
-- Remaining seeded dependencies for the current target slice are concentrated in `chat.controller.ts`, the `live-stream*` paths inside `realtime.controller.ts`, and the broader app-utility controller set still importing `src/data/*`.
+- Remaining seeded dependencies for the current target slice are now concentrated in support/app-utility controllers and live-stream lifecycle areas beyond the new durable list/detail/comment/reaction routes.
 - Latest verification for completed areas: `npm.cmd install`, `npx.cmd prisma generate`, `npx.cmd prisma migrate dev`, `npm.cmd run typecheck`, `npm.cmd run build`, `flutter pub get`, and `dart analyze lib --no-fatal-warnings` all pass, with frontend warnings remaining non-fatal.

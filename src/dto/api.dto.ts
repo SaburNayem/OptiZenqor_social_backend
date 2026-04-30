@@ -721,6 +721,23 @@ export class UpdateChatPreferencesDto {
   patch!: Record<string, unknown>;
 }
 
+export class ToggleThreadPreferenceDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  actorId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  value?: boolean;
+}
+
 export class UpdateChatPresenceDto {
   @ApiPropertyOptional()
   @IsOptional()
@@ -918,6 +935,11 @@ export class UpdateSavedCollectionDto {
 }
 
 export class HideItemDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
   @ApiProperty()
   @IsString()
   targetId!: string;
@@ -925,6 +947,27 @@ export class HideItemDto {
   @ApiProperty({ enum: ['post', 'reel', 'story', 'comment'] })
   @IsIn(['post', 'reel', 'story', 'comment'])
   targetType!: 'post' | 'reel' | 'story' | 'comment';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
+export class ArchiveEntityDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  actorId?: string;
+
+  @ApiProperty()
+  @IsString()
+  targetId!: string;
 }
 
 export class CreateEventDto {
@@ -1159,9 +1202,15 @@ export class CreateMarketplaceOrderDto {
 }
 
 export class LiveCommentDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  username!: string;
+  userId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  username?: string;
 
   @ApiProperty()
   @IsString()

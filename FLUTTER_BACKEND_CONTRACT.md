@@ -78,6 +78,14 @@ The intent is:
 - Purpose: database-backed chat flow
 - Auth: required
 
+### `GET /chat/preferences`
+### `PUT /chat/preferences`
+### `PATCH /chat/threads/:id/archive`
+### `PATCH /chat/threads/:id/mute`
+### `PATCH /chat/threads/:id/pin`
+- Purpose: persisted per-user chat preference state
+- Auth: required
+
 ## Notifications
 
 ### `GET /notifications`
@@ -118,6 +126,34 @@ The intent is:
 ### `POST /drafts`
 ### `PATCH /drafts/:id`
 ### `DELETE /drafts/:id`
+
+## Live stream and hidden/archive state
+
+### `GET /live-stream`
+### `GET /live-stream/:id`
+### `GET /live-stream/setup`
+### `GET /live-stream/studio`
+### `GET /live-stream/:id/comments`
+### `POST /live-stream/:id/comments`
+### `GET /live-stream/:id/reactions`
+### `POST /live-stream/:id/reactions`
+- Purpose: durable live-stream session, comment, and reaction flows
+
+### `GET /archive/posts`
+### `GET /archive/stories`
+### `GET /archive/reels`
+### `POST /archive/posts`
+### `POST /archive/stories`
+### `POST /archive/reels`
+- Purpose: authenticated archived content state
+
+### `GET /hide/posts/all`
+### `POST /hide/posts/:postId`
+### `DELETE /hide/posts/:postId`
+### `GET /hidden-posts`
+### `GET /hidden-posts/:targetId`
+### `DELETE /hidden-posts/:targetId`
+- Purpose: authenticated hidden post state
 - Purpose: persisted draft and scheduling state
 - Auth: required
 

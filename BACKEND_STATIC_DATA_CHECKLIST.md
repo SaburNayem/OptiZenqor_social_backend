@@ -60,21 +60,19 @@ This means the backend is database-backed, but not yet a pure Prisma-only codeba
 - Account switching, activity sessions, and verification request routes moved off snapshot-backed `AppExtensionsDataService`
 - Auth password hashing moved to `argon2`, and demo-account exposure is now opt-in via env instead of implied by the normal auth flow
 - Group chat create/update/delete/member-management routes are now durable against `chat_threads` and `chat_thread_participants`
+- Chat thread archive/mute/pin/preferences are now durable against `chat_thread_preferences` and `chat_user_preferences`
+- Live stream list/detail/setup/studio/comments/reactions are now durable against `app_live_stream_*` tables
+- Hidden-post and archive read/write state for posts/stories/reels are now durable against `app_user_hidden_entities` and `app_user_archived_entities`
 - Subscription plan change/cancel/renew routes are now durable against `app_subscriptions`
 
 ## Remaining static dependency hotspots
 
-- `src/controllers/chat.controller.ts`
-- `src/controllers/realtime.controller.ts`
 - `src/controllers/account-ops.controller.ts`
 - `src/controllers/auth.controller.ts`
-- `src/controllers/archive.controller.ts`
 - `src/controllers/admin.controller.ts`
 - `src/controllers/posts.controller.ts`
 - `src/controllers/stories.controller.ts`
 - `src/controllers/engagement.controller.ts`
-- `src/controllers/hide.controller.ts`
-- `src/controllers/hidden-posts.controller.ts`
 - `src/controllers/invite-friends.controller.ts`
 - `src/controllers/media-viewer.controller.ts`
 - `src/controllers/deep-link-handler.controller.ts`
@@ -89,10 +87,10 @@ This means the backend is database-backed, but not yet a pure Prisma-only codeba
 
 ## Priority order for remaining migration
 
-1. Chat adjunct and realtime durable state
-2. Admin and moderation utility routes
-3. Story/post detail adjunct state
-4. Utility app surfaces still backed by `src/data/*`
+1. Admin and moderation utility routes
+2. Story/post detail adjunct state
+3. Utility app surfaces still backed by `src/data/*`
+4. Full live-stream lifecycle mutation flows beyond the durable list/detail/comment/reaction slice
 
 ## Practical production rule
 

@@ -1,64 +1,132 @@
-import { Controller, Get } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { ExtendedDataService } from '../data/extended-data.service';
-import { PlatformDataService } from '../data/platform-data.service';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
+import { ArchiveEntityDto, PaginationQueryDto } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { SocialStateDatabaseService } from '../services/social-state-database.service';
 
 @ApiTags('archive')
 @Controller('archive')
+@UseGuards(SessionAuthGuard)
 export class ArchiveController {
   constructor(
-    private readonly extendedData: ExtendedDataService,
+    private readonly socialStateDatabase: SocialStateDatabaseService,
     private readonly coreDatabase: CoreDatabaseService,
-    private readonly platformData: PlatformDataService,
   ) {}
 
   @Get('posts')
-  async getArchivedPosts() {
-    const items = await Promise.all(
-      this.extendedData.getArchivedPostIds().map(async (postId) => {
-        const post = await this.coreDatabase.getPost(postId);
-        const author = await this.coreDatabase.getUser(post.authorId);
-        return {
-          ...post,
-          author: {
-            id: author.id,
-            name: author.name,
-            username: author.username,
-            avatar: author.avatar,
-            avatarUrl: author.avatarUrl,
-          },
-        };
-      }),
+  async getArchivedPosts(
+    @Query() query: PaginationQueryDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const payload = await this.socialStateDatabase.listArchivedEntities(
+      user.id,
+      'post',
+      query,
     );
+    return this.wrapListResponse('Archived posts fetched successfully.', payload);
+  }
 
-    return this.wrapListResponse('Archived posts fetched successfully.', items);
+  @Post('posts')
+  async archivePost(
+    @Body() body: ArchiveEntityDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId?.trim() || body.actorId?.trim(),
+    );
+    const archived = await this.socialStateDatabase.archiveEntity(
+      user.id,
+      'post',
+      body.targetId,
+    );
+    return {
+      success: true,
+      message: 'Post archived successfully.',
+      data: archived,
+      archived,
+    };
   }
 
   @Get('stories')
-  getArchivedStories() {
-    const items = this.extendedData
-      .getArchivedStoryIds()
-      .map((storyId) => this.platformData.getStory(storyId));
-    return this.wrapListResponse('Archived stories fetched successfully.', items);
+  async getArchivedStories(
+    @Query() query: PaginationQueryDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const payload = await this.socialStateDatabase.listArchivedEntities(
+      user.id,
+      'story',
+      query,
+    );
+    return this.wrapListResponse('Archived stories fetched successfully.', payload);
+  }
+
+  @Post('stories')
+  async archiveStory(
+    @Body() body: ArchiveEntityDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId?.trim() || body.actorId?.trim(),
+    );
+    const archived = await this.socialStateDatabase.archiveEntity(
+      user.id,
+      'story',
+      body.targetId,
+    );
+    return {
+      success: true,
+      message: 'Story archived successfully.',
+      data: archived,
+      archived,
+    };
   }
 
   @Get('reels')
-  getArchivedReels() {
-    const items = this.extendedData
-      .getArchivedReelIds()
-      .map((reelId) => this.platformData.getReel(reelId));
-    return this.wrapListResponse('Archived reels fetched successfully.', items);
+  async getArchivedReels(
+    @Query() query: PaginationQueryDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const payload = await this.socialStateDatabase.listArchivedEntities(
+      user.id,
+      'reel',
+      query,
+    );
+    return this.wrapListResponse('Archived reels fetched successfully.', payload);
   }
 
-  private wrapListResponse(message: string, items: unknown[]) {
+  @Post('reels')
+  async archiveReel(
+    @Body() body: ArchiveEntityDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId?.trim() || body.actorId?.trim(),
+    );
+    const archived = await this.socialStateDatabase.archiveEntity(
+      user.id,
+      'reel',
+      body.targetId,
+    );
+    return {
+      success: true,
+      message: 'Reel archived successfully.',
+      data: archived,
+      archived,
+    };
+  }
+
+  private wrapListResponse(message: string, payload: Record<string, unknown>) {
     return {
       success: true,
       message,
-      data: items,
-      items,
-      results: items,
-      count: items.length,
+      ...payload,
     };
   }
 }

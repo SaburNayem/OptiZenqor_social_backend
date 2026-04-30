@@ -8,6 +8,7 @@ import { MailService } from '../services/mail.service';
 import { MonetizationDatabaseService } from '../services/monetization-database.service';
 import { RealtimeStateService } from '../services/realtime-state.service';
 import { ReelsDatabaseService } from '../services/reels-database.service';
+import { SocialStateDatabaseService } from '../services/social-state-database.service';
 
 @ApiTags('account-ops')
 @Controller()
@@ -20,6 +21,7 @@ export class AccountOpsController {
     private readonly monetizationDatabase: MonetizationDatabaseService,
     private readonly accountStateDatabase: AccountStateDatabaseService,
     private readonly mailService: MailService,
+    private readonly socialStateDatabase: SocialStateDatabaseService,
   ) {}
 
   @Post('auth/send-otp')
@@ -102,8 +104,15 @@ export class AccountOpsController {
   }
 
   @Get('chat/preferences')
-  getConversationPreferences() {
-    return this.extendedData.getConversationPreferences();
+  async getConversationPreferences(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const preferences = await this.socialStateDatabase.getChatPreferences(user.id);
+    return {
+      success: true,
+      message: 'Chat preferences fetched successfully.',
+      data: preferences,
+      preferences,
+    };
   }
 
   @Patch('notification-preferences')
@@ -130,8 +139,15 @@ export class AccountOpsController {
   }
 
   @Get('safety/config')
-  getSafetyConfig() {
-    return this.extendedData.getSafetyConfig();
+  async getSafetyConfig(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const preferences = await this.socialStateDatabase.getChatPreferences(user.id);
+    return {
+      success: true,
+      message: 'Safety config fetched successfully.',
+      data: preferences.safetyConfig,
+      safetyConfig: preferences.safetyConfig,
+    };
   }
 
   @Get('support/chat')

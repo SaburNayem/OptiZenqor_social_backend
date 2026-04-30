@@ -307,6 +307,54 @@ Currently exposed event families include:
 - read state updates
 - presence updates
 
+## Latest durable additions
+
+### `GET /chat/preferences`
+### `PUT /chat/preferences`
+### `PATCH /chat/threads/:id/archive`
+### `PATCH /chat/threads/:id/mute`
+### `PATCH /chat/threads/:id/pin`
+
+These routes are now backed by persisted `chat_user_preferences` and
+`chat_thread_preferences` rows and return the standard success wrapper plus
+compatibility aliases such as `preferences`, `preference`, and `data`.
+
+### `GET /live-stream`
+### `GET /live-stream/:id`
+### `GET /live-stream/setup`
+### `GET /live-stream/studio`
+### `GET /live-stream/:id/comments`
+### `POST /live-stream/:id/comments`
+### `GET /live-stream/:id/reactions`
+### `POST /live-stream/:id/reactions`
+
+These routes are now backed by persisted live-stream session, comment, and
+reaction tables in PostgreSQL.
+
+### `GET /archive/posts`
+### `GET /archive/stories`
+### `GET /archive/reels`
+### `POST /archive/posts`
+### `POST /archive/stories`
+### `POST /archive/reels`
+
+Archive routes now return user-scoped PostgreSQL state instead of static or
+seed-backed data.
+
+### `GET /hide/posts/all`
+### `POST /hide/posts/:postId`
+### `DELETE /hide/posts/:postId`
+### `GET /hidden-posts`
+### `GET /hidden-posts/:targetId`
+### `DELETE /hidden-posts/:targetId`
+
+Hidden-post routes now return user-scoped PostgreSQL state instead of static or
+seed-backed data.
+
 ## Important status note
 
-This contract covers the preferred real integration path, but the repo still contains some static helper modules outside these routes. The biggest remaining backend gaps are support/help utility surfaces, chat/realtime adjunct state, admin utility flows, and other controllers that still import from `src/data/*`.
+This contract covers the preferred real integration path, but the repo still
+contains some static helper modules outside these routes. The biggest remaining
+backend gaps are support/help utility surfaces, the rest of the live-stream
+lifecycle beyond the new durable routes above, admin utility flows, and other
+controllers that still import from `src/data/*`.

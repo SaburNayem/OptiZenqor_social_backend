@@ -4,11 +4,13 @@ import { ExtendedDataService } from '../data/extended-data.service';
 import {
   CreateChatThreadDto,
   CreateMessageDto,
+  ToggleThreadPreferenceDto,
   UpdateChatPreferencesDto,
   UpdateChatPresenceDto,
 } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { RealtimeStateService } from '../services/realtime-state.service';
+import { SocialStateDatabaseService } from '../services/social-state-database.service';
 
 @ApiTags('chat')
 @Controller('chat')
@@ -17,31 +19,68 @@ export class ChatController {
     private readonly coreDatabase: CoreDatabaseService,
     private readonly extendedData: ExtendedDataService,
     private readonly realtimeState: RealtimeStateService,
+    private readonly socialStateDatabase: SocialStateDatabaseService,
   ) {}
 
   @Get()
-  async getChatOverview() {
+  async getChatOverview(
+    @Headers('authorization') authorization?: string,
+    @Query('userId') userId?: string,
+  ) {
+    const actor = await this.coreDatabase
+      .requireUserFromAuthorization(authorization, userId)
+      .catch(() => null);
     const threads = await this.coreDatabase.getThreads();
+    const visibleThreads = actor
+      ? threads.filter((thread) => (thread.participantIds ?? []).includes(actor.id))
+      : threads;
     return {
       success: true,
       message: 'Chat overview fetched successfully.',
-      threads,
-      data: threads,
-      unreadCount: threads.reduce((count, thread) => count + thread.unreadCount, 0),
+      threads: visibleThreads,
+      data: visibleThreads,
+      unreadCount: visibleThreads.reduce(
+        (count, thread) => count + thread.unreadCount,
+        0,
+      ),
       presence: this.extendedData.getPresence(),
       inboxFilters: ['all', 'unread', 'groups', 'marketplace', 'support'],
     };
   }
 
   @Get('detail')
-  async getChatDetail(@Query('id') id: string) {
+  async getChatDetail(
+    @Query('id') id: string,
+    @Headers('authorization') authorization?: string,
+    @Query('userId') userId?: string,
+  ) {
     const thread = await this.coreDatabase.getThread(id);
+    const actor = await this.coreDatabase
+      .requireUserFromAuthorization(authorization, userId)
+      .catch(() => null);
+    const preferences = actor
+      ? await this.socialStateDatabase.getChatPreferences(actor.id)
+      : {
+          conversationPreferences: [],
+          notificationPreferences: {},
+          safetyConfig: {},
+          preferences: {},
+        };
     return {
+      success: true,
+      message: 'Chat detail fetched successfully.',
       thread,
       presence: this.extendedData.getPresence(),
-      preferences: this.extendedData
-        .getConversationPreferences()
-        .find((item) => item.threadId === id) ?? null,
+      preferences:
+        preferences.conversationPreferences.find((item) => item.threadId === id) ??
+        null,
+      data: {
+        thread,
+        presence: this.extendedData.getPresence(),
+        preferences:
+          preferences.conversationPreferences.find((item) => item.threadId === id) ??
+          null,
+      },
     };
   }
 
@@ -51,24 +90,42 @@ export class ChatController {
   }
 
   @Get('settings')
-  getChatSettings() {
+  async getChatSettings(
+    @Headers('authorization') authorization?: string,
+    @Query('userId') userId?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      userId,
+    );
+    const preferences = await this.socialStateDatabase.getChatPreferences(actor.id);
     return {
-      conversationPreferences: this.extendedData.getConversationPreferences(),
-      notificationPreferences: this.extendedData.getNotificationPreferences(),
-      safetyConfig: this.extendedData.getSafetyConfig(),
+      success: true,
+      message: 'Chat settings fetched successfully.',
+      ...preferences,
+      data: preferences,
     };
   }
 
   @Get('threads')
-  async getThreads() {
+  async getThreads(
+    @Headers('authorization') authorization?: string,
+    @Query('userId') userId?: string,
+  ) {
+    const actor = await this.coreDatabase
+      .requireUserFromAuthorization(authorization, userId)
+      .catch(() => null);
     const threads = await this.coreDatabase.getThreads();
+    const visibleThreads = actor
+      ? threads.filter((thread) => (thread.participantIds ?? []).includes(actor.id))
+      : threads;
     return {
       success: true,
       message: 'Threads fetched successfully.',
-      data: threads,
-      items: threads,
-      results: threads,
-      threads,
+      data: visibleThreads,
+      items: visibleThreads,
+      results: visibleThreads,
+      threads: visibleThreads,
     };
   }
 
@@ -167,34 +224,120 @@ export class ChatController {
 
   @Patch('threads/:id/archive')
   @Post('threads/:id/archive')
-  archiveThread(@Param('id') id: string) {
-    return this.extendedData.updateConversationPreference(id, 'archived', true);
+  async archiveThread(
+    @Param('id') id: string,
+    @Body() body: ToggleThreadPreferenceDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId?.trim() || body.actorId?.trim(),
+    );
+    const preference = await this.socialStateDatabase.updateThreadPreference(
+      actor.id,
+      id,
+      { archived: body.value ?? true },
+    );
+    return {
+      success: true,
+      message: 'Thread archive preference updated successfully.',
+      data: preference,
+      preference,
+    };
   }
 
   @Patch('threads/:id/mute')
   @Post('threads/:id/mute')
-  muteThread(@Param('id') id: string) {
-    return this.extendedData.updateConversationPreference(id, 'muted', true);
+  async muteThread(
+    @Param('id') id: string,
+    @Body() body: ToggleThreadPreferenceDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId?.trim() || body.actorId?.trim(),
+    );
+    const preference = await this.socialStateDatabase.updateThreadPreference(
+      actor.id,
+      id,
+      { muted: body.value ?? true },
+    );
+    return {
+      success: true,
+      message: 'Thread mute preference updated successfully.',
+      data: preference,
+      preference,
+    };
   }
 
   @Patch('threads/:id/pin')
   @Post('threads/:id/pin')
-  pinThread(@Param('id') id: string) {
-    return this.extendedData.updateConversationPreference(id, 'pinned', true);
+  async pinThread(
+    @Param('id') id: string,
+    @Body() body: ToggleThreadPreferenceDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId?.trim() || body.actorId?.trim(),
+    );
+    const preference = await this.socialStateDatabase.updateThreadPreference(
+      actor.id,
+      id,
+      { pinned: body.value ?? true },
+    );
+    return {
+      success: true,
+      message: 'Thread pin preference updated successfully.',
+      data: preference,
+      preference,
+    };
   }
 
   @Patch('threads/:id/unread')
-  markUnread(@Param('id') id: string) {
-    return this.extendedData.updateConversationPreference(id, 'unread', true);
+  async markUnread(
+    @Param('id') id: string,
+    @Body() body: ToggleThreadPreferenceDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId?.trim() || body.actorId?.trim(),
+    );
+    const preference = await this.socialStateDatabase.updateThreadPreference(
+      actor.id,
+      id,
+      { unread: body.value ?? true },
+    );
+    return {
+      success: true,
+      message: 'Thread unread preference updated successfully.',
+      data: preference,
+      preference,
+    };
   }
 
   @Delete('threads/:id/clear')
-  clearThread(@Param('id') id: string) {
-    return this.extendedData.updateConversationPreference(
-      id,
-      'clearedAt',
-      new Date().toISOString(),
+  async clearThread(
+    @Param('id') id: string,
+    @Body() body: ToggleThreadPreferenceDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId?.trim() || body.actorId?.trim(),
     );
+    const preference = await this.socialStateDatabase.updateThreadPreference(
+      actor.id,
+      id,
+      { clearedAt: new Date() },
+    );
+    return {
+      success: true,
+      message: 'Thread cleared successfully.',
+      data: preference,
+      preference,
+    };
   }
 
   @Get('presence')
@@ -220,12 +363,15 @@ export class ChatController {
   }
 
   @Get('preferences')
-  getPreferences() {
-    const preferences = {
-      conversationPreferences: this.extendedData.getConversationPreferences(),
-      notificationPreferences: this.extendedData.getNotificationPreferences(),
-      safetyConfig: this.extendedData.getSafetyConfig(),
-    };
+  async getPreferences(
+    @Headers('authorization') authorization?: string,
+    @Query('userId') userId?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      userId,
+    );
+    const preferences = await this.socialStateDatabase.getChatPreferences(actor.id);
     return {
       success: true,
       message: 'Chat preferences fetched successfully.',
@@ -235,8 +381,19 @@ export class ChatController {
   }
 
   @Put('preferences')
-  async updatePreferences(@Body() body: UpdateChatPreferencesDto) {
-    const preferences = await this.extendedData.updateChatPreferences(body.patch);
+  async updatePreferences(
+    @Body() body: UpdateChatPreferencesDto,
+    @Headers('authorization') authorization?: string,
+    @Query('userId') userId?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      userId,
+    );
+    const preferences = await this.socialStateDatabase.updateChatPreferences(
+      actor.id,
+      body.patch,
+    );
     return {
       success: true,
       message: 'Chat preferences updated successfully.',
