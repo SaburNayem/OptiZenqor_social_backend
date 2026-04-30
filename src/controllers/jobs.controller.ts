@@ -51,10 +51,12 @@ export class JobsController {
     return {
       success: true,
       message: 'Job creation options fetched successfully.',
+      requiredProfileType: 'business',
       typeOptions: [...new Set(jobs.map((job) => job.type))],
       experienceLevels: [...new Set(jobs.map((job) => job.experienceLevel))],
       suggestedCompanies: [...new Set(jobs.map((job) => job.company))],
       data: {
+        requiredProfileType: 'business',
         typeOptions: [...new Set(jobs.map((job) => job.type))],
         experienceLevels: [...new Set(jobs.map((job) => job.experienceLevel))],
         suggestedCompanies: [...new Set(jobs.map((job) => job.company))],
@@ -79,6 +81,7 @@ export class JobsController {
     @Headers('authorization') authorization?: string,
   ) {
     const recruiter = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    this.coreDatabase.assertUserCanCreateJobs(recruiter);
     return this.experienceDatabase.createJob(recruiter.id, body);
   }
 

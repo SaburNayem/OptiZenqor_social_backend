@@ -278,6 +278,7 @@ export class MarketplaceController {
       authorization,
       body.sellerId,
     );
+    this.coreDatabase.assertUserCanCreateMarketplaceProducts(seller);
     return successResponse(
       'Marketplace product created successfully.',
       await this.experienceDatabase.createMarketplaceProduct({

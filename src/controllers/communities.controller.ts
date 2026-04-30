@@ -195,6 +195,7 @@ export class CommunitiesController {
     return {
       success: true,
       message: 'Page creation options fetched successfully.',
+      requiredProfileType: 'creator',
       categories: [
         ...new Set(
           pages.map(
@@ -205,6 +206,7 @@ export class CommunitiesController {
       ownerSuggestions: ['u1', 'u2', 'u4', 'u5'],
       locations: ['Dhaka, Bangladesh', 'Remote', 'Global'],
       data: {
+        requiredProfileType: 'creator',
         categories: [...new Set(pages.map((page: { category: string }) => page.category))],
         ownerSuggestions: ['u1', 'u2', 'u4', 'u5'],
         locations: ['Dhaka, Bangladesh', 'Remote', 'Global'],
@@ -232,6 +234,7 @@ export class CommunitiesController {
       authorization,
       body.ownerId,
     );
+    this.coreDatabase.assertUserCanCreatePages(owner);
     return successResponse(
       'Page created successfully.',
       await this.experienceDatabase.createPage({

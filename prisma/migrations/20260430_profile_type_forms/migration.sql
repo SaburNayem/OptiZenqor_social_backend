@@ -1,0 +1,5 @@
+ALTER TABLE "app_users"
+ADD COLUMN IF NOT EXISTS "profile_type" TEXT NOT NULL DEFAULT 'user';
+
+ALTER TABLE "app_users"
+ADD COLUMN IF NOT EXISTS "profile_setup" JSONB NOT NULL DEFAULT '{}';

@@ -162,7 +162,8 @@ export class AuthController {
       username: normalizedUsername,
       email: normalizedEmail,
       password: body.password,
-      role: body.role,
+      role: body.role ?? this.mapRoleFromProfileType(body.profileType),
+      profileType: body.profileType,
       bio: body.bio?.trim(),
       interests: this.normalizeInterests(body.interests),
       avatar: await this.resolveSignupAvatar(body),
@@ -319,6 +320,17 @@ export class AuthController {
 
     const normalized = [...new Set(interests.map((interest) => interest.trim()).filter(Boolean))];
     return normalized.length > 0 ? normalized : undefined;
+  }
+
+  private mapRoleFromProfileType(profileType: string) {
+    switch (profileType.trim().toLowerCase()) {
+      case 'business':
+        return 'Business';
+      case 'creator':
+        return 'Creator';
+      default:
+        return 'User';
+    }
   }
 
   private async resolveSignupAvatar(body: SignupDto) {

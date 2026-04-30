@@ -144,6 +144,68 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   coverImageUrl?: string;
+
+  @ApiPropertyOptional({ enum: ['user', 'creator', 'business'] })
+  @IsOptional()
+  @IsIn(['user', 'creator', 'business'])
+  profileType?: 'user' | 'creator' | 'business';
+}
+
+export class ProfileTypeSetupDto {
+  @ApiProperty({ enum: ['user', 'creator', 'business'] })
+  @IsString()
+  @IsIn(['user', 'creator', 'business'])
+  profileType!: 'user' | 'creator' | 'business';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  businessName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  businessCategory?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  businessPhone?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  businessAddress?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  companyWebsite?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  pageName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  pageCategory?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  pageAbout?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  contactLabel?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
 }
 
 export class FollowUserDto {

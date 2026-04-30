@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Headers, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
-import { FollowUserDto, UpdateUserDto } from '../dto/api.dto';
+import { FollowUserDto, ProfileTypeSetupDto, UpdateUserDto } from '../dto/api.dto';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { ProfilesDatabaseService } from '../services/profiles-database.service';
@@ -76,6 +76,8 @@ export class ProfilesController {
         'coverImageUrl',
         'website',
         'location',
+        'profileType',
+        'profileSetup',
       ],
       helpText:
         'Update your profile basics, then save to refresh your public profile.',
@@ -95,6 +97,49 @@ export class ProfilesController {
     return successResponse('Profile updated successfully.', {
       user,
       profile: user,
+    });
+  }
+
+  @Get('profile-type/forms')
+  getProfileTypeForms() {
+    return successResponse('Profile type forms fetched successfully.', {
+      required: true,
+      profileTypes: [
+        {
+          value: 'business',
+          label: 'Business',
+          capabilities: ['create_jobs', 'create_marketplace_products'],
+          requiredFields: ['businessName', 'businessCategory', 'businessPhone'],
+          optionalFields: ['businessAddress', 'companyWebsite'],
+        },
+        {
+          value: 'creator',
+          label: 'Creator',
+          capabilities: ['create_pages'],
+          requiredFields: ['pageName', 'pageCategory', 'pageAbout'],
+          optionalFields: ['contactLabel', 'location'],
+        },
+        {
+          value: 'user',
+          label: 'User',
+          capabilities: [],
+          requiredFields: [],
+          optionalFields: [],
+        },
+      ],
+    });
+  }
+
+  @Patch('user-profile/type')
+  async updateUserProfileType(
+    @Body() body: ProfileTypeSetupDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const updated = await this.coreDatabase.updateUserProfileTypeSetup(user.id, body);
+    return successResponse('Profile type updated successfully.', {
+      user: updated,
+      profile: updated,
     });
   }
 
@@ -296,6 +341,7 @@ export class ProfilesController {
       website: body.website?.trim(),
       location: body.location?.trim(),
       coverImageUrl: body.coverImageUrl?.trim(),
+      profileType: body.profileType?.trim(),
     };
   }
 

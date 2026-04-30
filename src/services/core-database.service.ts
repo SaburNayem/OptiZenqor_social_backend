@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   OnModuleInit,
@@ -39,6 +40,8 @@ type UserRow = QueryResultRow & {
   note?: string | null;
   note_privacy?: string | null;
   supporter_badge?: boolean | null;
+  profile_type?: string | null;
+  profile_setup?: Record<string, unknown> | null;
 };
 
 type PostRow = QueryResultRow & {
@@ -268,6 +271,7 @@ export class CoreDatabaseService implements OnModuleInit {
     email: string;
     password: string;
     role: string;
+    profileType: string;
     bio?: string;
     avatar?: string;
     interests?: string[];
@@ -278,13 +282,13 @@ export class CoreDatabaseService implements OnModuleInit {
     const interests = [...new Set((input.interests ?? []).map((interest) => interest.trim()).filter(Boolean))];
     await this.database.query(
       `insert into app_users (
-        id, name, username, email, avatar, bio, interests, role, verification, status,
+        id, name, username, email, avatar, bio, interests, role, profile_type, profile_setup, verification, status,
         followers, following, wallet_summary, health, reports, last_active,
         email_verified, blocked, password_hash
       ) values (
-        $1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,
-        $11,$12,$13,$14,$15,$16,
-        $17,$18,$19
+        $1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10::jsonb,$11,$12,
+        $13,$14,$15,$16,$17,$18,
+        $19,$20,$21
       )`,
       [
         id,
@@ -295,6 +299,8 @@ export class CoreDatabaseService implements OnModuleInit {
         input.bio?.trim() ?? '',
         JSON.stringify(interests),
         input.role,
+        this.normalizeProfileType(input.profileType, input.role),
+        JSON.stringify({}),
         'Not Requested',
         'Active',
         0,
@@ -366,13 +372,13 @@ export class CoreDatabaseService implements OnModuleInit {
       const id = makeId('user');
       await this.database.query(
         `insert into app_users (
-          id, name, username, email, avatar, bio, role, verification, status,
+          id, name, username, email, avatar, bio, role, profile_type, profile_setup, verification, status,
           followers, following, wallet_summary, health, reports, last_active,
           email_verified, blocked, password_hash
         ) values (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,
-          $10,$11,$12,$13,$14,$15,
-          $16,$17,$18
+          $1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,
+          $12,$13,$14,$15,$16,$17,
+          $18,$19,$20
         )`,
         [
           id,
@@ -382,6 +388,8 @@ export class CoreDatabaseService implements OnModuleInit {
           'https://placehold.co/120x120',
           'Google sign-in user.',
           'User',
+          'user',
+          JSON.stringify({}),
           'Verified',
           'Active',
           0,
@@ -501,6 +509,7 @@ export class CoreDatabaseService implements OnModuleInit {
       website: string;
       location: string;
       coverImageUrl: string;
+      profileType: string;
     }>,
   ) {
     await this.getUser(id);
@@ -524,6 +533,7 @@ export class CoreDatabaseService implements OnModuleInit {
            website = coalesce($6, website),
            location = coalesce($7, location),
            cover_image_url = coalesce($8, cover_image_url),
+           profile_type = coalesce($9, profile_type),
            updated_at = now()
        where id = $1`,
       [
@@ -535,9 +545,78 @@ export class CoreDatabaseService implements OnModuleInit {
         patch.website ?? null,
         patch.location ?? null,
         patch.coverImageUrl ?? null,
+        patch.profileType
+          ? this.normalizeProfileType(patch.profileType)
+          : null,
       ],
     );
     return this.getUser(id);
+  }
+
+  async updateUserProfileTypeSetup(
+    id: string,
+    input: {
+      profileType: 'user' | 'creator' | 'business';
+      businessName?: string;
+      businessCategory?: string;
+      businessPhone?: string;
+      businessAddress?: string;
+      companyWebsite?: string;
+      pageName?: string;
+      pageCategory?: string;
+      pageAbout?: string;
+      contactLabel?: string;
+      location?: string;
+    },
+  ) {
+    const profileType = this.normalizeProfileType(input.profileType);
+    const profileSetup = this.buildProfileSetup(profileType, input);
+
+    await this.getUser(id);
+    await this.database.query(
+      `update app_users
+       set role = $2,
+           profile_type = $3,
+           profile_setup = $4::jsonb,
+           updated_at = now()
+       where id = $1`,
+      [
+        id,
+        this.roleFromProfileType(profileType),
+        profileType,
+        JSON.stringify(profileSetup),
+      ],
+    );
+
+    return this.getUser(id);
+  }
+
+  assertUserCanCreateJobs(user: { id: string; role?: string; profileType?: string }) {
+    if (!this.userHasCapability(user, 'jobs')) {
+      throw new ForbiddenException(
+        'Only business profiles can create jobs. Complete the business form first.',
+      );
+    }
+  }
+
+  assertUserCanCreateMarketplaceProducts(user: {
+    id: string;
+    role?: string;
+    profileType?: string;
+  }) {
+    if (!this.userHasCapability(user, 'marketplace')) {
+      throw new ForbiddenException(
+        'Only business profiles can create marketplace products. Complete the business form first.',
+      );
+    }
+  }
+
+  assertUserCanCreatePages(user: { id: string; role?: string; profileType?: string }) {
+    if (!this.userHasCapability(user, 'pages')) {
+      throw new ForbiddenException(
+        'Only creator profiles can create pages. Complete the creator form first.',
+      );
+    }
   }
 
   async changePassword(input: { email: string; oldPassword: string; newPassword: string }) {
@@ -1761,6 +1840,8 @@ export class CoreDatabaseService implements OnModuleInit {
         bio text not null,
         interests jsonb not null default '[]'::jsonb,
         role text not null,
+        profile_type text not null default 'user',
+        profile_setup jsonb not null default '{}'::jsonb,
         verification text not null,
         status text not null,
         followers integer not null default 0,
@@ -1819,6 +1900,14 @@ export class CoreDatabaseService implements OnModuleInit {
     await this.database.query(`
       alter table app_users
       add column if not exists supporter_badge boolean not null default false;
+    `);
+    await this.database.query(`
+      alter table app_users
+      add column if not exists profile_type text not null default 'user';
+    `);
+    await this.database.query(`
+      alter table app_users
+      add column if not exists profile_setup jsonb not null default '{}'::jsonb;
     `);
     await this.database.query(`
       create table if not exists auth_sessions (
@@ -2448,12 +2537,22 @@ export class CoreDatabaseService implements OnModuleInit {
 
   private mapUser(row: UserRow) {
     const normalizedRole = row.role.trim().toLowerCase();
+    const profileType = this.normalizeProfileType(row.profile_type ?? row.role, row.role);
     const verificationStatus = this.normalizeVerificationStatus(
       row.verification,
       row.email_verified,
     );
     const verified = row.email_verified || verificationStatus.includes('verified');
     const badgeStyle = this.normalizeBadgeStyle(normalizedRole);
+    const profileSetup = this.toObject(row.profile_setup);
+    const capabilities = {
+      canCreateJobs: this.userHasCapability({ profileType, role: normalizedRole }, 'jobs'),
+      canCreateMarketplaceProducts: this.userHasCapability(
+        { profileType, role: normalizedRole },
+        'marketplace',
+      ),
+      canCreatePages: this.userHasCapability({ profileType, role: normalizedRole }, 'pages'),
+    };
 
     return {
       id: row.id,
@@ -2465,6 +2564,9 @@ export class CoreDatabaseService implements OnModuleInit {
       bio: row.bio,
       interests: Array.isArray(row.interests) ? row.interests : [],
       role: normalizedRole,
+      profileType,
+      profileSetup,
+      capabilities,
       verification: verificationStatus,
       verified,
       verificationStatus,
@@ -2566,6 +2668,108 @@ export class CoreDatabaseService implements OnModuleInit {
       type: row.type,
       createdAt: this.iso(row.created_at),
     };
+  }
+
+  private normalizeProfileType(value?: string | null, fallbackRole?: string | null) {
+    const normalized = (value ?? '').trim().toLowerCase();
+    if (normalized === 'business' || normalized === 'creator' || normalized === 'user') {
+      return normalized;
+    }
+
+    const normalizedRole = (fallbackRole ?? '').trim().toLowerCase();
+    if (['business', 'seller', 'recruiter'].includes(normalizedRole)) {
+      return 'business';
+    }
+    if (normalizedRole === 'creator') {
+      return 'creator';
+    }
+    return 'user';
+  }
+
+  private roleFromProfileType(profileType: string) {
+    switch (profileType) {
+      case 'business':
+        return 'Business';
+      case 'creator':
+        return 'Creator';
+      default:
+        return 'User';
+    }
+  }
+
+  private userHasCapability(
+    user: { profileType?: string | null; role?: string | null },
+    capability: 'jobs' | 'marketplace' | 'pages',
+  ) {
+    const profileType = this.normalizeProfileType(user.profileType, user.role);
+    const role = (user.role ?? '').trim().toLowerCase();
+
+    if (capability === 'pages') {
+      return profileType === 'creator' || role === 'creator';
+    }
+
+    return (
+      profileType === 'business' ||
+      role === 'business' ||
+      role === 'seller' ||
+      role === 'recruiter'
+    );
+  }
+
+  private buildProfileSetup(
+    profileType: string,
+    input: {
+      businessName?: string;
+      businessCategory?: string;
+      businessPhone?: string;
+      businessAddress?: string;
+      companyWebsite?: string;
+      pageName?: string;
+      pageCategory?: string;
+      pageAbout?: string;
+      contactLabel?: string;
+      location?: string;
+    },
+  ) {
+    if (profileType === 'business') {
+      if (!input.businessName?.trim() || !input.businessCategory?.trim() || !input.businessPhone?.trim()) {
+        throw new ConflictException(
+          'businessName, businessCategory, and businessPhone are required for business profiles.',
+        );
+      }
+
+      return {
+        businessName: input.businessName.trim(),
+        businessCategory: input.businessCategory.trim(),
+        businessPhone: input.businessPhone.trim(),
+        businessAddress: input.businessAddress?.trim() ?? '',
+        companyWebsite: input.companyWebsite?.trim() ?? '',
+      };
+    }
+
+    if (profileType === 'creator') {
+      if (!input.pageName?.trim() || !input.pageCategory?.trim() || !input.pageAbout?.trim()) {
+        throw new ConflictException(
+          'pageName, pageCategory, and pageAbout are required for creator profiles.',
+        );
+      }
+
+      return {
+        pageName: input.pageName.trim(),
+        pageCategory: input.pageCategory.trim(),
+        pageAbout: input.pageAbout.trim(),
+        contactLabel: input.contactLabel?.trim() ?? '',
+        location: input.location?.trim() ?? '',
+      };
+    }
+
+    return {};
+  }
+
+  private toObject(value: unknown) {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
   }
 
   private async getBuddyRequestRow(requestId: string) {

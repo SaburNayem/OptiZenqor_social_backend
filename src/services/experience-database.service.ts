@@ -196,6 +196,7 @@ export class ExperienceDatabaseService {
     });
 
     return {
+      requiredProfileType: 'business',
       categories: [...new Set(products.map((item) => item.category))],
       conditions: [...new Set(products.map((item) => item.condition).filter(Boolean))],
       sellerProfiles: await this.buildSellerProfiles(

@@ -16,6 +16,8 @@ model AppUser {
   bio                 String               @map("bio")
   interests           Json                 @default("[]") @map("interests")
   role                String               @map("role")
+  profileType         String               @default("user") @map("profile_type")
+  profileSetup        Json                 @default("{}") @map("profile_setup")
   verification        String               @map("verification")
   status              String               @map("status")
   followers           Int                  @default(0) @map("followers")
