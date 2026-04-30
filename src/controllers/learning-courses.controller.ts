@@ -1,14 +1,21 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { AppExtensionsDataService } from '../data/app-extensions-data.service';
+import { ExperienceDatabaseService } from '../services/experience-database.service';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('learning-courses')
 @Controller('learning-courses')
 export class LearningCoursesController {
-  constructor(private readonly appExtensionsData: AppExtensionsDataService) {}
+  constructor(private readonly experienceDatabase: ExperienceDatabaseService) {}
 
   @Get()
-  getCourses() {
-    return this.appExtensionsData.getLearningCourses();
+  async getCourses() {
+    const payload = await this.experienceDatabase.getLearningCourses();
+    return {
+      ...successResponse('Learning courses fetched successfully.', payload),
+      courses: payload.courses,
+      items: payload.items,
+      results: payload.results,
+    };
   }
 }

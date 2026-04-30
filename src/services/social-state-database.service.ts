@@ -480,6 +480,92 @@ export class SocialStateDatabaseService {
     };
   }
 
+  async createLiveStream(
+    userId: string,
+    input: {
+      title: string;
+      description?: string;
+      category?: string;
+      location?: string;
+      audience?: string;
+      quickOptions?: unknown[];
+      previewImageUrl?: string;
+    },
+  ) {
+    await this.coreDatabase.getUser(userId);
+    const stream = await this.prisma.liveStreamSession.create({
+      data: {
+        id: makeId('live_stream'),
+        hostId: userId,
+        title: input.title.trim() || 'Go live',
+        description: input.description?.trim() || '',
+        category: input.category?.trim() || 'Live',
+        location: input.location?.trim() || null,
+        audience: input.audience?.trim() || 'public',
+        status: 'scheduled',
+        quickOptions: (Array.isArray(input.quickOptions)
+          ? input.quickOptions
+          : this.defaultLiveQuickOptions()) as Prisma.InputJsonValue,
+        previewImageUrl: input.previewImageUrl?.trim() || null,
+      },
+      include: {
+        host: true,
+        _count: {
+          select: {
+            comments: true,
+            reactions: true,
+          },
+        },
+      },
+    });
+    return this.mapLiveStream(stream);
+  }
+
+  async startLiveStream(streamId: string, userId: string) {
+    const stream = await this.prisma.liveStreamSession.findUnique({
+      where: { id: streamId },
+      select: { id: true, hostId: true },
+    });
+    if (!stream) {
+      throw new NotFoundException(`Live stream ${streamId} not found.`);
+    }
+    if (stream.hostId !== userId) {
+      throw new ForbiddenException('Only the host can start this live stream.');
+    }
+    await this.prisma.liveStreamSession.update({
+      where: { id: streamId },
+      data: {
+        status: 'live',
+        startedAt: new Date(),
+        endedAt: null,
+        updatedAt: new Date(),
+      },
+    });
+    return this.getLiveStream(streamId);
+  }
+
+  async endLiveStream(streamId: string, userId: string) {
+    const stream = await this.prisma.liveStreamSession.findUnique({
+      where: { id: streamId },
+      select: { id: true, hostId: true },
+    });
+    if (!stream) {
+      throw new NotFoundException(`Live stream ${streamId} not found.`);
+    }
+    if (stream.hostId !== userId) {
+      throw new ForbiddenException('Only the host can end this live stream.');
+    }
+    await this.prisma.liveStreamSession.update({
+      where: { id: streamId },
+      data: {
+        status: 'ended',
+        endedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    return this.getLiveStream(streamId);
+  }
+
   async createLiveStreamComment(streamId: string, userId: string, message: string) {
     const stream = await this.prisma.liveStreamSession.findUnique({
       where: { id: streamId },

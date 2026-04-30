@@ -678,6 +678,106 @@ export class ExperienceDatabaseService {
     return [...companies.values()];
   }
 
+  async getPollsAndSurveys(status?: 'active' | 'draft') {
+    const rows = await this.prisma.userSettings.findMany({
+      select: {
+        userId: true,
+        settings: true,
+      },
+    });
+    const items = rows.flatMap((row) =>
+      this.readPollSurveyEntries(row.settings, row.userId).map((entry) =>
+        this.mapPollSurvey(entry),
+      ),
+    );
+    return {
+      activeEntries: items.filter(
+        (item) => item.status === 'active' && (!status || status === 'active'),
+      ),
+      draftEntries: items.filter(
+        (item) => item.status === 'draft' && (!status || status === 'draft'),
+      ),
+      items,
+      results: items,
+      quickTemplates: items.map((item) => item.title).filter(Boolean).slice(0, 8),
+    };
+  }
+
+  async votePollSurvey(id: string, optionIndex: number) {
+    const rows = await this.prisma.userSettings.findMany({
+      select: {
+        userId: true,
+        settings: true,
+      },
+    });
+    for (const row of rows) {
+      const settings = this.toObject(row.settings);
+      const entries = this.readPollSurveyEntries(row.settings, row.userId);
+      const index = entries.findIndex((item) => item.id === id);
+      if (index === -1) {
+        continue;
+      }
+      const entry = entries[index];
+      if (optionIndex < 0 || optionIndex >= entry.options.length) {
+        throw new NotFoundException(`Option ${optionIndex} not found for ${id}.`);
+      }
+      const nextVotes = entry.options.map((_, voteIndex) =>
+        voteIndex === optionIndex
+          ? (entry.votes[voteIndex] ?? 0) + 1
+          : (entry.votes[voteIndex] ?? 0),
+      );
+      entries[index] = {
+        ...entry,
+        votes: nextVotes,
+        updatedAt: new Date().toISOString(),
+      };
+      await this.prisma.userSettings.upsert({
+        where: { userId: row.userId },
+        create: {
+          userId: row.userId,
+          settings: {
+            ...settings,
+            pollsSurveys: {
+              ...this.toObject(settings.pollsSurveys),
+              entries,
+            },
+          } as Prisma.InputJsonValue,
+        },
+        update: {
+          settings: {
+            ...settings,
+            pollsSurveys: {
+              ...this.toObject(settings.pollsSurveys),
+              entries,
+            },
+          } as Prisma.InputJsonValue,
+          updatedAt: new Date(),
+        },
+      });
+      return this.mapPollSurvey(entries[index]);
+    }
+    throw new NotFoundException(`Poll or survey ${id} not found.`);
+  }
+
+  async getLearningCourses() {
+    const rows = await this.prisma.userSettings.findMany({
+      select: {
+        userId: true,
+        settings: true,
+      },
+    });
+    const items = rows.flatMap((row) =>
+      this.readLearningCourseEntries(row.settings, row.userId).map((entry) =>
+        this.mapLearningCourse(entry),
+      ),
+    );
+    return {
+      courses: items,
+      items,
+      results: items,
+    };
+  }
+
   async getEvents(query: string | EventsQueryDto = {}) {
     const queryObject =
       typeof query === 'string' ? ({ status: query } satisfies EventsQueryDto) : query;
@@ -1481,6 +1581,70 @@ export class ExperienceDatabaseService {
     };
   }
 
+  private mapPollSurvey(row: {
+    id: string;
+    creatorId: string;
+    title: string;
+    question: string;
+    options: string[];
+    votes: number[];
+    type: string;
+    status: string;
+    audience: string;
+    endsAt: string | null;
+    accentHex: number;
+    createdAt: string;
+  }) {
+    const options = row.options;
+    const votes = options.map((_, index) => row.votes[index] ?? 0);
+    const responseCount = votes.reduce((sum, value) => sum + value, 0);
+    const endsAt = row.endsAt ? new Date(row.endsAt) : null;
+    return {
+      id: row.id,
+      creatorId: row.creatorId,
+      title: row.title,
+      question: row.question,
+      options,
+      votes,
+      type: row.type,
+      status: row.status,
+      statusLabel: row.status === 'active' ? 'Live now' : 'Draft',
+      audience: row.audience,
+      audienceLabel: row.audience,
+      endsAt: endsAt?.toISOString() ?? null,
+      endsInLabel: endsAt ? this.toRelativeTime(endsAt) : 'Not scheduled',
+      responseCount,
+      accentHex: row.accentHex,
+      createdAt: row.createdAt,
+    };
+  }
+
+  private mapLearningCourse(row: {
+    id: string;
+    creatorId: string;
+    title: string;
+    lessons: string[];
+    progress: number;
+    instructor: string;
+    saved: boolean;
+    certificateSummary: string;
+    quizSummary: string;
+    createdAt: string;
+  }) {
+    return {
+      id: row.id,
+      creatorId: row.creatorId,
+      title: row.title,
+      lessons: row.lessons,
+      progress: row.progress,
+      instructor: row.instructor,
+      saved: row.saved,
+      certificateSummary: row.certificateSummary,
+      quizSummary: row.quizSummary,
+      createdAt: row.createdAt,
+    };
+  }
+
   private parseSalaryRange(value: string) {
     const matches = value.match(/\d+/g)?.map((item) => Number(item)) ?? [];
     if (matches.length === 0) {
@@ -1533,6 +1697,56 @@ export class ExperienceDatabaseService {
     return value && typeof value === 'object' && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : {};
+  }
+
+  private readPollSurveyEntries(value: Prisma.JsonValue | unknown, fallbackUserId: string) {
+    const settings = this.toObject(value);
+    const pollsSurveys = this.toObject(settings.pollsSurveys);
+    const entries = Array.isArray(pollsSurveys.entries) ? pollsSurveys.entries : [];
+    return entries
+      .filter(
+        (item): item is Record<string, unknown> =>
+          Boolean(item) && typeof item === 'object' && !Array.isArray(item),
+      )
+      .map((item, index) => ({
+        id: this.readString(item.id) ?? `poll_${fallbackUserId}_${index + 1}`,
+        creatorId: this.readString(item.creatorId) ?? fallbackUserId,
+        title: this.readString(item.title) ?? 'Poll',
+        question: this.readString(item.question) ?? 'No question provided.',
+        options: this.readStringArray(item.options),
+        votes: this.readNumberArray(item.votes),
+        type: this.readString(item.type) ?? 'poll',
+        status: this.readString(item.status) ?? 'draft',
+        audience: this.readString(item.audience) ?? 'Public',
+        endsAt: this.readString(item.endsAt) ?? null,
+        accentHex: this.readNumber(item.accentHex) ?? 4278215881,
+        createdAt: this.readString(item.createdAt) ?? new Date().toISOString(),
+        updatedAt: this.readString(item.updatedAt) ?? new Date().toISOString(),
+      }));
+  }
+
+  private readLearningCourseEntries(value: Prisma.JsonValue | unknown, fallbackUserId: string) {
+    const settings = this.toObject(value);
+    const learningCourses = this.toObject(settings.learningCourses);
+    const items = Array.isArray(learningCourses.items) ? learningCourses.items : [];
+    return items
+      .filter(
+        (item): item is Record<string, unknown> =>
+          Boolean(item) && typeof item === 'object' && !Array.isArray(item),
+      )
+      .map((item, index) => ({
+        id: this.readString(item.id) ?? `course_${fallbackUserId}_${index + 1}`,
+        creatorId: this.readString(item.creatorId) ?? fallbackUserId,
+        title: this.readString(item.title) ?? 'Course',
+        lessons: this.readStringArray(item.lessons),
+        progress: this.readNumericValue(item.progress) ?? 0,
+        instructor: this.readString(item.instructor) ?? 'Instructor profile',
+        saved: this.readBoolean(item.saved, false) ?? false,
+        certificateSummary:
+          this.readString(item.certificateSummary) ?? 'No certificate data yet',
+        quizSummary: this.readString(item.quizSummary) ?? 'No quiz data yet',
+        createdAt: this.readString(item.createdAt) ?? new Date().toISOString(),
+      }));
   }
 
   private normalizeJobAlert(item: unknown, index: number, fallbackLocation?: string) {
@@ -1625,6 +1839,29 @@ export class ExperienceDatabaseService {
       return value;
     }
     return fallback;
+  }
+
+  private readNumber(value: unknown) {
+    return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  }
+
+  private readNumericValue(value: unknown) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    }
+    return undefined;
+  }
+
+  private readNumberArray(value: Prisma.JsonValue | unknown) {
+    return Array.isArray(value)
+      ? value.filter(
+          (item): item is number => typeof item === 'number' && Number.isFinite(item),
+        )
+      : [];
   }
 
   private jsonStringArray(value: Prisma.JsonValue | unknown) {

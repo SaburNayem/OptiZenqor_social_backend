@@ -301,6 +301,62 @@ export class RealtimeController {
     };
   }
 
+  @UseGuards(SessionAuthGuard)
+  @Post('live-stream')
+  async createLiveStream(
+    @CurrentUser() user: { id: string },
+    @Body()
+    body: {
+      title?: string;
+      description?: string;
+      category?: string;
+      location?: string;
+      audience?: string;
+      quickOptions?: unknown[];
+      previewImageUrl?: string;
+    },
+  ) {
+    const stream = await this.socialStateDatabase.createLiveStream(user.id, {
+      title: body.title ?? 'Go live',
+      description: body.description,
+      category: body.category,
+      location: body.location,
+      audience: body.audience,
+      quickOptions: body.quickOptions,
+      previewImageUrl: body.previewImageUrl,
+    });
+    return {
+      success: true,
+      message: 'Live stream created successfully.',
+      data: stream,
+      stream,
+    };
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Patch('live-stream/:id/start')
+  async startLiveStream(@Param('id') id: string, @CurrentUser() user: { id: string }) {
+    const stream = await this.socialStateDatabase.startLiveStream(id, user.id);
+    return {
+      success: true,
+      message: 'Live stream started successfully.',
+      data: stream,
+      stream,
+    };
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Patch('live-stream/:id/end')
+  async endLiveStream(@Param('id') id: string, @CurrentUser() user: { id: string }) {
+    const stream = await this.socialStateDatabase.endLiveStream(id, user.id);
+    return {
+      success: true,
+      message: 'Live stream ended successfully.',
+      data: stream,
+      stream,
+    };
+  }
+
   @Get('live-stream/:id/comments')
   async getLiveStreamComments(
     @Param('id') id: string,

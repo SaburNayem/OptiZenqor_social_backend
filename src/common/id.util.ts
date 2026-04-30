@@ -39,6 +39,7 @@ export type IdPrefix =
   | 'chat_pref'
   | 'archive'
   | 'hidden'
+  | 'live_stream'
   | 'live_comment'
   | 'live_reaction'
   | 'support_faq'
