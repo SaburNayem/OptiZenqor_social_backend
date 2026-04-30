@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Headers, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { CreateTicketDto } from '../dto/api.dto';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
+import { CreateSupportMessageDto, CreateTicketDto } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { SupportDatabaseService } from '../services/support-database.service';
 import { successResponse } from '../utils/api-response.util';
@@ -14,10 +15,10 @@ export class SupportController {
   ) {}
 
   @Get('support/faqs')
-  getFaqs() {
+  async getFaqs() {
     return successResponse(
       'Support FAQs fetched successfully.',
-      this.supportDatabase.getFaqs(),
+      await this.supportDatabase.getFaqs(),
     );
   }
 
@@ -35,18 +36,18 @@ export class SupportController {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization).catch(() => null);
     const tickets = await this.supportDatabase.getTickets(user?.id ?? null);
     return successResponse('Support help fetched successfully.', {
-      faqs: this.supportDatabase.getFaqs(),
+      faqs: await this.supportDatabase.getFaqs(),
       tickets,
-      chat: this.supportDatabase.getSupportChat(user?.id ?? null),
+      chat: await this.supportDatabase.getSupportChat(user?.id ?? null),
       mail: this.supportDatabase.getSupportMail(),
     });
   }
 
   @Get('support-help/faq')
-  getSupportHelpFaq() {
+  async getSupportHelpFaq() {
     return successResponse(
       'Support FAQs fetched successfully.',
-      this.supportDatabase.getFaqs(),
+      await this.supportDatabase.getFaqs(),
     );
   }
 
@@ -55,7 +56,24 @@ export class SupportController {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization).catch(() => null);
     return successResponse(
       'Support chat fetched successfully.',
-      this.supportDatabase.getSupportChat(user?.id ?? null),
+      await this.supportDatabase.getSupportChat(user?.id ?? null),
+    );
+  }
+
+  @Post('support-help/chat')
+  @UseGuards(SessionAuthGuard)
+  async postSupportHelpChat(
+    @Body() body: CreateSupportMessageDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Support message sent successfully.',
+      await this.supportDatabase.createSupportMessage({
+        userId: user.id,
+        message: body.message,
+        attachments: body.attachments,
+      }),
     );
   }
 
@@ -78,6 +96,8 @@ export class SupportController {
       await this.supportDatabase.createTicket({
         subject: body.subject,
         category: body.category,
+        message: body.message,
+        priority: body.priority,
         userId: user?.id ?? null,
       }),
     );

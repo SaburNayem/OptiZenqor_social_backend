@@ -52,7 +52,10 @@ This report compares the current frontend endpoint contract in `../OptiZenqor_so
 
 | Frontend Endpoint Area | Backend Route Status | Mismatch Type | Notes |
 | --- | --- | --- | --- |
-| `/support/chat` | Exists | Response source mismatch | Utility/support assistant payload remains configuration-backed, not fully modeled. |
+| `/support/faqs`, `/support-help`, `/support-help/faq`, `/support-help/chat`, `/support-help/mail`, `/support/tickets` | Exists | Remaining config-only mail metadata | Backend support flow is now Prisma-backed for FAQs, tickets, conversations, and messages, and the Flutter help flow now reads the backend. Remaining non-DB portion is contact/escalation mail config, which is environment-backed configuration rather than relational app data. |
+| `/trending`, `/hashtags`, `/global-search`, `/search-discovery` | Exists | Derived ranking gap | Routes now return standardized wrappers and the Flutter trending repository uses backend data, but ranking is still derived from existing DB-backed entities instead of dedicated persisted discovery datasets/materialized ranking tables. Files: `src/controllers/discovery.controller.ts`, `src/services/discovery-database.service.ts`, `prisma/schema.prisma`. |
+| `/marketplace` detail/checkout/products | Exists | Frontend fallback mismatch | Backend marketplace routes are available, but frontend repository still falls back silently and derives sellers/categories/chat locally when payloads are incomplete. Files: `src/controllers/marketplace.controller.ts`, `../OptiZenqor_social/lib/feature/marketplace/repository/marketplace_repository.dart`. |
+| `/admin/*` and `/admin/auth/*` | Exists | Static/mock/in-memory | Admin dashboard, reports, moderation, audit, and demo auth/session flows still depend on `PlatformDataService` and `AdminOpsDataService`, including seeded demo accounts and non-durable admin session state. Files: `src/controllers/admin.controller.ts`, `src/controllers/admin-ops.controller.ts`, `src/data/platform-data.service.ts`, `src/data/admin-ops-data.service.ts`, `prisma/schema.prisma`. |
 | `/onboarding/*` | Exists | Persistence mismatch | Routes are still part of the broader utility migration set. |
 | `/live-stream` lifecycle mutations beyond comments/reactions | Partial | Capability gap | Durable reads, comments, and reactions are live, but the start/end/studio moderation workflow is still not a full mobile CRUD slice. |
 | `/hide/*` for non-post targets | Partial | Capability gap | Post hide/unhide is durable; other target types still need end-to-end mobile coverage. |
@@ -84,7 +87,8 @@ This report compares the current frontend endpoint contract in `../OptiZenqor_so
 
 ## Highest Priority Remaining Work
 
-1. Finish the live-stream lifecycle beyond the now-durable list/detail/comment/reaction slice.
-2. Migrate the remaining app-utility controllers still reading from `src/data/*`.
-3. Remove the remaining frontend local-only hidden/archive state and wire those screens to the new backend routes.
-4. Expand this report from the current high-risk slices to the full frontend endpoint surface.
+1. Replace support/help static helpers with Prisma-backed FAQs, tickets, conversations, and messages, then wire the Flutter support flow to backend data.
+2. Remove hardcoded Flutter trending data and align `/trending` and `/hashtags` on the backend with durable/derived DB-backed queries only.
+3. Eliminate remaining marketplace fallback branches so seller, category, offer, and chat state does not silently degrade to local derivation.
+4. Replace `src/data/*` admin and moderation dashboard sources with durable admin/session/audit/moderation persistence.
+5. Finish the remaining live-stream lifecycle and non-post hide/archive flows.

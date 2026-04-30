@@ -96,6 +96,61 @@ CREATE TABLE "app_live_stream_reactions" (
     CONSTRAINT "app_live_stream_reactions_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "support_faqs" (
+    "id" TEXT NOT NULL,
+    "question" TEXT NOT NULL,
+    "answer" TEXT NOT NULL,
+    "category" TEXT NOT NULL DEFAULT '',
+    "sort_order" INTEGER NOT NULL DEFAULT 0,
+    "is_published" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "support_faqs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "support_tickets" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT,
+    "subject" TEXT NOT NULL,
+    "category" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'open',
+    "priority" TEXT NOT NULL DEFAULT 'normal',
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "metadata" JSONB NOT NULL DEFAULT '{}',
+
+    CONSTRAINT "support_tickets_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "support_conversations" (
+    "id" TEXT NOT NULL,
+    "ticket_id" TEXT,
+    "user_id" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'open',
+    "channel" TEXT NOT NULL DEFAULT 'in_app',
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "support_conversations_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "support_messages" (
+    "id" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
+    "sender_type" TEXT NOT NULL,
+    "sender_user_id" TEXT,
+    "body" TEXT NOT NULL,
+    "attachments" JSONB NOT NULL DEFAULT '[]',
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "support_messages_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "chat_thread_preferences_user_id_thread_id_key" ON "chat_thread_preferences"("user_id", "thread_id");
 
@@ -132,6 +187,24 @@ CREATE INDEX "app_live_stream_reactions_stream_id_created_at_idx" ON "app_live_s
 -- CreateIndex
 CREATE INDEX "app_live_stream_reactions_stream_id_type_created_at_idx" ON "app_live_stream_reactions"("stream_id", "type", "created_at" DESC);
 
+-- CreateIndex
+CREATE INDEX "support_faqs_is_published_sort_order_idx" ON "support_faqs"("is_published", "sort_order");
+
+-- CreateIndex
+CREATE INDEX "support_tickets_user_id_created_at_idx" ON "support_tickets"("user_id", "created_at" DESC);
+
+-- CreateIndex
+CREATE INDEX "support_tickets_status_updated_at_idx" ON "support_tickets"("status", "updated_at" DESC);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "support_conversations_ticket_id_key" ON "support_conversations"("ticket_id");
+
+-- CreateIndex
+CREATE INDEX "support_conversations_user_id_updated_at_idx" ON "support_conversations"("user_id", "updated_at" DESC);
+
+-- CreateIndex
+CREATE INDEX "support_messages_conversation_id_created_at_idx" ON "support_messages"("conversation_id", "created_at" ASC);
+
 -- AddForeignKey
 ALTER TABLE "chat_user_preferences" ADD CONSTRAINT "chat_user_preferences_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "app_users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -164,3 +237,18 @@ ALTER TABLE "app_live_stream_reactions" ADD CONSTRAINT "app_live_stream_reaction
 
 -- AddForeignKey
 ALTER TABLE "app_live_stream_reactions" ADD CONSTRAINT "app_live_stream_reactions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "app_users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "support_tickets" ADD CONSTRAINT "support_tickets_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "app_users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "support_conversations" ADD CONSTRAINT "support_conversations_ticket_id_fkey" FOREIGN KEY ("ticket_id") REFERENCES "support_tickets"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "support_conversations" ADD CONSTRAINT "support_conversations_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "app_users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "support_messages" ADD CONSTRAINT "support_messages_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "support_conversations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "support_messages" ADD CONSTRAINT "support_messages_sender_user_id_fkey" FOREIGN KEY ("sender_user_id") REFERENCES "app_users"("id") ON DELETE SET NULL ON UPDATE CASCADE;

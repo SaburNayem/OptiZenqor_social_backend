@@ -87,6 +87,9 @@ model AppUser {
   subscriptions       Subscription[]
   hiddenEntities      UserHiddenEntity[]
   archivedEntities    UserArchivedEntity[]
+  supportTickets      SupportTicket[]
+  supportConversations SupportConversation[]
+  supportMessages     SupportMessage[]      @relation("SupportMessageSender")
   hostedLiveStreams   LiveStreamSession[]     @relation("LiveStreamHost")
   liveStreamComments  LiveStreamComment[]
   liveStreamReactions LiveStreamReaction[]
@@ -900,6 +903,69 @@ model NotificationCampaign {
 
   @@index([createdAt(sort: Desc)])
   @@map("app_notification_campaigns")
+}
+
+model SupportFaq {
+  id          String   @id @map("id")
+  question    String   @map("question")
+  answer      String   @map("answer")
+  category    String   @default("") @map("category")
+  sortOrder   Int      @default(0) @map("sort_order")
+  isPublished Boolean  @default(true) @map("is_published")
+  createdAt   DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt   DateTime @default(now()) @db.Timestamptz(6) @map("updated_at")
+
+  @@index([isPublished, sortOrder])
+  @@map("support_faqs")
+}
+
+model SupportTicket {
+  id           String               @id @map("id")
+  userId       String?              @map("user_id")
+  subject      String               @map("subject")
+  category     String               @map("category")
+  status       String               @default("open") @map("status")
+  priority     String               @default("normal") @map("priority")
+  createdAt    DateTime             @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt    DateTime             @default(now()) @db.Timestamptz(6) @map("updated_at")
+  metadata     Json                 @default("{}") @map("metadata")
+  user         AppUser?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  conversation SupportConversation?
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, updatedAt(sort: Desc)])
+  @@map("support_tickets")
+}
+
+model SupportConversation {
+  id        String           @id @map("id")
+  ticketId  String?          @unique @map("ticket_id")
+  userId    String?          @map("user_id")
+  status    String           @default("open") @map("status")
+  channel   String           @default("in_app") @map("channel")
+  createdAt DateTime         @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt DateTime         @default(now()) @db.Timestamptz(6) @map("updated_at")
+  ticket    SupportTicket?   @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  user      AppUser?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  messages  SupportMessage[]
+
+  @@index([userId, updatedAt(sort: Desc)])
+  @@map("support_conversations")
+}
+
+model SupportMessage {
+  id             String              @id @map("id")
+  conversationId String              @map("conversation_id")
+  senderType     String              @map("sender_type")
+  senderUserId   String?             @map("sender_user_id")
+  body           String              @map("body")
+  attachments    Json                @default("[]") @map("attachments")
+  createdAt      DateTime            @default(now()) @db.Timestamptz(6) @map("created_at")
+  conversation   SupportConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderUser     AppUser?            @relation("SupportMessageSender", fields: [senderUserId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt(sort: Asc)])
+  @@map("support_messages")
 }
 
 model Subscription {

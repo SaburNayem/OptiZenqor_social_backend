@@ -1265,6 +1265,28 @@ export class CreateTicketDto {
   @ApiProperty()
   @IsString()
   category!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  message?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  priority?: string;
+}
+
+export class CreateSupportMessageDto {
+  @ApiProperty()
+  @IsString()
+  message!: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  attachments?: string[];
 }
 
 export class CreateNotificationCampaignDto {

@@ -9,6 +9,7 @@ import { MonetizationDatabaseService } from '../services/monetization-database.s
 import { RealtimeStateService } from '../services/realtime-state.service';
 import { ReelsDatabaseService } from '../services/reels-database.service';
 import { SocialStateDatabaseService } from '../services/social-state-database.service';
+import { SupportDatabaseService } from '../services/support-database.service';
 
 @ApiTags('account-ops')
 @Controller()
@@ -22,6 +23,7 @@ export class AccountOpsController {
     private readonly accountStateDatabase: AccountStateDatabaseService,
     private readonly mailService: MailService,
     private readonly socialStateDatabase: SocialStateDatabaseService,
+    private readonly supportDatabase: SupportDatabaseService,
   ) {}
 
   @Post('auth/send-otp')
@@ -151,8 +153,13 @@ export class AccountOpsController {
   }
 
   @Get('support/chat')
-  getSupportChat() {
-    return this.extendedData.getSupportChat();
+  async getSupportChat(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization).catch(() => null);
+    return {
+      success: true,
+      message: 'Support chat fetched successfully.',
+      data: await this.supportDatabase.getSupportChat(user?.id ?? null),
+    };
   }
 
   @Get('wallet/ledger')

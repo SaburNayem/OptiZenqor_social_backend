@@ -198,6 +198,41 @@ Draft and scheduling metadata are persisted in PostgreSQL.
 
 Saved collections are now persisted in PostgreSQL through `app_collections` and `app_collection_items`.
 
+## Support contract
+
+### `GET /support/faqs`
+### `GET /support-help/faq`
+
+Returns published FAQ rows from `support_faqs` using the standard wrapper.
+
+### `GET /support/tickets`
+### `POST /support/tickets`
+
+Support tickets are now persisted in `support_tickets`, with optional authenticated user ownership and conversation linkage. Create payload now accepts:
+
+```json
+{
+  "subject": "Problem with my account",
+  "category": "account",
+  "message": "Optional initial ticket message",
+  "priority": "normal"
+}
+```
+
+### `GET /support-help`
+### `GET /support-help/chat`
+### `POST /support-help/chat`
+### `GET /support-help/mail`
+
+`/support-help` returns a composed payload with:
+
+- `faqs`
+- `tickets`
+- `chat`
+- `mail`
+
+Support chat is now persisted through `support_conversations` and `support_messages`.
+
 ## Experience contract
 
 ### Marketplace
@@ -246,6 +281,16 @@ List responses return `data.jobs`, `data.items`, and `data.results` plus paginat
 These now use database-backed event and RSVP models.
 
 List responses return `data.events`, `data.items`, and `data.results` plus pagination metadata. Query support includes `page`, `limit`, `search`, `status`, `category`, `userId`, `sort`, and `order`.
+
+### Discovery
+
+- `GET /hashtags`
+- `GET /trending`
+- `GET /search`
+- `GET /global-search`
+- `GET /search-discovery`
+
+These endpoints now return the standard `{ success, message, data }` wrapper while keeping compatibility aliases like `query`, `count`, `sections`, `results`, `items`, `trending`, and `hashtags` where the Flutter side already expects them.
 
 ### Communities and pages
 

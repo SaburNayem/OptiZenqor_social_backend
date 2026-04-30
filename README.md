@@ -25,12 +25,16 @@ Database-backed now:
 - communities, members, pages, page follows
 - wallet accounts and wallet transactions
 - premium plans, subscriptions, notification campaigns
+- support FAQs, tickets, conversations, and messages
+- chat preferences and chat thread archive/mute/pin state
+- hidden posts and archived post/story/reel state
+- live stream sessions, comments, and reactions
 
 Still partially or fully static/mock-backed:
 
 - admin dashboard and admin auth flows
-- support/help/legal flows
-- discovery/trending recommendation flows
+- some support/help utility surfaces beyond the now-durable FAQs, tickets, and conversations
+- discovery/trending recommendation ranking is still derived from live DB-backed entities rather than dedicated persisted discovery datasets
 - some accessibility/localization/preference helper surfaces
 - advanced moderation and audit trails
 - live/call/session persistence beyond the current realtime layer
@@ -81,6 +85,7 @@ Optional but recommended:
 - frontend URLs
 - rate-limit configuration
 - `AUTH_EXPOSE_TEST_ACCOUNTS=true` only for controlled local QA if `/auth/demo-accounts` is explicitly needed
+- support contact configuration for `/support-help/mail`
 
 ## Key routes
 
@@ -138,6 +143,21 @@ Experience:
 - `GET /pages`
 - supports `page`, `limit`, `search`, `category`, `ownerId`, `sort`, `order`
 - `POST /pages/create`
+
+Support and discovery:
+
+- `GET /support/faqs`
+- `GET /support/tickets`
+- `POST /support/tickets`
+- `GET /support-help`
+- `GET /support-help/faq`
+- `GET /support-help/chat`
+- `POST /support-help/chat`
+- `GET /support-help/mail`
+- `GET /hashtags`
+- `GET /trending`
+- `GET /global-search`
+- `GET /search-discovery`
 
 Account and settings:
 

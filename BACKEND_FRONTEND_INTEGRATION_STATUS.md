@@ -31,7 +31,7 @@ This is a backend-first audit of the current `Socity_backend` workspace, now cro
 | Blocks/reports/settings state | Yes | Yes | Pending | Partial | Partial | Persistent account-state tables/services exist. |
 | Discovery/search/trending | Yes | Yes | Pending | Partial | Partial | `discovery.controller.ts` now reads search/trending/hashtags from DB-backed services instead of seeded ecosystem/platform services. |
 | Profiles/dashboards | Yes | Yes | Pending | Partial | Partial | `profiles.controller.ts` now reads profile, tagged/mention history, and business/seller/recruiter/creator dashboard payloads from DB-backed services. |
-| Preferences/support/app extensions | Partial | Partial | Pending | Partial | Partial | `settings` and `preferences` now read user-scoped state from DB-backed services, support tickets are persisted, and account switching/activity sessions/verification request are now durable; several utility routes still rely on snapshot-backed services. |
+| Preferences/support/app extensions | Partial | Partial | Partial | Partial | Partial | `settings` and `preferences` now read user-scoped state from DB-backed services, support FAQs/tickets/conversations/messages are now durable, and account switching/activity sessions/verification request are now durable; several utility routes still rely on snapshot-backed services. |
 | Realtime calls/live/presence | Partial | Partial | Partial | Partial | Partial | Calls history/session creation remain durable, and live-stream list/setup/studio/comments/reactions are now DB-backed; full live lifecycle mutations and some presence flows still need more work. |
 | Subscriptions | Yes | Yes | Partial | Partial | Partial | Read flows were already live; plan change/cancel/renew routes are now durable and the frontend subscription selector posts to backend. |
 
@@ -110,8 +110,14 @@ This is a backend-first audit of the current `Socity_backend` workspace, now cro
 - `GET /push-notification-preferences`
 - `GET /legal-compliance`
 - `GET /blocked-muted-accounts`
+- `GET /support/faqs`
 - `GET /support/tickets`
 - `POST /support/tickets`
+- `GET /support-help`
+- `GET /support-help/faq`
+- `GET /support-help/chat`
+- `POST /support-help/chat`
+- `GET /support-help/mail`
 - `GET /account-switching`
 - `GET /account-switching/active`
 - `PATCH /account-switching/active`
@@ -178,8 +184,8 @@ This is a backend-first audit of the current `Socity_backend` workspace, now cro
 - Calls screens no longer need local mock history; the current repository/controller/UI path loads authenticated call history from `/calls` and creates sessions through `/calls/sessions`.
 - Group chat screen no longer stops at a backend-placeholder error for create/add/remove actions; it now posts to durable group chat mutation routes.
 - Subscription plan selection no longer stays device-local only; it now posts to `/subscriptions/change-plan` before updating local cache.
-- Support utility payloads still include configuration-backed helper data, and the remaining live-stream lifecycle UI is still a migration target.
-- Support ticket list/create routes are now durable, but FAQ/chat/mail utility payloads are still configuration-backed rather than fully modeled in Prisma.
+- Support utility payloads now read durable FAQ/ticket/conversation state, while support mail contact details remain environment configuration rather than user data.
+- The remaining live-stream lifecycle UI is still a migration target.
 - Account switching, activity session management, and verification request screens can now rely on authenticated DB-backed state instead of snapshot-backed app extension memory.
 
 ## Latest Verification
@@ -188,10 +194,11 @@ This is a backend-first audit of the current `Socity_backend` workspace, now cro
 - `npm.cmd run build`: pass
 - `npm.cmd install`: pass
 - `npx.cmd prisma generate`: pass
-- `npx.cmd prisma migrate dev`: blocked in this environment on 2026-04-30 because the Neon PostgreSQL host was unreachable; migration SQL was added manually under `prisma/migrations/20260430_social_state_persistence/`
+- `npx.cmd prisma migrate dev`: blocked in this environment on 2026-04-30 because the shared Neon dev database reports drift and Prisma wants a destructive reset; migration SQL was added manually under `prisma/migrations/20260430_social_state_persistence/`
 - `flutter pub get`: pass
-- `dart format` on updated calls files: pass
-- `dart analyze lib --no-fatal-warnings`: pass with existing warnings only
+- `dart format` on updated support/trending/marketplace files: pass
+- `flutter analyze`: pass with existing warnings/info only
+- `flutter test`: fails because the repo has no `test/` directory or `_test.dart` files
 
 ## High-Priority Controller Migration Targets
 

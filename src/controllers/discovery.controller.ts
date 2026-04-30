@@ -18,33 +18,90 @@ export class DiscoveryController {
 
   @Get('hashtags')
   async getHashtags() {
-    return this.discoveryDatabase.getHashtags();
+    const hashtags = await this.discoveryDatabase.getHashtags();
+    return successResponse('Hashtags fetched successfully.', hashtags, {
+      total: hashtags.length,
+      page: 1,
+      limit: hashtags.length,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    });
   }
 
   @Get('trending')
   async getTrending() {
-    return this.discoveryDatabase.getTrending();
+    const trending = await this.discoveryDatabase.getTrending();
+    return successResponse('Trending items fetched successfully.', trending, {
+      total: trending.length,
+      page: 1,
+      limit: trending.length,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    });
   }
 
   @Get('search')
   @ApiQuery({ name: 'q', required: false })
   @ApiQuery({ name: 'limit', required: false })
   async search(@Query('q') q?: string, @Query('limit') limit?: string) {
-    return this.discoveryDatabase.buildGlobalSearch(q, limit);
+    const result = await this.discoveryDatabase.buildGlobalSearch(q, limit);
+    return {
+      ...successResponse('Search results fetched successfully.', result.data, {
+        total: result.count,
+        page: 1,
+        limit: result.items.length,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      }),
+      query: result.query,
+      count: result.count,
+      sections: result.sections,
+      results: result.results,
+      items: result.items,
+    };
   }
 
   @Get('global-search')
   @ApiQuery({ name: 'q', required: false })
   @ApiQuery({ name: 'limit', required: false })
   async getGlobalSearch(@Query('q') q?: string, @Query('limit') limit?: string) {
-    return this.discoveryDatabase.buildGlobalSearch(q, limit);
+    const result = await this.discoveryDatabase.buildGlobalSearch(q, limit);
+    return {
+      ...successResponse('Search results fetched successfully.', result.data, {
+        total: result.count,
+        page: 1,
+        limit: result.items.length,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      }),
+      query: result.query,
+      count: result.count,
+      sections: result.sections,
+      results: result.results,
+      items: result.items,
+    };
   }
 
   @Get('search-discovery')
   @ApiQuery({ name: 'q', required: false })
   @ApiQuery({ name: 'limit', required: false })
   async getSearchDiscovery(@Query('q') q?: string, @Query('limit') limit?: string) {
-    return this.discoveryDatabase.getSearchDiscovery(q, limit);
+    const result = await this.discoveryDatabase.getSearchDiscovery(q, limit);
+    return {
+      ...successResponse('Search discovery fetched successfully.', result, {
+        total: result.count,
+        page: 1,
+        limit: result.count,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      }),
+      query: result.query,
+      count: result.count,
+      sections: result.sections,
+      results: result.results,
+      trending: result.trending,
+      hashtags: result.hashtags,
+    };
   }
 
   @Get('saved-collections')
