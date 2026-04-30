@@ -59,6 +59,22 @@ Updated: 2026-04-30
 - `../OptiZenqor_social/lib/feature/trending/repository/trending_repository.dart`
 - `../OptiZenqor_social/lib/feature/trending/controller/trending_controller.dart`
 - `../OptiZenqor_social/lib/feature/trending/screen/trending_screen.dart`
+- `../OptiZenqor_social/lib/feature/hashtags/repository/hashtags_repository.dart`
+- `../OptiZenqor_social/lib/feature/hashtags/controller/hashtags_controller.dart`
+- `../OptiZenqor_social/lib/feature/hashtags/screen/hashtags_screen.dart`
+- `../OptiZenqor_social/lib/feature/group_chat/repository/group_chat_repository.dart`
+- `../OptiZenqor_social/lib/feature/group_chat/controller/group_chat_controller.dart`
+- `../OptiZenqor_social/lib/feature/group_chat/screen/group_chat_screen.dart`
+- `../OptiZenqor_social/lib/feature/subscriptions/repository/subscriptions_repository.dart`
+- `../OptiZenqor_social/lib/feature/subscriptions/controller/subscriptions_controller.dart`
+- `../OptiZenqor_social/lib/feature/subscriptions/screen/subscriptions_screen.dart`
+- `../OptiZenqor_social/lib/feature/verification_request/repository/verification_request_repository.dart`
+- `../OptiZenqor_social/lib/feature/verification_request/controller/verification_request_controller.dart`
+- `../OptiZenqor_social/lib/feature/verification_request/screen/verification_request_screen.dart`
+- `../OptiZenqor_social/lib/feature/settings/repository/archive_repository.dart`
+- `../OptiZenqor_social/lib/feature/settings/screen/archive_posts_screen.dart`
+- `../OptiZenqor_social/lib/feature/settings/screen/archive_stories_screen.dart`
+- `../OptiZenqor_social/lib/feature/settings/screen/archive_reels_screen.dart`
 - `../OptiZenqor_social/lib/feature/marketplace/repository/marketplace_repository.dart`
 - `../OptiZenqor_social/lib/feature/marketplace/screen/marketplace_screen.dart`
 
@@ -122,6 +138,7 @@ Manual migration files added:
 - Admin/auth/session/moderation/audit routes under `/admin/*` are still backed by `src/data/platform-data.service.ts` and `src/data/admin-ops-data.service.ts`.
 - Discovery ranking still comes from derived queries over DB-backed entities, not dedicated persisted recommendation/trending datasets.
 - Marketplace follow-seller, offer history mutation, and marketplace chat mutation flows are still local on the Flutter side and need durable backend routes.
-- Hidden/archive frontend UI state is not fully migrated to the new backend routes yet.
+- Hidden posts frontend UI state is still not fully migrated to the new backend routes yet.
 - Live stream lifecycle beyond list/detail/setup/studio/comments/reactions still needs durable create/start/end/moderation flows.
 - Support mail/contact payload is environment-backed configuration, not relational DB content.
+- Jobs, events, pages/communities/groups completeness, learning courses, polls/surveys, business profile, and several utility features remain only partially migrated.
