@@ -1,7 +1,11 @@
 import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
-import { CreateSavedCollectionDto, UpdateSavedCollectionDto } from '../dto/api.dto';
+import {
+  CreateSavedCollectionDto,
+  RefreshDiscoveryDatasetDto,
+  UpdateSavedCollectionDto,
+} from '../dto/api.dto';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { DiscoveryDatabaseService } from '../services/discovery-database.service';
@@ -102,6 +106,32 @@ export class DiscoveryController {
       trending: result.trending,
       hashtags: result.hashtags,
     };
+  }
+
+  @Post('trending/refresh')
+  @UseGuards(SessionAuthGuard)
+  async refreshTrending(
+    @Body() body: RefreshDiscoveryDatasetDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const entries = await this.discoveryDatabase.refreshTrendingEntries(body.limit ?? 20);
+    return successResponse('Trending dataset refreshed successfully.', entries, {
+      count: entries.length,
+    });
+  }
+
+  @Post('hashtags/refresh')
+  @UseGuards(SessionAuthGuard)
+  async refreshHashtags(
+    @Body() body: RefreshDiscoveryDatasetDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const entries = await this.discoveryDatabase.refreshHashtagEntries(body.limit ?? 20);
+    return successResponse('Hashtag dataset refreshed successfully.', entries, {
+      count: entries.length,
+    });
   }
 
   @Get('saved-collections')

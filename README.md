@@ -20,6 +20,7 @@ Database-backed now:
 - settings and privacy state
 - drafts and scheduled posts
 - marketplace products and orders
+- marketplace drafts, seller follows, chat, and offers
 - jobs and job applications
 - events and RSVPs
 - communities, members, pages, page follows
@@ -30,11 +31,15 @@ Database-backed now:
 - hidden posts and archived post/story/reel state
 - live stream sessions, comments, and reactions
 
+Persisted discovery datasets now exist for:
+
+- `trending` entries
+- `hashtags` entries
+
 Still partially or fully static/mock-backed:
 
 - admin dashboard and admin auth flows
 - some support/help utility surfaces beyond the now-durable FAQs, tickets, and conversations
-- discovery/trending recommendation ranking is still derived from live DB-backed entities rather than dedicated persisted discovery datasets
 - some accessibility/localization/preference helper surfaces
 - advanced moderation and audit trails
 - live/call/session persistence beyond the current realtime layer
@@ -129,6 +134,18 @@ Experience:
 - supports `page`, `limit`, `search`, `category`, `status`, `sellerId`, `sort`, `order`
 - `POST /marketplace/products`
 - `POST /marketplace/checkout`
+- `GET /marketplace/drafts`
+- `POST /marketplace/drafts`
+- `PATCH /marketplace/drafts/:id`
+- `DELETE /marketplace/drafts/:id`
+- `GET /marketplace/seller-follows`
+- `POST /marketplace/sellers/:sellerId/follow`
+- `DELETE /marketplace/sellers/:sellerId/follow`
+- `GET /marketplace/products/:id/chat`
+- `POST /marketplace/products/:id/chat/messages`
+- `GET /marketplace/products/:id/offers`
+- `POST /marketplace/products/:id/offers`
+- `PATCH /marketplace/offers/:id`
 - `GET /jobs`
 - supports `page`, `limit`, `search`, `status`, `type`, `userId`, `sort`, `order`
 - `POST /jobs/create`
@@ -155,7 +172,9 @@ Support and discovery:
 - `POST /support-help/chat`
 - `GET /support-help/mail`
 - `GET /hashtags`
+- `POST /hashtags/refresh`
 - `GET /trending`
+- `POST /trending/refresh`
 - `GET /global-search`
 - `GET /search-discovery`
 

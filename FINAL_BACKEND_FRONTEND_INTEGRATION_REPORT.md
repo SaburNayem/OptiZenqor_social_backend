@@ -42,10 +42,24 @@ Updated: 2026-04-30
 - `GET /support-help/mail`
 - `GET /support/chat`
 - `GET /hashtags`
+- `POST /hashtags/refresh`
 - `GET /trending`
+- `POST /trending/refresh`
 - `GET /search`
 - `GET /global-search`
 - `GET /search-discovery`
+- `GET /marketplace/drafts`
+- `POST /marketplace/drafts`
+- `PATCH /marketplace/drafts/:id`
+- `DELETE /marketplace/drafts/:id`
+- `GET /marketplace/seller-follows`
+- `POST /marketplace/sellers/:sellerId/follow`
+- `DELETE /marketplace/sellers/:sellerId/follow`
+- `GET /marketplace/products/:id/chat`
+- `POST /marketplace/products/:id/chat/messages`
+- `GET /marketplace/products/:id/offers`
+- `POST /marketplace/products/:id/offers`
+- `PATCH /marketplace/offers/:id`
 
 ### Frontend repositories/screens connected or cleaned up
 
@@ -91,10 +105,19 @@ Updated: 2026-04-30
 - `SupportTicket`
 - `SupportConversation`
 - `SupportMessage`
+- `MarketplaceDraft`
+- `MarketplaceSellerFollow`
+- `MarketplaceConversation`
+- `MarketplaceMessage`
+- `MarketplaceOffer`
+- `DiscoveryTrendingEntry`
+- `DiscoveryHashtagEntry`
 
 Manual migration files added:
 
 - `prisma/migrations/20260430_social_state_persistence/migration.sql`
+- `prisma/migrations/20260430_learning_polls_live_extensions/migration.sql`
+- `prisma/migrations/20260430_marketplace_discovery_persistence/migration.sql`
 - `prisma/migrations/migration_lock.toml`
 
 ## Docs and config updated
@@ -102,6 +125,12 @@ Manual migration files added:
 - `.env.example`
 - `README.md`
 - `BACKEND_API_CONTRACT.md`
+- `prisma/schema.prisma`
+- `src/controllers/discovery.controller.ts`
+- `src/controllers/marketplace.controller.ts`
+- `src/dto/api.dto.ts`
+- `src/services/discovery-database.service.ts`
+- `src/services/experience-database.service.ts`
 - `BACKEND_FRONTEND_ENDPOINT_MISMATCH_REPORT.md`
 - `BACKEND_FRONTEND_INTEGRATION_STATUS.md`
 - `FRONTEND_BACKEND_AUDIT.md`
@@ -113,14 +142,18 @@ Manual migration files added:
 
 - `git pull --ff-only`: pass in backend repo
 - `npm install`: pass
-- `npx prisma generate`: pass
+- `npx prisma generate`: pass via `PRISMA_GENERATE_NO_ENGINE=1`
 - `npm run typecheck`: pass
 - `npm run build`: pass
-- `npm run prisma:migrate -- --name support_help_persistence`: failed
-  - Prisma reports drift in the shared Neon development database and wants a destructive reset before applying migrations.
-  - Because that would drop shared data, I did not force-reset the database.
+- `npx prisma validate`: pass
+- `npm run prisma:migrate`: failed
+  - first failure: repo migration history issue because `prisma/migrations/20260430_learning_polls_live_extensions/migration.sql` was missing
+  - after restoring that file, Prisma reached the shared Neon DB and reported real drift
+  - current drift summary: extra live call/session snapshot tables and `support_tickets` exist in the DB outside this repo migration history, so Prisma wants a destructive reset of the shared `public` schema
+  - because that would drop shared data, I did not run `prisma migrate reset`
 - `npm test`: not available in `package.json`
-- `npm run start:dev`: long-running process; command hit the agent timeout window before shutdown, so no clean smoke assertion was recorded
+- `npm run start:dev`: sandbox `spawn EPERM` from `ts-node-dev`
+- `node dist/main.js`: boot reached route registration and exposed the new marketplace routes, but runtime Prisma remained blocked locally because the normal query-engine DLL could not be regenerated while the file was locked on this machine
 
 ### Frontend
 
@@ -136,9 +169,8 @@ Manual migration files added:
 ## Remaining gaps
 
 - Admin/auth/session/moderation/audit routes under `/admin/*` are still backed by `src/data/platform-data.service.ts` and `src/data/admin-ops-data.service.ts`.
-- Discovery ranking still comes from derived queries over DB-backed entities, not dedicated persisted recommendation/trending datasets.
-- Marketplace follow-seller, offer history mutation, and marketplace chat mutation flows are still local on the Flutter side and need durable backend routes.
-- Hidden posts frontend UI state is still not fully migrated to the new backend routes yet.
-- Live stream lifecycle beyond list/detail/setup/studio/comments/reactions still needs durable create/start/end/moderation flows.
+- Flutter marketplace screens still mutate follow/chat/offer/draft state locally in `lib/feature/marketplace/controller/marketplace_controller.dart`, even though durable backend routes now exist.
+- Hidden posts frontend UI is already backend-backed, so the remaining hidden/archive work is mostly non-post target coverage rather than the main hidden-post screen.
+- Live stream durable create/start/end already exists; the remaining work is deeper moderation/studio CRUD and archive/viewer tooling.
 - Support mail/contact payload is environment-backed configuration, not relational DB content.
 - Jobs, events, pages/communities/groups completeness, learning courses, polls/surveys, business profile, and several utility features remain only partially migrated.

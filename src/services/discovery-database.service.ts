@@ -1,15 +1,48 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { CoreDatabaseService } from './core-database.service';
 import { ExperienceDatabaseService } from './experience-database.service';
+import { PrismaService } from './prisma.service';
 
 @Injectable()
 export class DiscoveryDatabaseService {
   constructor(
     private readonly coreDatabase: CoreDatabaseService,
     private readonly experienceDatabase: ExperienceDatabaseService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async getHashtags(limit = 20) {
+    await this.refreshHashtagEntries(limit);
+    const rows = await this.prisma.discoveryHashtagEntry.findMany({
+      orderBy: [{ score: 'desc' }, { updatedAt: 'desc' }],
+      take: limit,
+    });
+    return rows.map((row) => ({
+      tag: row.displayTag,
+      count: row.count,
+      score: row.score,
+      updatedAt: row.updatedAt.toISOString(),
+    }));
+  }
+
+  async getTrending(limit = 20) {
+    await this.refreshTrendingEntries(limit);
+    const rows = await this.prisma.discoveryTrendingEntry.findMany({
+      orderBy: [{ score: 'desc' }, { updatedAt: 'desc' }],
+      take: limit,
+    });
+    return rows.map((row) => ({
+      id: row.entityId,
+      title: row.title,
+      type: row.entityType,
+      score: row.score,
+      payload: row.payload,
+      updatedAt: row.updatedAt.toISOString(),
+    }));
+  }
+
+  async refreshHashtagEntries(limit = 20) {
     const feed = await this.coreDatabase.getFeed();
     const counts = new Map<string, number>();
 
@@ -24,13 +57,36 @@ export class DiscoveryDatabaseService {
       }
     }
 
-    return [...counts.entries()]
-      .map(([tag, count]) => ({ tag: `#${tag}`, count }))
+    const rows = [...counts.entries()]
+      .map(([tag, count]) => ({
+        tag,
+        displayTag: `#${tag}`,
+        count,
+        score: Number(count),
+        payload: { tag: `#${tag}`, count },
+      }))
       .sort((left, right) => right.count - left.count || left.tag.localeCompare(right.tag))
       .slice(0, limit);
+
+    await this.prisma.$transaction([
+      this.prisma.discoveryHashtagEntry.deleteMany(),
+      ...rows.map((row) =>
+        this.prisma.discoveryHashtagEntry.create({
+          data: {
+            tag: row.tag,
+            displayTag: row.displayTag,
+            count: row.count,
+            score: row.score,
+            payload: row.payload as Prisma.InputJsonValue,
+          },
+        }),
+      ),
+    ]);
+
+    return rows;
   }
 
-  async getTrending(limit = 20) {
+  async refreshTrendingEntries(limit = 20) {
     const [feed, jobsPayload, communitiesPayload, pagesPayload, eventsPayload, marketplacePayload] =
       await Promise.all([
         this.coreDatabase.getFeed(),
@@ -43,40 +99,70 @@ export class DiscoveryDatabaseService {
 
     const items = [
       ...feed.map((post) => ({
+        id: String(post.id ?? post.caption ?? ''),
         title: post.caption || `Post by ${post.author?.name ?? 'Unknown'}`,
         type: 'post',
         score: Number(post.views ?? 0) + Number(post.likes ?? 0) * 2 + Number(post.comments ?? 0) * 3,
+        payload: post,
       })),
       ...jobsPayload.jobs.map((job) => ({
+        id: String(job.id ?? job.title ?? ''),
         title: job.title,
         type: 'job',
         score: this.readNumber(job.skills?.length, 0) * 5 + (job.featured ? 25 : 0),
+        payload: job,
       })),
       ...communitiesPayload.communities.map((community) => ({
+        id: String(community.id ?? community.name ?? ''),
         title: community.name,
         type: 'community',
         score: Number(community.memberCount ?? 0),
+        payload: community,
       })),
       ...pagesPayload.pages.map((page) => ({
+        id: String(page.id ?? page.name ?? ''),
         title: page.name,
         type: 'page',
         score: Number(page.followerCount ?? 0),
+        payload: page,
       })),
       ...eventsPayload.events.map((event) => ({
+        id: String(event.id ?? event.title ?? ''),
         title: event.title,
         type: 'event',
         score: Number(event.participants ?? 0) + Number(event.savedCount ?? 0) * 2,
+        payload: event,
       })),
       ...marketplacePayload.products.map((product) => ({
+        id: String(product.id ?? product.title ?? ''),
         title: product.title,
         type: 'marketplace',
         score: Number(product.watchers ?? 0) * 2 + Number(product.views ?? 0),
+        payload: product,
       })),
     ];
 
-    return items
+    const rows = items
       .sort((left, right) => right.score - left.score || left.title.localeCompare(right.title))
       .slice(0, limit);
+
+    await this.prisma.$transaction([
+      this.prisma.discoveryTrendingEntry.deleteMany(),
+      ...rows.map((row) =>
+        this.prisma.discoveryTrendingEntry.create({
+          data: {
+            id: `${row.type}:${row.id}`,
+            entityType: row.type,
+            entityId: row.id,
+            title: row.title,
+            score: row.score,
+            payload: row.payload as Prisma.InputJsonValue,
+          },
+        }),
+      ),
+    ]);
+
+    return rows;
   }
 
   async buildGlobalSearch(query?: string, limitQuery?: string) {

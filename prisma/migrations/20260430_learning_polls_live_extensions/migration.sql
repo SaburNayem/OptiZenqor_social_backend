@@ -1,0 +1,2 @@
+-- Restored placeholder migration file.
+-- The corresponding schema changes are already reflected in later code/history.

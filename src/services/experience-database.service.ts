@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { makeId } from '../common/id.util';
 import {
@@ -73,7 +73,7 @@ export class ExperienceDatabaseService {
     };
   }
 
-  async getMarketplaceOverview(query: MarketplaceProductsQueryDto = {}) {
+  async getMarketplaceOverview(query: MarketplaceProductsQueryDto = {}, userId?: string) {
     const paging = this.normalizePaging(query.page, query.limit);
     const where: Prisma.MarketplaceProductWhereInput = {
       deletedAt: null,
@@ -90,7 +90,8 @@ export class ExperienceDatabaseService {
         : undefined,
     };
     const orderBy = this.resolveMarketplaceOrder(query.sort, query.order);
-    const [products, totalProducts, orders] = await Promise.all([
+    const [products, totalProducts, orders, followedSellerRows, draftRows, conversationRows, offerRows] =
+      await Promise.all([
       this.prisma.marketplaceProduct.findMany({
         where,
         orderBy,
@@ -101,9 +102,48 @@ export class ExperienceDatabaseService {
         where,
       }),
       this.prisma.marketplaceOrder.findMany({
+        where: userId
+          ? {
+              OR: [{ buyerId: userId }, { sellerId: userId }],
+            }
+          : undefined,
         orderBy: { createdAt: 'desc' },
         take: 20,
       }),
+      userId
+        ? this.prisma.marketplaceSellerFollow.findMany({
+            where: { followerId: userId },
+          })
+        : Promise.resolve([]),
+      userId
+        ? this.prisma.marketplaceDraft.findMany({
+            where: { userId },
+            orderBy: { updatedAt: 'desc' },
+          })
+        : Promise.resolve([]),
+      userId
+        ? this.prisma.marketplaceConversation.findMany({
+            where: {
+              OR: [{ buyerId: userId }, { sellerId: userId }],
+            },
+            include: {
+              messages: {
+                orderBy: { createdAt: 'desc' },
+                take: 50,
+              },
+            },
+            orderBy: { updatedAt: 'desc' },
+          })
+        : Promise.resolve([]),
+      userId
+        ? this.prisma.marketplaceOffer.findMany({
+            where: {
+              OR: [{ buyerId: userId }, { sellerId: userId }],
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 50,
+          })
+        : Promise.resolve([]),
     ]);
 
     const mappedProducts = await Promise.all(products.map((row) => this.mapMarketplaceProduct(row)));
@@ -111,6 +151,7 @@ export class ExperienceDatabaseService {
       [...new Set(products.map((item) => item.sellerId))],
       products,
     );
+    const followedSellerIds = followedSellerRows.map((row) => row.sellerId);
 
     return {
       totalProducts,
@@ -120,6 +161,13 @@ export class ExperienceDatabaseService {
       categories: [...new Set(products.map((item) => item.category))],
       sellers,
       orders: orders.map((row) => this.mapMarketplaceOrder(row)),
+      drafts: draftRows.map((row) => this.mapMarketplaceDraft(row)),
+      followedSellerIds,
+      chatMessages: conversationRows
+        .flatMap((row) => row.messages)
+        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+        .map((row) => this.mapMarketplaceMessage(row)),
+      offerHistory: offerRows.map((row) => this.mapMarketplaceOffer(row)),
       featuredProducts: mappedProducts.slice(0, 5),
       trendingProducts: mappedProducts
         .slice()
@@ -173,7 +221,7 @@ export class ExperienceDatabaseService {
     return this.mapMarketplaceProduct(product);
   }
 
-  async getMarketplaceDetail(id: string) {
+  async getMarketplaceDetail(id: string, viewerId?: string) {
     const product = await this.prisma.marketplaceProduct.findFirst({
       where: { id, deletedAt: null },
     });
@@ -181,7 +229,7 @@ export class ExperienceDatabaseService {
       throw new NotFoundException(`Marketplace product ${id} not found`);
     }
 
-    const [related, seller, orders] = await Promise.all([
+    const [related, seller, orders, sellerFollow, conversationRows, offerRows] = await Promise.all([
       this.prisma.marketplaceProduct.findMany({
         where: {
           deletedAt: null,
@@ -196,6 +244,46 @@ export class ExperienceDatabaseService {
         where: { productId: id },
         orderBy: { createdAt: 'desc' },
       }),
+      viewerId
+        ? this.prisma.marketplaceSellerFollow.findUnique({
+            where: {
+              followerId_sellerId: {
+                followerId: viewerId,
+                sellerId: product.sellerId,
+              },
+            },
+          })
+        : Promise.resolve(null),
+      viewerId
+        ? this.prisma.marketplaceConversation.findMany({
+            where:
+              viewerId === product.sellerId
+                ? { productId: id }
+                : {
+                    productId: id,
+                    buyerId: viewerId,
+                  },
+            include: {
+              messages: {
+                orderBy: { createdAt: 'desc' },
+                take: 50,
+              },
+            },
+            orderBy: { updatedAt: 'desc' },
+          })
+        : Promise.resolve([]),
+      viewerId
+        ? this.prisma.marketplaceOffer.findMany({
+            where:
+              viewerId === product.sellerId
+                ? { productId: id }
+                : {
+                    productId: id,
+                    buyerId: viewerId,
+                  },
+            orderBy: { createdAt: 'desc' },
+          })
+        : Promise.resolve([]),
     ]);
 
     return {
@@ -203,9 +291,12 @@ export class ExperienceDatabaseService {
       seller,
       relatedProducts: await Promise.all(related.map((row) => this.mapMarketplaceProduct(row))),
       saved: false,
-      sellerFollowed: false,
-      chatMessages: [],
-      offerHistory: [],
+      sellerFollowed: Boolean(sellerFollow),
+      chatMessages: conversationRows
+        .flatMap((row) => row.messages)
+        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+        .map((row) => this.mapMarketplaceMessage(row)),
+      offerHistory: offerRows.map((row) => this.mapMarketplaceOffer(row)),
       orderHistory: orders.map((row) => this.mapMarketplaceOrder(row)),
     };
   }
@@ -255,6 +346,259 @@ export class ExperienceDatabaseService {
       },
     });
     return this.mapMarketplaceOrder(order);
+  }
+
+  async getMarketplaceDrafts(userId: string) {
+    const drafts = await this.prisma.marketplaceDraft.findMany({
+      where: { userId },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return drafts.map((row) => this.mapMarketplaceDraft(row));
+  }
+
+  async createMarketplaceDraft(
+    userId: string,
+    input: {
+      title: string;
+      description?: string;
+      price?: number;
+      category: string;
+      subcategory?: string;
+      condition?: string;
+      location?: string;
+      images?: string[];
+      metadata?: Record<string, unknown>;
+    },
+  ) {
+    const draft = await this.prisma.marketplaceDraft.create({
+      data: {
+        id: makeId('draft'),
+        userId,
+        title: input.title,
+        description: input.description ?? '',
+        price: input.price == null ? undefined : new Prisma.Decimal(input.price),
+        category: input.category,
+        subcategory: input.subcategory,
+        condition: input.condition,
+        location: input.location,
+        images: (input.images ?? []) as Prisma.InputJsonValue,
+        metadata: (input.metadata ?? {}) as Prisma.InputJsonValue,
+        status: 'draft',
+      },
+    });
+    return this.mapMarketplaceDraft(draft);
+  }
+
+  async updateMarketplaceDraft(
+    draftId: string,
+    userId: string,
+    input: {
+      title?: string;
+      description?: string;
+      price?: number;
+      category?: string;
+      subcategory?: string;
+      condition?: string;
+      location?: string;
+      images?: string[];
+      metadata?: Record<string, unknown>;
+      status?: string;
+    },
+  ) {
+    const existing = await this.prisma.marketplaceDraft.findFirst({
+      where: { id: draftId, userId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Marketplace draft ${draftId} not found`);
+    }
+    const draft = await this.prisma.marketplaceDraft.update({
+      where: { id: draftId },
+      data: {
+        title: input.title,
+        description: input.description,
+        price: input.price == null ? undefined : new Prisma.Decimal(input.price),
+        category: input.category,
+        subcategory: input.subcategory,
+        condition: input.condition,
+        location: input.location,
+        images: input.images ? (input.images as Prisma.InputJsonValue) : undefined,
+        metadata: input.metadata ? (input.metadata as Prisma.InputJsonValue) : undefined,
+        status: input.status,
+        updatedAt: new Date(),
+      },
+    });
+    return this.mapMarketplaceDraft(draft);
+  }
+
+  async deleteMarketplaceDraft(draftId: string, userId: string) {
+    const draft = await this.prisma.marketplaceDraft.findFirst({
+      where: { id: draftId, userId },
+    });
+    if (!draft) {
+      throw new NotFoundException(`Marketplace draft ${draftId} not found`);
+    }
+    await this.prisma.marketplaceDraft.delete({ where: { id: draftId } });
+    return {
+      id: draft.id,
+      removed: true,
+    };
+  }
+
+  async listMarketplaceSellerFollows(userId: string) {
+    const rows = await this.prisma.marketplaceSellerFollow.findMany({
+      where: { followerId: userId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((row) => ({
+      sellerId: row.sellerId,
+      followerId: row.followerId,
+      createdAt: row.createdAt.toISOString(),
+    }));
+  }
+
+  async followMarketplaceSeller(userId: string, sellerId: string) {
+    await this.coreDatabase.getUser(sellerId);
+    if (userId === sellerId) {
+      return { sellerId, following: false, reason: 'self_follow_not_allowed' };
+    }
+    await this.prisma.marketplaceSellerFollow.upsert({
+      where: {
+        followerId_sellerId: {
+          followerId: userId,
+          sellerId,
+        },
+      },
+      update: {},
+      create: {
+        followerId: userId,
+        sellerId,
+      },
+    });
+    return { sellerId, following: true };
+  }
+
+  async unfollowMarketplaceSeller(userId: string, sellerId: string) {
+    await this.prisma.marketplaceSellerFollow.deleteMany({
+      where: {
+        followerId: userId,
+        sellerId,
+      },
+    });
+    return { sellerId, following: false };
+  }
+
+  async listMarketplaceProductChat(productId: string, userId: string) {
+    await this.ensureMarketplaceProduct(productId);
+    const conversations = await this.prisma.marketplaceConversation.findMany({
+      where: this.marketplaceConversationScope(productId, userId),
+      include: {
+        messages: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return {
+      conversations: conversations.map((row) => this.mapMarketplaceConversation(row)),
+      messages: conversations
+        .flatMap((row) => row.messages)
+        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+        .map((row) => this.mapMarketplaceMessage(row)),
+    };
+  }
+
+  async createMarketplaceProductMessage(
+    productId: string,
+    senderId: string,
+    input: { buyerId?: string; text?: string; imageUrl?: string },
+  ) {
+    if (!(input.text?.trim() || input.imageUrl?.trim())) {
+      throw new BadRequestException('Message text or image is required.');
+    }
+    const conversation = await this.ensureMarketplaceConversation(productId, senderId, input.buyerId);
+    const message = await this.prisma.marketplaceMessage.create({
+      data: {
+        id: makeId('message'),
+        conversationId: conversation.id,
+        senderId,
+        text: input.text?.trim() ?? '',
+        imageUrl: input.imageUrl?.trim() || undefined,
+        kind: input.imageUrl?.trim() ? 'image' : 'text',
+      },
+    });
+    await this.prisma.marketplaceConversation.update({
+      where: { id: conversation.id },
+      data: { updatedAt: new Date() },
+    });
+    return this.mapMarketplaceMessage(message);
+  }
+
+  async listMarketplaceOffers(productId: string, userId: string) {
+    await this.ensureMarketplaceProduct(productId);
+    const offers = await this.prisma.marketplaceOffer.findMany({
+      where: this.marketplaceOfferScope(productId, userId),
+      orderBy: { createdAt: 'desc' },
+    });
+    return offers.map((row) => this.mapMarketplaceOffer(row));
+  }
+
+  async createMarketplaceOffer(
+    productId: string,
+    actorId: string,
+    input: { buyerId?: string; amount: number; note?: string },
+  ) {
+    const conversation = await this.ensureMarketplaceConversation(productId, actorId, input.buyerId);
+    const offer = await this.prisma.marketplaceOffer.create({
+      data: {
+        id: makeId('offer'),
+        conversationId: conversation.id,
+        productId,
+        buyerId: conversation.buyerId,
+        sellerId: conversation.sellerId,
+        amount: new Prisma.Decimal(input.amount),
+        note: input.note?.trim() || undefined,
+        status: 'pending',
+      },
+    });
+    await this.prisma.marketplaceConversation.update({
+      where: { id: conversation.id },
+      data: { updatedAt: new Date() },
+    });
+    return this.mapMarketplaceOffer(offer);
+  }
+
+  async updateMarketplaceOffer(
+    offerId: string,
+    actorId: string,
+    input: { status: 'accepted' | 'rejected' | 'countered' | 'cancelled'; amount?: number; note?: string },
+  ) {
+    const existing = await this.prisma.marketplaceOffer.findUnique({
+      where: { id: offerId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Marketplace offer ${offerId} not found`);
+    }
+    const permitted =
+      actorId === existing.sellerId ||
+      actorId === existing.buyerId;
+    if (!permitted) {
+      throw new NotFoundException(`Marketplace offer ${offerId} not found`);
+    }
+    const offer = await this.prisma.marketplaceOffer.update({
+      where: { id: offerId },
+      data: {
+        status: input.status,
+        amount: input.amount == null ? undefined : new Prisma.Decimal(input.amount),
+        note: input.note ?? undefined,
+        actedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    await this.prisma.marketplaceConversation.update({
+      where: { id: offer.conversationId },
+      data: { updatedAt: new Date() },
+    });
+    return this.mapMarketplaceOffer(offer);
   }
 
   async getJobs(query: JobsQueryDto = {}) {
@@ -1292,7 +1636,11 @@ export class ExperienceDatabaseService {
     sellerId: string,
     products: Array<{ sellerId: string }>,
   ) {
-    const seller = await this.coreDatabase.getUser(sellerId).catch(() => null);
+    const [seller, followerCount, completedOrders] = await Promise.all([
+      this.coreDatabase.getUser(sellerId).catch(() => null),
+      this.prisma.marketplaceSellerFollow.count({ where: { sellerId } }),
+      this.prisma.marketplaceOrder.count({ where: { sellerId, status: 'delivered' } }),
+    ]);
     return {
       id: seller?.id ?? sellerId,
       name: seller?.name ?? 'Unknown Seller',
@@ -1301,10 +1649,10 @@ export class ExperienceDatabaseService {
       bio: seller?.bio ?? '',
       verified: seller?.verified ?? false,
       role: seller?.role ?? 'seller',
-      followers: seller?.followers ?? 0,
+      followers: followerCount,
       following: seller?.following ?? 0,
       activeListings: products.length,
-      completedOrders: Math.max(0, products.length * 12),
+      completedOrders,
       storeName: seller?.name ?? 'Unknown Seller',
       strikeStatus: seller?.status === 'Suspended' ? 'Under review' : 'No warnings',
     };
@@ -1370,6 +1718,170 @@ export class ExperienceDatabaseService {
       status: row.status,
       createdAt: row.createdAt.toISOString(),
     };
+  }
+
+  private mapMarketplaceDraft(row: {
+    id: string;
+    userId: string;
+    title: string;
+    description: string;
+    price: Prisma.Decimal | null;
+    currency: string;
+    category: string;
+    subcategory: string | null;
+    condition: string | null;
+    location: string | null;
+    images: Prisma.JsonValue;
+    metadata: Prisma.JsonValue;
+    status: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
+    return {
+      id: row.id,
+      userId: row.userId,
+      title: row.title,
+      description: row.description,
+      price: row.price == null ? null : Number(row.price),
+      currency: row.currency,
+      category: row.category,
+      subcategory: row.subcategory ?? '',
+      condition: row.condition ?? '',
+      location: row.location ?? '',
+      images: Array.isArray(row.images) ? row.images : [],
+      metadata: row.metadata,
+      status: row.status,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
+  private mapMarketplaceConversation(row: {
+    id: string;
+    productId: string;
+    buyerId: string;
+    sellerId: string;
+    status: string;
+    metadata: Prisma.JsonValue;
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
+    return {
+      id: row.id,
+      productId: row.productId,
+      buyerId: row.buyerId,
+      sellerId: row.sellerId,
+      status: row.status,
+      metadata: row.metadata,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
+  private mapMarketplaceMessage(row: {
+    id: string;
+    senderId: string;
+    text: string;
+    imageUrl: string | null;
+    kind: string;
+    createdAt: Date;
+  }) {
+    return {
+      id: row.id,
+      senderId: row.senderId,
+      senderName: row.senderId,
+      text: row.text,
+      imageUrl: row.imageUrl ?? undefined,
+      kind: row.kind,
+      timestamp: row.createdAt.toISOString(),
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  private mapMarketplaceOffer(row: {
+    id: string;
+    conversationId: string;
+    productId: string;
+    buyerId: string;
+    sellerId: string;
+    amount: Prisma.Decimal;
+    currency: string;
+    status: string;
+    note: string | null;
+    metadata: Prisma.JsonValue;
+    actedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
+    return {
+      id: row.id,
+      conversationId: row.conversationId,
+      productId: row.productId,
+      buyerId: row.buyerId,
+      sellerId: row.sellerId,
+      actor: row.buyerId,
+      action: this.titleCase(row.status),
+      amount: Number(row.amount),
+      currency: row.currency,
+      status: row.status,
+      note: row.note ?? '',
+      metadata: row.metadata,
+      actedAt: row.actedAt?.toISOString() ?? null,
+      timestamp: row.updatedAt.toISOString(),
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
+  private async ensureMarketplaceProduct(productId: string) {
+    const product = await this.prisma.marketplaceProduct.findFirst({
+      where: { id: productId, deletedAt: null },
+    });
+    if (!product) {
+      throw new NotFoundException(`Marketplace product ${productId} not found`);
+    }
+    return product;
+  }
+
+  private marketplaceConversationScope(productId: string, userId: string): Prisma.MarketplaceConversationWhereInput {
+    return {
+      productId,
+      OR: [{ buyerId: userId }, { sellerId: userId }],
+    };
+  }
+
+  private marketplaceOfferScope(productId: string, userId: string): Prisma.MarketplaceOfferWhereInput {
+    return {
+      productId,
+      OR: [{ buyerId: userId }, { sellerId: userId }],
+    };
+  }
+
+  private async ensureMarketplaceConversation(productId: string, actorId: string, buyerId?: string) {
+    const product = await this.ensureMarketplaceProduct(productId);
+    const resolvedBuyerId = actorId === product.sellerId ? buyerId?.trim() || '' : actorId;
+    if (!resolvedBuyerId) {
+      throw new BadRequestException('A buyerId is required for seller-side marketplace conversations.');
+    }
+    return this.prisma.marketplaceConversation.upsert({
+      where: {
+        productId_buyerId_sellerId: {
+          productId,
+          buyerId: resolvedBuyerId,
+          sellerId: product.sellerId,
+        },
+      },
+      update: {
+        updatedAt: new Date(),
+      },
+      create: {
+        id: makeId('conversation'),
+        productId,
+        buyerId: resolvedBuyerId,
+        sellerId: product.sellerId,
+        status: 'open',
+      },
+    });
   }
 
   private mapJob(row: {

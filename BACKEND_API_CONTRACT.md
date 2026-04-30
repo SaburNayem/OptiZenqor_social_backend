@@ -242,10 +242,30 @@ Support chat is now persisted through `support_conversations` and `support_messa
 - `GET /marketplace/products/:id`
 - `POST /marketplace/products`
 - `POST /marketplace/checkout`
+- `GET /marketplace/drafts`
+- `POST /marketplace/drafts`
+- `PATCH /marketplace/drafts/:id`
+- `DELETE /marketplace/drafts/:id`
+- `GET /marketplace/seller-follows`
+- `POST /marketplace/sellers/:sellerId/follow`
+- `DELETE /marketplace/sellers/:sellerId/follow`
+- `GET /marketplace/products/:id/chat`
+- `POST /marketplace/products/:id/chat/messages`
+- `GET /marketplace/products/:id/offers`
+- `POST /marketplace/products/:id/offers`
+- `PATCH /marketplace/offers/:id`
 
-These now use database-backed product and order models.
+These now use database-backed product, order, draft, seller-follow, conversation, message, and offer models.
 
 List responses return `data.products`, `data.items`, and `data.results` plus pagination metadata. Query support includes `page`, `limit`, `search`, `category`, `status`, `sellerId`, `sort`, and `order`.
+
+Overview/detail payloads now also expose durable marketplace adjunct state for authenticated users, including:
+
+- `followedSellerIds`
+- `drafts`
+- `chatMessages`
+- `offerHistory`
+- `orders`
 
 ### Jobs
 
@@ -286,11 +306,18 @@ List responses return `data.events`, `data.items`, and `data.results` plus pagin
 
 - `GET /hashtags`
 - `GET /trending`
+- `POST /hashtags/refresh`
+- `POST /trending/refresh`
 - `GET /search`
 - `GET /global-search`
 - `GET /search-discovery`
 
 These endpoints now return the standard `{ success, message, data }` wrapper while keeping compatibility aliases like `query`, `count`, `sections`, `results`, `items`, `trending`, and `hashtags` where the Flutter side already expects them.
+
+Trending and hashtag datasets are now persisted in PostgreSQL through:
+
+- `app_discovery_trending_entries`
+- `app_discovery_hashtag_entries`
 
 ### Communities and pages
 

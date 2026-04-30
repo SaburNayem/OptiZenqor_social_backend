@@ -1,10 +1,16 @@
 import { Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Delete, Patch } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
 import {
+  CreateMarketplaceDraftDto,
+  CreateMarketplaceMessageDto,
+  CreateMarketplaceOfferDto,
   CreateMarketplaceOrderDto,
   CreateProductDto,
   MarketplaceProductsQueryDto,
+  UpdateMarketplaceDraftDto,
+  UpdateMarketplaceOfferDto,
 } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { ExperienceDatabaseService } from '../services/experience-database.service';
@@ -19,8 +25,12 @@ export class MarketplaceController {
   ) {}
 
   @Get()
-  async getMarketplaceOverview(@Query() query: MarketplaceProductsQueryDto) {
-    const payload = await this.experienceDatabase.getMarketplaceOverview(query);
+  async getMarketplaceOverview(
+    @Query() query: MarketplaceProductsQueryDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const viewer = await this.coreDatabase.requireUserFromAuthorization(authorization).catch(() => null);
+    const payload = await this.experienceDatabase.getMarketplaceOverview(query, viewer?.id);
     return {
       ...successResponse('Marketplace fetched successfully.', payload, payload.pagination),
       items: payload.items,
@@ -36,13 +46,22 @@ export class MarketplaceController {
   }
 
   @Get('detail')
-  getMarketplaceDetail(@Query('id') id: string) {
-    return this.getMarketplaceDetailById(id);
+  async getMarketplaceDetail(
+    @Query('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const viewer = await this.coreDatabase.requireUserFromAuthorization(authorization).catch(() => null);
+    return this.experienceDatabase.getMarketplaceDetail(id, viewer?.id);
   }
 
   @Get('detail/:id')
-  getMarketplaceDetailById(@Param('id') id: string) {
-    return this.experienceDatabase.getMarketplaceDetail(id);
+  async getMarketplaceDetailById(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const resolvedViewerId =
+      (await this.coreDatabase.requireUserFromAuthorization(authorization).catch(() => null))?.id;
+    return this.experienceDatabase.getMarketplaceDetail(id, resolvedViewerId);
   }
 
   @Get('checkout')
@@ -88,6 +107,160 @@ export class MarketplaceController {
   @Get('products/:id')
   getProduct(@Param('id') id: string) {
     return this.experienceDatabase.getMarketplaceProduct(id);
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Get('drafts')
+  async getMarketplaceDrafts(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const drafts = await this.experienceDatabase.getMarketplaceDrafts(user.id);
+    return successResponse('Marketplace drafts fetched successfully.', drafts, {
+      count: drafts.length,
+    });
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Post('drafts')
+  async createMarketplaceDraft(
+    @Body() body: CreateMarketplaceDraftDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Marketplace draft created successfully.',
+      await this.experienceDatabase.createMarketplaceDraft(user.id, body),
+    );
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Patch('drafts/:id')
+  async updateMarketplaceDraft(
+    @Param('id') id: string,
+    @Body() body: UpdateMarketplaceDraftDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Marketplace draft updated successfully.',
+      await this.experienceDatabase.updateMarketplaceDraft(id, user.id, body),
+    );
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Delete('drafts/:id')
+  async deleteMarketplaceDraft(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Marketplace draft deleted successfully.',
+      await this.experienceDatabase.deleteMarketplaceDraft(id, user.id),
+    );
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Get('seller-follows')
+  async getMarketplaceSellerFollows(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const follows = await this.experienceDatabase.listMarketplaceSellerFollows(user.id);
+    return successResponse('Marketplace seller follows fetched successfully.', follows, {
+      count: follows.length,
+    });
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Post('sellers/:sellerId/follow')
+  async followMarketplaceSeller(
+    @Param('sellerId') sellerId: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Marketplace seller followed successfully.',
+      await this.experienceDatabase.followMarketplaceSeller(user.id, sellerId),
+    );
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Delete('sellers/:sellerId/follow')
+  async unfollowMarketplaceSeller(
+    @Param('sellerId') sellerId: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Marketplace seller unfollowed successfully.',
+      await this.experienceDatabase.unfollowMarketplaceSeller(user.id, sellerId),
+    );
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Get('products/:id/chat')
+  async getMarketplaceProductChat(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const payload = await this.experienceDatabase.listMarketplaceProductChat(id, user.id);
+    return successResponse('Marketplace chat fetched successfully.', payload, {
+      count: payload.messages.length,
+    });
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Post('products/:id/chat/messages')
+  async createMarketplaceProductMessage(
+    @Param('id') id: string,
+    @Body() body: CreateMarketplaceMessageDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization, body.buyerId);
+    return successResponse(
+      'Marketplace chat message created successfully.',
+      await this.experienceDatabase.createMarketplaceProductMessage(id, user.id, body),
+    );
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Get('products/:id/offers')
+  async getMarketplaceOffers(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const offers = await this.experienceDatabase.listMarketplaceOffers(id, user.id);
+    return successResponse('Marketplace offers fetched successfully.', offers, {
+      count: offers.length,
+    });
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Post('products/:id/offers')
+  async createMarketplaceOffer(
+    @Param('id') id: string,
+    @Body() body: CreateMarketplaceOfferDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization, body.buyerId);
+    return successResponse(
+      'Marketplace offer created successfully.',
+      await this.experienceDatabase.createMarketplaceOffer(id, user.id, body),
+    );
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Patch('offers/:id')
+  async updateMarketplaceOffer(
+    @Param('id') id: string,
+    @Body() body: UpdateMarketplaceOfferDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Marketplace offer updated successfully.',
+      await this.experienceDatabase.updateMarketplaceOffer(id, user.id, body),
+    );
   }
 
   @Post('create')

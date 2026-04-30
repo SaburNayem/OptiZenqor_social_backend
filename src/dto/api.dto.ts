@@ -1201,6 +1201,154 @@ export class CreateMarketplaceOrderDto {
   buyerId?: string;
 }
 
+export class CreateMarketplaceDraftDto {
+  @ApiProperty()
+  @IsString()
+  title!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  price?: number;
+
+  @ApiProperty()
+  @IsString()
+  category!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  subcategory?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  condition?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  images?: string[];
+
+  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, unknown>;
+}
+
+export class UpdateMarketplaceDraftDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  price?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  subcategory?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  condition?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  images?: string[];
+
+  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, unknown>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
+}
+
+export class CreateMarketplaceMessageDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  buyerId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  text?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+}
+
+export class CreateMarketplaceOfferDto {
+  @ApiProperty()
+  @IsNumber()
+  amount!: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  buyerId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
+export class UpdateMarketplaceOfferDto {
+  @ApiProperty({ enum: ['accepted', 'rejected', 'countered', 'cancelled'] })
+  @IsIn(['accepted', 'rejected', 'countered', 'cancelled'])
+  status!: 'accepted' | 'rejected' | 'countered' | 'cancelled';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  amount?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
 export class LiveCommentDto {
   @ApiPropertyOptional()
   @IsOptional()
@@ -1264,6 +1412,16 @@ export class CreateLiveStreamDto {
   @IsOptional()
   @IsString()
   previewImageUrl?: string;
+}
+
+export class RefreshDiscoveryDatasetDto {
+  @ApiPropertyOptional({ minimum: 1, maximum: 100, default: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }
 
 export class EventActorDto {
