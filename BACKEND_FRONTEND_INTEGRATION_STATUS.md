@@ -1,8 +1,8 @@
 # Backend Frontend Integration Status
 
-Last updated: 2026-04-29
+Last updated: 2026-04-30
 
-This is a backend-first audit of the current `Socity_backend` workspace. Frontend status is pending a separate repo audit.
+This is a backend-first audit of the current `Socity_backend` workspace, now cross-checked against the local `OptiZenqor_social` frontend endpoint map and the current calls integration slice.
 
 ## Summary
 
@@ -18,7 +18,7 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 | Feed/posts/comments/reactions | Yes | Yes | Pending | Partial | Partial | Core post data is DB-backed; some detail/adjacent routes still touch mock-backed services. |
 | Stories | Yes | Yes | Pending | Partial | Partial | Prisma models and DB service exist; some controller-adjacent flows still reference old data services. |
 | Reels | Yes | Yes | Pending | Partial | Partial | Prisma models and DB service exist. |
-| Chat/messages | Yes | Yes | Pending | Partial | Partial | Core threads/messages are DB-backed; presence/call/live layers still use snapshot/state services. |
+| Chat/messages | Yes | Yes | Partial | Partial | Partial | Core threads/messages are DB-backed; chat archive/mute/pin/preferences still mix snapshot-backed services. |
 | Notifications | Yes | Yes | Pending | Partial | Partial | Inbox is DB-backed; some campaign/preferences flows still mix static or snapshot data. |
 | Bookmarks | Yes | Yes | Pending | In Progress | Partial | Persistent bookmark storage exists in Prisma. Controller fallback to `PlatformDataService` removed on 2026-04-29. |
 | Collections | Yes | Yes | Pending | Partial | Partial | Backed by `AccountStateDatabaseService`. |
@@ -32,7 +32,7 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 | Discovery/search/trending | Yes | Yes | Pending | Partial | Partial | `discovery.controller.ts` now reads search/trending/hashtags from DB-backed services instead of seeded ecosystem/platform services. |
 | Profiles/dashboards | Yes | Yes | Pending | Partial | Partial | `profiles.controller.ts` now reads profile, tagged/mention history, and business/seller/recruiter/creator dashboard payloads from DB-backed services. |
 | Preferences/support/app extensions | Partial | Partial | Pending | Partial | Partial | `settings` and `preferences` now read user-scoped state from DB-backed services, support tickets are persisted, and account switching/activity sessions/verification request are now durable; several utility routes still rely on snapshot-backed services. |
-| Realtime calls/live/presence | Partial | Partial | Pending | No | Partial | Socket auth exists, but snapshot-backed session state and fallback auth paths remain. |
+| Realtime calls/live/presence | Partial | Partial | Partial | Partial | Partial | Calls history/session creation now use authenticated backend routes and frontend calls UI is API-backed; live streams and some presence flows still rely on snapshot/static services. |
 
 ## Remaining Mock or Snapshot Hotspots
 
@@ -42,6 +42,24 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 - `src/data/app-extensions-data.service.ts`
 - `src/data/settings-data.service.ts`
 - `src/services/state-snapshot.service.ts`
+
+## Frontend Endpoint Audit Snapshot
+
+- Frontend endpoint source inspected: `../OptiZenqor_social/lib/core/data/api/api_end_points.dart`
+- Frontend transport/auth sources inspected:
+  - `../OptiZenqor_social/lib/core/config/app_config.dart`
+  - `../OptiZenqor_social/lib/core/data/service/api_client_service.dart`
+  - `../OptiZenqor_social/lib/core/data/service/auth_service.dart`
+- Calls feature is now wired to backend routes instead of local repository state:
+  - `../OptiZenqor_social/lib/feature/calls/repository/calls_repository.dart`
+  - `../OptiZenqor_social/lib/feature/calls/controller/calls_controller.dart`
+  - `../OptiZenqor_social/lib/feature/calls/screen/calls_screen.dart`
+- Remaining high-risk mismatch areas from the endpoint map are still concentrated in:
+  - chat thread settings and presence
+  - live stream setup/comments/reactions
+  - onboarding and app utility routes
+  - archive/hide/hidden post flows
+  - admin/support helper routes still backed by `src/data/*`
 
 ## Latest Completed Files
 
@@ -106,12 +124,21 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 - `PATCH /verification-request/documents`
 - `POST /verification-request/submit`
 - `PATCH /verification-request/status`
+- `GET /group-chat`
+- `GET /group-chat/:id`
+- `GET /calls`
+- `GET /calls/:id`
+- `GET /calls/sessions`
+- `GET /calls/sessions/:id`
+- `POST /calls/sessions`
+- `PATCH /calls/sessions/:id/end`
 
 ## Frontend Impact
 
 - Discovery and search screens should continue to receive the same top-level keys (`success`, `query`, `results`, `sections`, `count`, `items`, `data`) while now reflecting DB-backed users, posts, jobs, pages, communities, marketplace items, and events.
 - Profile routes keep the same wrapper aliases (`user`, `profile`, `data`, `items`, `results`) while removing seeded ecosystem/profile dashboard dependencies for the completed endpoints.
-- Support and realtime feature screens still depend on seeded/snapshot-backed routes and remain migration targets.
+- Calls screens no longer need local mock history; the current repository/controller/UI path loads authenticated call history from `/calls` and creates sessions through `/calls/sessions`.
+- Support and remaining realtime feature screens still depend on seeded/snapshot-backed routes and remain migration targets.
 - Support ticket list/create routes are now durable, but FAQ/chat/mail utility payloads are still configuration-backed rather than fully modeled in Prisma.
 - Account switching, activity session management, and verification request screens can now rely on authenticated DB-backed state instead of snapshot-backed app extension memory.
 
@@ -121,6 +148,10 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 - `npm.cmd run build`: pass
 - `npm.cmd install`: pass
 - `npx.cmd prisma generate`: pass
+- `npx.cmd prisma migrate dev`: pass (`Already in sync, no schema change or pending migration was found.`)
+- `flutter pub get`: pass
+- `dart format` on updated calls files: pass
+- `dart analyze lib --no-fatal-warnings`: pass with existing warnings only
 
 ## High-Priority Controller Migration Targets
 
@@ -140,6 +171,7 @@ This is a backend-first audit of the current `Socity_backend` workspace. Fronten
 - On 2026-04-29, `discovery.controller.ts` and `profiles.controller.ts` were moved off seeded ecosystem/platform lookups for their main read flows by introducing `DiscoveryDatabaseService` and `ProfilesDatabaseService`.
 - On 2026-04-29, `support.controller.ts` moved ticket persistence off in-memory ecosystem state by introducing `SupportDatabaseService`.
 - On 2026-04-29, `account-switching.controller.ts`, `activity-sessions.controller.ts`, and `verification-request.controller.ts` moved off snapshot-backed app extension state by introducing `AppExtensionsDatabaseService`.
+- On 2026-04-30, `realtime.controller.ts` moved `group-chat` and `calls` reads plus call session creation/end flows onto authenticated backend state instead of seeded ecosystem payloads, and the frontend calls feature was switched from local repository data to the backend API.
 - The backend currently uses a deliberate hybrid database access style: Prisma for many newer modules and raw `pg` for the core social/auth layer.
-- Remaining seeded dependencies for the current target slice are concentrated in `chat.controller.ts`, `realtime.controller.ts`, and the broader app-utility controller set still importing `src/data/*`.
-- Latest verification for completed areas: `npm.cmd install`, `npx.cmd prisma generate`, `npm.cmd run typecheck`, and `npm.cmd run build` all pass.
+- Remaining seeded dependencies for the current target slice are concentrated in `chat.controller.ts`, the `live-stream*` paths inside `realtime.controller.ts`, and the broader app-utility controller set still importing `src/data/*`.
+- Latest verification for completed areas: `npm.cmd install`, `npx.cmd prisma generate`, `npx.cmd prisma migrate dev`, `npm.cmd run typecheck`, `npm.cmd run build`, `flutter pub get`, and `dart analyze lib --no-fatal-warnings` all pass, with frontend warnings remaining non-fatal.
