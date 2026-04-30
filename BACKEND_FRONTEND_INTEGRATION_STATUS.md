@@ -32,7 +32,8 @@ This is a backend-first audit of the current `Socity_backend` workspace, now cro
 | Discovery/search/trending | Yes | Yes | Pending | Partial | Partial | `discovery.controller.ts` now reads search/trending/hashtags from DB-backed services instead of seeded ecosystem/platform services. |
 | Profiles/dashboards | Yes | Yes | Pending | Partial | Partial | `profiles.controller.ts` now reads profile, tagged/mention history, and business/seller/recruiter/creator dashboard payloads from DB-backed services. |
 | Preferences/support/app extensions | Partial | Partial | Pending | Partial | Partial | `settings` and `preferences` now read user-scoped state from DB-backed services, support tickets are persisted, and account switching/activity sessions/verification request are now durable; several utility routes still rely on snapshot-backed services. |
-| Realtime calls/live/presence | Partial | Partial | Partial | Partial | Partial | Calls history/session creation now use authenticated backend routes and frontend calls UI is API-backed; live streams and some presence flows still rely on snapshot/static services. |
+| Realtime calls/live/presence | Partial | Partial | Partial | Partial | Partial | Calls history/session creation now use authenticated backend routes and frontend calls UI is API-backed; group chat create/member mutations are now durable too, while live streams and some presence flows still rely on snapshot/static services. |
+| Subscriptions | Yes | Yes | Partial | Partial | Partial | Read flows were already live; plan change/cancel/renew routes are now durable and the frontend subscription selector posts to backend. |
 
 ## Remaining Mock or Snapshot Hotspots
 
@@ -132,12 +133,23 @@ This is a backend-first audit of the current `Socity_backend` workspace, now cro
 - `GET /calls/sessions/:id`
 - `POST /calls/sessions`
 - `PATCH /calls/sessions/:id/end`
+- `POST /group-chat`
+- `PATCH /group-chat/:id`
+- `DELETE /group-chat/:id`
+- `POST /group-chat/:id/members`
+- `DELETE /group-chat/:id/members/:userId`
+- `PATCH /group-chat/:id/members/:userId/role`
+- `POST /subscriptions/change-plan`
+- `POST /subscriptions/cancel`
+- `POST /subscriptions/renew`
 
 ## Frontend Impact
 
 - Discovery and search screens should continue to receive the same top-level keys (`success`, `query`, `results`, `sections`, `count`, `items`, `data`) while now reflecting DB-backed users, posts, jobs, pages, communities, marketplace items, and events.
 - Profile routes keep the same wrapper aliases (`user`, `profile`, `data`, `items`, `results`) while removing seeded ecosystem/profile dashboard dependencies for the completed endpoints.
 - Calls screens no longer need local mock history; the current repository/controller/UI path loads authenticated call history from `/calls` and creates sessions through `/calls/sessions`.
+- Group chat screen no longer stops at a backend-placeholder error for create/add/remove actions; it now posts to durable group chat mutation routes.
+- Subscription plan selection no longer stays device-local only; it now posts to `/subscriptions/change-plan` before updating local cache.
 - Support and remaining realtime feature screens still depend on seeded/snapshot-backed routes and remain migration targets.
 - Support ticket list/create routes are now durable, but FAQ/chat/mail utility payloads are still configuration-backed rather than fully modeled in Prisma.
 - Account switching, activity session management, and verification request screens can now rely on authenticated DB-backed state instead of snapshot-backed app extension memory.
@@ -172,6 +184,7 @@ This is a backend-first audit of the current `Socity_backend` workspace, now cro
 - On 2026-04-29, `support.controller.ts` moved ticket persistence off in-memory ecosystem state by introducing `SupportDatabaseService`.
 - On 2026-04-29, `account-switching.controller.ts`, `activity-sessions.controller.ts`, and `verification-request.controller.ts` moved off snapshot-backed app extension state by introducing `AppExtensionsDatabaseService`.
 - On 2026-04-30, `realtime.controller.ts` moved `group-chat` and `calls` reads plus call session creation/end flows onto authenticated backend state instead of seeded ecosystem payloads, and the frontend calls feature was switched from local repository data to the backend API.
+- On 2026-04-30, `realtime.controller.ts` gained durable group-chat create/update/delete/member-management routes and `engagement.controller.ts` gained durable subscription change/cancel/renew routes, with matching frontend repository integrations.
 - The backend currently uses a deliberate hybrid database access style: Prisma for many newer modules and raw `pg` for the core social/auth layer.
 - Remaining seeded dependencies for the current target slice are concentrated in `chat.controller.ts`, the `live-stream*` paths inside `realtime.controller.ts`, and the broader app-utility controller set still importing `src/data/*`.
 - Latest verification for completed areas: `npm.cmd install`, `npx.cmd prisma generate`, `npx.cmd prisma migrate dev`, `npm.cmd run typecheck`, `npm.cmd run build`, `flutter pub get`, and `dart analyze lib --no-fatal-warnings` all pass, with frontend warnings remaining non-fatal.

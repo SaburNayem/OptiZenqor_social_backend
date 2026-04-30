@@ -2,7 +2,7 @@
 
 This file is an endpoint inventory generated from the NestJS controllers under `src/controllers`.
 
-- Total documented HTTP endpoints: 349.
+- Total documented HTTP endpoints: 358.
 - No global `/api` prefix is configured, so the paths below are the full route paths.
 - Default local server from `src/main.ts`: `http://localhost:3000`.
 - Swagger endpoints: `GET /docs`, `GET /docs-json`, `GET /docs-yaml`.
@@ -162,9 +162,15 @@ This file is an endpoint inventory generated from the NestJS controllers under `
 - `PATCH /chat/threads/:id/unread`
 - `DELETE /chat/threads/:id/clear`
 
-### RealtimeController (18 endpoints)
+### RealtimeController (24 endpoints)
 - `GET /group-chat`
 - `GET /group-chat/:id`
+- `POST /group-chat`
+- `PATCH /group-chat/:id`
+- `DELETE /group-chat/:id`
+- `POST /group-chat/:id/members`
+- `DELETE /group-chat/:id/members/:userId`
+- `PATCH /group-chat/:id/members/:userId/role`
 - `GET /calls`
 - `GET /calls/:id`
 - `GET /live-stream`
@@ -297,12 +303,15 @@ This file is an endpoint inventory generated from the NestJS controllers under `
 - `GET /jobs/:id`
 - `GET /professional-profiles`
 
-### EngagementController (5 endpoints)
+### EngagementController (8 endpoints)
 - `GET /invite-referral`
 - `GET /premium-membership`
 - `GET /premium`
 - `GET /wallet-payments`
 - `GET /subscriptions`
+- `POST /subscriptions/change-plan`
+- `POST /subscriptions/cancel`
+- `POST /subscriptions/renew`
 
 ### LearningCoursesController (1 endpoints)
 - `GET /learning-courses`

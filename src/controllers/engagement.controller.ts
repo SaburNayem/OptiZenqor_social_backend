@@ -1,7 +1,8 @@
-import { Controller, Get, Headers, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { EcosystemDataService } from '../data/ecosystem-data.service';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
+import { ChangeSubscriptionPlanDto, ManageSubscriptionDto } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { MonetizationDatabaseService } from '../services/monetization-database.service';
 
@@ -56,6 +57,48 @@ export class EngagementController {
       success: true,
       message: 'Subscriptions fetched successfully.',
       data: await this.monetizationDatabase.getSubscriptions(user.id),
+    };
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Post('subscriptions/change-plan')
+  async changeSubscriptionPlan(
+    @Body() body: ChangeSubscriptionPlanDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return {
+      success: true,
+      message: 'Subscription plan changed successfully.',
+      data: await this.monetizationDatabase.changeSubscriptionPlan(user.id, body.planId),
+    };
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Post('subscriptions/cancel')
+  async cancelSubscription(
+    @Body() body: ManageSubscriptionDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return {
+      success: true,
+      message: 'Subscription cancelled successfully.',
+      data: await this.monetizationDatabase.cancelSubscription(user.id, body.subscriptionId),
+    };
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Post('subscriptions/renew')
+  async renewSubscription(
+    @Body() body: ManageSubscriptionDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return {
+      success: true,
+      message: 'Subscription renewed successfully.',
+      data: await this.monetizationDatabase.renewSubscription(user.id, body.subscriptionId),
     };
   }
 }

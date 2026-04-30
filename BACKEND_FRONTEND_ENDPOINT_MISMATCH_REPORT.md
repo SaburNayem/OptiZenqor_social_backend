@@ -24,6 +24,15 @@ This report compares the current frontend endpoint contract in `../OptiZenqor_so
 | `GET /calls/:id` | Exists | Returns active/persisted call session payload. |
 | `POST /calls/sessions` | Exists | Authenticated call session creation path is active. |
 | `PATCH /calls/sessions/:id/end` | Exists | Authenticated call session end path is active. |
+| `POST /group-chat` | Exists | Group chat creation is now database-backed. |
+| `PATCH /group-chat/:id` | Exists | Group rename/update is now database-backed. |
+| `DELETE /group-chat/:id` | Exists | Group delete is now database-backed. |
+| `POST /group-chat/:id/members` | Exists | Member add is now database-backed with persisted roles. |
+| `DELETE /group-chat/:id/members/:userId` | Exists | Member removal is now database-backed. |
+| `PATCH /group-chat/:id/members/:userId/role` | Exists | Member role updates are now database-backed. |
+| `POST /subscriptions/change-plan` | Exists | Frontend subscription selection can now persist to backend. |
+| `POST /subscriptions/cancel` | Exists | Durable cancel route is now available. |
+| `POST /subscriptions/renew` | Exists | Durable renew route is now available. |
 
 ## Still Mixed or Not Fully Durable
 
@@ -55,6 +64,10 @@ This report compares the current frontend endpoint contract in `../OptiZenqor_so
 
 - `../OptiZenqor_social/lib/feature/calls/repository/calls_repository.dart`
   - Replaced local in-repo call history with authenticated backend reads/writes.
+- `../OptiZenqor_social/lib/feature/group_chat/repository/group_chat_repository.dart`
+  - Replaced backend-placeholder mutation behavior with live group create/member API calls.
+- `../OptiZenqor_social/lib/feature/subscriptions/repository/subscriptions_repository.dart`
+  - Replaced local active-plan-only persistence with backend subscription plan mutation calls.
 - `../OptiZenqor_social/lib/feature/calls/controller/calls_controller.dart`
   - Added async loading and backend error state handling.
 - `../OptiZenqor_social/lib/feature/calls/screen/calls_screen.dart`
@@ -64,5 +77,5 @@ This report compares the current frontend endpoint contract in `../OptiZenqor_so
 
 1. Move `chat.controller.ts` archive/mute/pin/preferences paths fully onto DB-backed services.
 2. Replace `live-stream*` handlers in `realtime.controller.ts` with real Prisma-backed persistence.
-3. Audit the remaining controller imports from `src/data/*` and migrate those routes off seeded/static providers.
+3. Migrate the remaining app-utility controllers still reading from `src/data/*`.
 4. Expand this report from the current high-risk slices to the full frontend endpoint surface.

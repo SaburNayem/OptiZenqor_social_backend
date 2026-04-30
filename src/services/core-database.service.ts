@@ -64,6 +64,10 @@ type ThreadRow = QueryResultRow & {
   summary: string;
 };
 
+type ThreadParticipantRow = UserRow & {
+  thread_role: string | null;
+};
+
 type MessageRow = QueryResultRow & {
   id: string;
   thread_id: string;
@@ -240,6 +244,19 @@ export class CoreDatabaseService implements OnModuleInit {
     const { rows } = await this.database.query<UserRow>(
       `select * from app_users where lower(email) = lower($1) limit 1`,
       [email],
+    );
+    const row = rows[0];
+    return row ? this.mapUser(row) : null;
+  }
+
+  async findUserByUsernameOptional(username: string) {
+    const normalized = username.trim().replace(/^@/, '');
+    if (!normalized) {
+      return null;
+    }
+    const { rows } = await this.database.query<UserRow>(
+      `select * from app_users where lower(username) = lower($1) limit 1`,
+      [normalized],
     );
     const row = rows[0];
     return row ? this.mapUser(row) : null;
@@ -1400,6 +1417,133 @@ export class CoreDatabaseService implements OnModuleInit {
     );
   }
 
+  async createGroupThread(
+    actorId: string,
+    title: string,
+    participantIdentifiers: string[],
+  ) {
+    const normalizedTitle = title.trim();
+    if (!normalizedTitle) {
+      throw new ConflictException('Group chat name is required.');
+    }
+
+    const resolvedParticipants = await this.resolveUserIdentifiers(participantIdentifiers);
+    const participantIds = [
+      actorId,
+      ...resolvedParticipants.map((item) => item.id).filter((id) => id !== actorId),
+    ];
+    const uniqueParticipantIds = [...new Set(participantIds)];
+    const createdAt = new Date().toISOString();
+    const threadId = makeId('conversation');
+
+    await this.database.query(
+      `insert into chat_threads (id, title, participants_label, flag, summary, created_at)
+       values ($1,$2,$3,$4,$5,$6)`,
+      [
+        threadId,
+        normalizedTitle,
+        `${uniqueParticipantIds.length} members`,
+        'group',
+        `Group chat for ${normalizedTitle}.`,
+        createdAt,
+      ],
+    );
+
+    for (const participantId of uniqueParticipantIds) {
+      await this.database.query(
+        `insert into chat_thread_participants (thread_id, user_id, role, created_at)
+         values ($1,$2,$3,$4)
+         on conflict (thread_id, user_id) do nothing`,
+        [threadId, participantId, participantId === actorId ? 'admin' : 'member', createdAt],
+      );
+    }
+
+    return this.getThread(threadId);
+  }
+
+  async updateGroupThread(threadId: string, actorId: string, title: string) {
+    await this.assertThreadAdmin(threadId, actorId);
+    const normalizedTitle = title.trim();
+    if (!normalizedTitle) {
+      throw new ConflictException('Group chat name is required.');
+    }
+
+    await this.database.query(
+      `update chat_threads
+       set title = $2,
+           summary = $3,
+           participants_label = (
+             select concat(count(*), ' members')
+             from chat_thread_participants
+             where thread_id = $1
+           )
+       where id = $1`,
+      [threadId, normalizedTitle, `Group chat for ${normalizedTitle}.`],
+    );
+
+    return this.getThread(threadId);
+  }
+
+  async deleteGroupThread(threadId: string, actorId: string) {
+    await this.assertThreadAdmin(threadId, actorId);
+    await this.database.query(`delete from chat_threads where id = $1`, [threadId]);
+    return {
+      success: true,
+      threadId,
+      deleted: true,
+    };
+  }
+
+  async addThreadParticipant(
+    threadId: string,
+    actorId: string,
+    userIdentifier: string,
+    role: 'admin' | 'moderator' | 'member' = 'member',
+  ) {
+    await this.assertThreadAdmin(threadId, actorId);
+    const user = await this.resolveUserIdentifier(userIdentifier);
+    await this.database.query(
+      `insert into chat_thread_participants (thread_id, user_id, role, created_at)
+       values ($1,$2,$3,$4)
+       on conflict (thread_id, user_id)
+       do update set role = excluded.role`,
+      [threadId, user.id, role, new Date().toISOString()],
+    );
+    await this.refreshThreadParticipantsLabel(threadId);
+    return this.getThread(threadId);
+  }
+
+  async removeThreadParticipant(threadId: string, actorId: string, userIdentifier: string) {
+    await this.assertThreadAdmin(threadId, actorId);
+    const user = await this.resolveUserIdentifier(userIdentifier);
+    if (user.id === actorId) {
+      throw new ConflictException('Use group deletion or role transfer before removing the admin.');
+    }
+    await this.database.query(
+      `delete from chat_thread_participants where thread_id = $1 and user_id = $2`,
+      [threadId, user.id],
+    );
+    await this.refreshThreadParticipantsLabel(threadId);
+    return this.getThread(threadId);
+  }
+
+  async updateThreadParticipantRole(
+    threadId: string,
+    actorId: string,
+    userIdentifier: string,
+    role: 'admin' | 'moderator' | 'member',
+  ) {
+    await this.assertThreadAdmin(threadId, actorId);
+    const user = await this.resolveUserIdentifier(userIdentifier);
+    await this.database.query(
+      `update chat_thread_participants
+       set role = $3
+       where thread_id = $1 and user_id = $2`,
+      [threadId, user.id, role],
+    );
+    return this.getThread(threadId);
+  }
+
   async createMessage(
     threadId: string,
     senderId: string,
@@ -1850,9 +1994,14 @@ export class CoreDatabaseService implements OnModuleInit {
       create table if not exists chat_thread_participants (
         thread_id text not null references chat_threads(id) on delete cascade,
         user_id text not null references app_users(id) on delete cascade,
+        role text not null default 'member',
         created_at timestamptz not null,
         primary key (thread_id, user_id)
       );
+    `);
+    await this.database.query(`
+      alter table chat_thread_participants
+      add column if not exists role text not null default 'member';
     `);
     await this.database.query(`
       create table if not exists chat_messages (
@@ -1910,14 +2059,17 @@ export class CoreDatabaseService implements OnModuleInit {
   }
 
   private async getThreadParticipants(threadId: string) {
-    const { rows } = await this.database.query<UserRow>(
-      `select u.* from chat_thread_participants tp
+    const { rows } = await this.database.query<ThreadParticipantRow>(
+      `select u.*, tp.role as thread_role from chat_thread_participants tp
        join app_users u on u.id = tp.user_id
        where tp.thread_id = $1
        order by tp.created_at asc`,
       [threadId],
     );
-    return rows.map((row) => this.mapUser(row));
+    return rows.map((row) => ({
+      ...this.mapUser(row),
+      threadRole: row.thread_role ?? 'member',
+    }));
   }
 
   private async listThreadMessages(threadId: string) {
@@ -1949,6 +2101,14 @@ export class CoreDatabaseService implements OnModuleInit {
       ...this.mapThread(row),
       unreadCount: messages.filter((message) => !message.read).length,
       lastMessage,
+      roles: Array.isArray(participants)
+        ? Object.fromEntries(
+            participants.map((participant) => [
+              participant.username,
+              String(participant.threadRole ?? 'member'),
+            ]),
+          )
+        : undefined,
       ...(options.includeParticipants ? { participants } : {}),
       ...(options.includeParticipantIds ? { participantIds } : {}),
       ...(options.includeMessages ? { messages } : {}),
@@ -2051,6 +2211,58 @@ export class CoreDatabaseService implements OnModuleInit {
       acc[row.comment_id][row.reaction] = Number(row.count);
       return acc;
     }, {});
+  }
+
+  private async assertThreadAdmin(threadId: string, actorId: string) {
+    const thread = await this.getThread(threadId);
+    const participantIds = thread.participantIds ?? [];
+    if (participantIds.length < 3) {
+      throw new ConflictException('This route is only available for group chats.');
+    }
+    const { rows } = await this.database.query<QueryResultRow & { role: string }>(
+      `select role from chat_thread_participants where thread_id = $1 and user_id = $2 limit 1`,
+      [threadId, actorId],
+    );
+    const role = rows[0]?.role ?? '';
+    if (role !== 'admin') {
+      throw new UnauthorizedException('Only group chat admins can manage this group.');
+    }
+  }
+
+  private async refreshThreadParticipantsLabel(threadId: string) {
+    await this.database.query(
+      `update chat_threads
+       set participants_label = (
+         select concat(count(*), ' members')
+         from chat_thread_participants
+         where thread_id = $1
+       )
+       where id = $1`,
+      [threadId],
+    );
+  }
+
+  private async resolveUserIdentifier(identifier: string) {
+    const normalized = identifier.trim();
+    if (!normalized) {
+      throw new NotFoundException('User identifier is required.');
+    }
+    if (normalized.startsWith('user_')) {
+      return this.getUser(normalized);
+    }
+    const userByUsername = await this.findUserByUsernameOptional(normalized);
+    if (userByUsername) {
+      return userByUsername;
+    }
+    return this.getUser(normalized);
+  }
+
+  private async resolveUserIdentifiers(identifiers: string[]) {
+    return Promise.all(
+      [...new Set(identifiers.map((item) => item.trim()).filter(Boolean))].map((item) =>
+        this.resolveUserIdentifier(item),
+      ),
+    );
   }
 
   private async assertEmailAndUsernameAvailable(email: string, username: string) {

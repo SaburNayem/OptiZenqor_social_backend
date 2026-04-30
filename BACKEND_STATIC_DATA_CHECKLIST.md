@@ -59,6 +59,8 @@ This means the backend is database-backed, but not yet a pure Prisma-only codeba
 - Support tickets moved out of in-memory ecosystem state and into a real database table
 - Account switching, activity sessions, and verification request routes moved off snapshot-backed `AppExtensionsDataService`
 - Auth password hashing moved to `argon2`, and demo-account exposure is now opt-in via env instead of implied by the normal auth flow
+- Group chat create/update/delete/member-management routes are now durable against `chat_threads` and `chat_thread_participants`
+- Subscription plan change/cancel/renew routes are now durable against `app_subscriptions`
 
 ## Remaining static dependency hotspots
 

@@ -1,13 +1,16 @@
-import { Body, Controller, Get, Headers, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { EcosystemDataService } from '../data/ecosystem-data.service';
 import {
+  CreateGroupChatDto,
   CreateCallSessionDto,
   EndCallSessionDto,
+  GroupChatMemberDto,
   LiveCommentDto,
   LiveReactionDto,
+  UpdateGroupChatDto,
 } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { RealtimeStateService } from '../services/realtime-state.service';
@@ -21,6 +24,32 @@ export class RealtimeController {
     private readonly realtimeState: RealtimeStateService,
   ) {}
 
+  private mapGroupChat(thread: Awaited<ReturnType<CoreDatabaseService['getThread']>>) {
+    return {
+      id: thread.id,
+      name: thread.title,
+      members:
+        Array.isArray(thread.participants) && thread.participants.length > 0
+          ? thread.participants.map((participant) => participant.username)
+          : (thread.participantIds ?? []),
+      roles:
+        typeof thread.roles === 'object' && thread.roles
+          ? thread.roles
+          : Array.isArray(thread.participants) && thread.participants.length > 0
+            ? Object.fromEntries(
+                thread.participants.map((participant) => [
+                  participant.username,
+                  participant.threadRole ?? 'member',
+                ]),
+              )
+            : {},
+      media: [],
+      summary: thread.summary,
+      unreadCount: thread.unreadCount ?? 0,
+      messages: thread.messages ?? [],
+    };
+  }
+
   @UseGuards(SessionAuthGuard)
   @Get('group-chat')
   async getGroupChats(@CurrentUser() user: { id: string }) {
@@ -28,24 +57,7 @@ export class RealtimeController {
     const groups = threads
       .filter((thread) => (thread.participantIds?.length ?? 0) > 2)
       .map((thread) => ({
-        id: thread.id,
-        name: thread.title,
-        members:
-          Array.isArray(thread.participants) && thread.participants.length > 0
-            ? thread.participants.map((participant) => participant.username)
-            : (thread.participantIds ?? []),
-        roles:
-          Array.isArray(thread.participants) && thread.participants.length > 0
-            ? Object.fromEntries(
-                thread.participants.map((participant, index) => [
-                  participant.username,
-                  index === 0 ? 'admin' : 'member',
-                ]),
-              )
-            : {},
-        media: [],
-        summary: thread.summary,
-        unreadCount: thread.unreadCount ?? 0,
+        ...this.mapGroupChat(thread),
         activeForUser: (thread.participantIds ?? []).includes(user.id),
       }));
 
@@ -63,28 +75,117 @@ export class RealtimeController {
   @Get('group-chat/:id')
   async getGroupChat(@Param('id') id: string) {
     const thread = await this.coreDatabase.getThread(id);
-    const group = {
-      id: thread.id,
-      name: thread.title,
-      members:
-        Array.isArray(thread.participants) && thread.participants.length > 0
-          ? thread.participants.map((participant) => participant.username)
-          : (thread.participantIds ?? []),
-      roles:
-        Array.isArray(thread.participants) && thread.participants.length > 0
-          ? Object.fromEntries(
-              thread.participants.map((participant, index) => [
-                participant.username,
-                index === 0 ? 'admin' : 'member',
-              ]),
-            )
-          : {},
-      media: [],
-      messages: thread.messages ?? [],
-    };
+    const group = this.mapGroupChat(thread);
     return {
       success: true,
       message: 'Group chat fetched successfully.',
+      data: group,
+      group,
+    };
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Post('group-chat')
+  async createGroupChat(@CurrentUser() user: { id: string }, @Body() body: CreateGroupChatDto) {
+    const thread = await this.coreDatabase.createGroupThread(
+      user.id,
+      body.name,
+      body.participantIds ?? [],
+    );
+    const group = this.mapGroupChat(thread);
+    return {
+      success: true,
+      message: 'Group chat created successfully.',
+      data: group,
+      group,
+    };
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Patch('group-chat/:id')
+  async updateGroupChat(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string },
+    @Body() body: UpdateGroupChatDto,
+  ) {
+    const thread = await this.coreDatabase.updateGroupThread(id, user.id, body.name);
+    const group = this.mapGroupChat(thread);
+    return {
+      success: true,
+      message: 'Group chat updated successfully.',
+      data: group,
+      group,
+    };
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Delete('group-chat/:id')
+  async deleteGroupChat(@Param('id') id: string, @CurrentUser() user: { id: string }) {
+    return {
+      success: true,
+      message: 'Group chat deleted successfully.',
+      data: await this.coreDatabase.deleteGroupThread(id, user.id),
+    };
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Post('group-chat/:id/members')
+  async addGroupChatMember(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string },
+    @Body() body: GroupChatMemberDto,
+  ) {
+    const identifier = body.userId?.trim() || body.username?.trim() || '';
+    const thread = await this.coreDatabase.addThreadParticipant(
+      id,
+      user.id,
+      identifier,
+      body.role ?? 'member',
+    );
+    const group = this.mapGroupChat(thread);
+    return {
+      success: true,
+      message: 'Group member added successfully.',
+      data: group,
+      group,
+    };
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Delete('group-chat/:id/members/:userId')
+  async removeGroupChatMember(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @CurrentUser() user: { id: string },
+  ) {
+    const thread = await this.coreDatabase.removeThreadParticipant(id, user.id, userId);
+    const group = this.mapGroupChat(thread);
+    return {
+      success: true,
+      message: 'Group member removed successfully.',
+      data: group,
+      group,
+    };
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Patch('group-chat/:id/members/:userId/role')
+  async updateGroupChatMemberRole(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @CurrentUser() user: { id: string },
+    @Body() body: GroupChatMemberDto,
+  ) {
+    const thread = await this.coreDatabase.updateThreadParticipantRole(
+      id,
+      user.id,
+      userId,
+      body.role ?? 'member',
+    );
+    const group = this.mapGroupChat(thread);
+    return {
+      success: true,
+      message: 'Group member role updated successfully.',
       data: group,
       group,
     };

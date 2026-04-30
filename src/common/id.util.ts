@@ -34,7 +34,8 @@ export type IdPrefix =
   | 'collection'
   | 'collection_item'
   | 'campaign'
-  | 'txn';
+  | 'txn'
+  | 'subscription';
 
 export function makeId<T extends IdPrefix>(prefix: T): `${T}_${string}` {
   return `${prefix}_${randomUUID().replace(/-/g, '')}` as `${T}_${string}`;

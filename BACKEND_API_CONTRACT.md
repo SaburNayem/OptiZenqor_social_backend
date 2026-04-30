@@ -139,6 +139,18 @@ Reels are database-backed through the reels persistence service.
 
 These routes are database-backed and should be treated as authenticated-first.
 
+### `GET /group-chat`
+### `GET /group-chat/:id`
+### `POST /group-chat`
+### `PATCH /group-chat/:id`
+### `DELETE /group-chat/:id`
+### `POST /group-chat/:id/members`
+### `DELETE /group-chat/:id/members/:userId`
+### `PATCH /group-chat/:id/members/:userId/role`
+
+Group chat management is now database-backed through `chat_threads` and
+`chat_thread_participants`, including persisted member roles.
+
 ## Notifications contract
 
 ### `GET /notifications`
@@ -258,6 +270,13 @@ List responses return compatibility aliases in `data.communities` or `data.pages
 Returns the authenticated user wallet account plus transaction list.
 
 ### `GET /monetization/overview`
+
+### `POST /subscriptions/change-plan`
+### `POST /subscriptions/cancel`
+### `POST /subscriptions/renew`
+
+Subscription mutations are now backed by persisted `app_subscriptions` rows and
+return the active subscription payload in the standard success wrapper.
 
 Returns:
 

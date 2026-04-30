@@ -64,6 +64,73 @@ export class MonetizationDatabaseService {
     return subscriptions.map((item) => this.mapSubscription(item));
   }
 
+  async changeSubscriptionPlan(userId: string, planId: string) {
+    const plan = await this.prisma.premiumPlan.findFirstOrThrow({
+      where: { id: planId, isActive: true },
+    });
+
+    await this.prisma.subscription.updateMany({
+      where: {
+        userId,
+        status: { in: ['active', 'trialing', 'current'] },
+      },
+      data: {
+        status: 'changed',
+        autoRenew: false,
+        updatedAt: new Date(),
+      },
+    });
+
+    const subscription = await this.prisma.subscription.create({
+      data: {
+        id: makeId('subscription'),
+        userId,
+        planId: plan.id,
+        planCode: plan.code,
+        provider: 'internal',
+        providerRef: `manual_${Date.now()}`,
+        status: 'active',
+        autoRenew: true,
+        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        metadata: {
+          source: 'app_change_plan',
+        },
+      },
+      include: { plan: true },
+    });
+
+    return this.mapSubscription(subscription);
+  }
+
+  async cancelSubscription(userId: string, subscriptionId?: string) {
+    const subscription = await this.findUserSubscription(userId, subscriptionId);
+    const updated = await this.prisma.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        status: 'cancelled',
+        autoRenew: false,
+        updatedAt: new Date(),
+      },
+      include: { plan: true },
+    });
+    return this.mapSubscription(updated);
+  }
+
+  async renewSubscription(userId: string, subscriptionId?: string) {
+    const subscription = await this.findUserSubscription(userId, subscriptionId);
+    const updated = await this.prisma.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        status: 'active',
+        autoRenew: true,
+        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        updatedAt: new Date(),
+      },
+      include: { plan: true },
+    });
+    return this.mapSubscription(updated);
+  }
+
   async getNotificationCampaigns() {
     const campaigns = await this.prisma.notificationCampaign.findMany({
       orderBy: { createdAt: 'desc' },
@@ -177,5 +244,21 @@ export class MonetizationDatabaseService {
           : {},
       createdAt: item.createdAt.toISOString(),
     };
+  }
+
+  private async findUserSubscription(userId: string, subscriptionId?: string) {
+    return this.prisma.subscription.findFirstOrThrow({
+      where: subscriptionId
+        ? {
+            id: subscriptionId,
+            userId,
+          }
+        : {
+            userId,
+            status: { not: 'changed' },
+          },
+      include: { plan: true },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 }

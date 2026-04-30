@@ -240,6 +240,7 @@ model ChatThread {
 model ChatThreadParticipant {
   threadId   String     @map("thread_id")
   userId     String     @map("user_id")
+  role       String     @default("member") @map("role")
   createdAt  DateTime   @db.Timestamptz(6) @map("created_at")
   thread     ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
   user       AppUser    @relation(fields: [userId], references: [id], onDelete: Cascade)

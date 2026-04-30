@@ -680,6 +680,41 @@ export class CreateChatThreadDto {
   participantIds?: string[];
 }
 
+export class CreateGroupChatDto {
+  @ApiProperty()
+  @IsString()
+  name!: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  participantIds?: string[];
+}
+
+export class UpdateGroupChatDto {
+  @ApiProperty()
+  @IsString()
+  name!: string;
+}
+
+export class GroupChatMemberDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  username?: string;
+
+  @ApiPropertyOptional({ enum: ['admin', 'moderator', 'member'] })
+  @IsOptional()
+  @IsIn(['admin', 'moderator', 'member'])
+  role?: 'admin' | 'moderator' | 'member';
+}
+
 export class UpdateChatPreferencesDto {
   @ApiProperty({ type: 'object', additionalProperties: true })
   @IsObject()
@@ -1293,6 +1328,19 @@ export class EndCallSessionDto {
   @IsOptional()
   @IsString()
   reason?: string;
+}
+
+export class ChangeSubscriptionPlanDto {
+  @ApiProperty()
+  @IsString()
+  planId!: string;
+}
+
+export class ManageSubscriptionDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  subscriptionId?: string;
 }
 
 export class MarkNotificationReadDto {
