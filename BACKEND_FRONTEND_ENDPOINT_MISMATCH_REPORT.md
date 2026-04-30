@@ -31,6 +31,9 @@ This report compares the current frontend endpoint contract in `../OptiZenqor_so
 | `GET /live-stream` | Exists | Now reads durable PostgreSQL live stream sessions. |
 | `GET /live-stream/setup` | Exists | Now resolves authenticated DB-backed setup payloads. |
 | `GET /live-stream/studio` | Exists | Now resolves authenticated DB-backed studio payloads. |
+| `POST /live-stream` | Exists | Flutter live-stream setup now creates a durable backend stream before going live. |
+| `PATCH /live-stream/:id/start` | Exists | Flutter live-stream start now persists backend lifecycle state. |
+| `PATCH /live-stream/:id/end` | Exists | Flutter live-stream end now persists backend lifecycle state. |
 | `GET/POST /live-stream/:id/comments` | Exists | Now persisted in PostgreSQL. |
 | `GET/POST /live-stream/:id/reactions` | Exists | Now persisted in PostgreSQL. |
 | `GET /archive/posts` | Exists | Now reads user-scoped archived post state from PostgreSQL. |
@@ -38,6 +41,8 @@ This report compares the current frontend endpoint contract in `../OptiZenqor_so
 | `GET /archive/reels` | Exists | Now reads user-scoped archived reel state from PostgreSQL. |
 | `GET /hide/posts/all` | Exists | Now reads user-scoped hidden post state from PostgreSQL. |
 | `GET /hidden-posts` | Exists | Now reads user-scoped hidden post state from PostgreSQL. |
+| `DELETE /hidden-posts/:targetId` | Exists | Flutter hidden-posts restore now uses the backend instead of local-only feed state. |
+| `POST /hide/posts/:postId` | Exists | Flutter feed hide-post action now persists through backend hide routes. |
 | `POST /group-chat` | Exists | Group chat creation is now database-backed. |
 | `PATCH /group-chat/:id` | Exists | Group rename/update is now database-backed. |
 | `DELETE /group-chat/:id` | Exists | Group delete is now database-backed. |
@@ -57,7 +62,7 @@ This report compares the current frontend endpoint contract in `../OptiZenqor_so
 | `/marketplace` detail/checkout/products | Exists | Frontend fallback mismatch | Backend marketplace routes are available, but frontend repository still falls back silently and derives sellers/categories/chat locally when payloads are incomplete. Files: `src/controllers/marketplace.controller.ts`, `../OptiZenqor_social/lib/feature/marketplace/repository/marketplace_repository.dart`. |
 | `/admin/*` and `/admin/auth/*` | Exists | Static/mock/in-memory | Admin dashboard, reports, moderation, audit, and demo auth/session flows still depend on `PlatformDataService` and `AdminOpsDataService`, including seeded demo accounts and non-durable admin session state. Files: `src/controllers/admin.controller.ts`, `src/controllers/admin-ops.controller.ts`, `src/data/platform-data.service.ts`, `src/data/admin-ops-data.service.ts`, `prisma/schema.prisma`. |
 | `/onboarding/*` | Exists | Persistence mismatch | Routes are still part of the broader utility migration set. |
-| `/live-stream` lifecycle mutations beyond comments/reactions | Partial | Capability gap | Durable reads, comments, and reactions are live, but the start/end/studio moderation workflow is still not a full mobile CRUD slice. |
+| `/live-stream` moderation/studio mutations beyond start/end/comment | Partial | Capability gap | Durable create/start/end/comment flows are live in Flutter, but deeper moderation/studio preference persistence still needs a dedicated mutation slice. |
 | `/hide/*` for non-post targets | Partial | Capability gap | Post hide/unhide is durable; other target types still need end-to-end mobile coverage. |
 
 ## Backend-Only Hardening Completed
@@ -91,4 +96,4 @@ This report compares the current frontend endpoint contract in `../OptiZenqor_so
 2. Remove hardcoded Flutter trending data and align `/trending` and `/hashtags` on the backend with durable/derived DB-backed queries only.
 3. Eliminate remaining marketplace fallback branches so seller, category, offer, and chat state does not silently degrade to local derivation.
 4. Replace `src/data/*` admin and moderation dashboard sources with durable admin/session/audit/moderation persistence.
-5. Finish the remaining live-stream lifecycle and non-post hide/archive flows.
+5. Finish the remaining live-stream moderation/studio preference mutations and non-post hide/archive flows.

@@ -690,3 +690,14 @@ Frontend and backend are considered aligned only when:
 - docs match actual responses
 
 At that point, the backend becomes the single system of record for the Flutter social app.
+
+## Current migration note
+
+As of 2026-04-30 in the local workspaces:
+
+- hidden post hide/restore flows in the Flutter feed are expected to use `/hide/posts/:postId` and `/hidden-posts/:targetId`
+- hidden-post list UI is expected to read `/hidden-posts`
+- live stream setup still begins from `/live-stream/setup`, but shipped lifecycle actions should create/start/end through `/live-stream`, `/live-stream/:id/start`, and `/live-stream/:id/end`
+- moderator chat replies during live sessions should post through `/live-stream/:id/comments`
+
+These flows should no longer treat local controller state as authoritative production state.

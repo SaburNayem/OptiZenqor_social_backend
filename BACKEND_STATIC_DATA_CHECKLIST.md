@@ -64,6 +64,8 @@ This means the backend is database-backed, but not yet a pure Prisma-only codeba
 - Live stream list/detail/setup/studio/comments/reactions are now durable against `app_live_stream_*` tables
 - Hidden-post and archive read/write state for posts/stories/reels are now durable against `app_user_hidden_entities` and `app_user_archived_entities`
 - Subscription plan change/cancel/renew routes are now durable against `app_subscriptions`
+- Flutter feed hide/unhide state now uses the durable hidden-post routes instead of `HomeFeedController` local-only state
+- Flutter live-stream lifecycle now uses durable create/start/end/comment routes instead of setup-only UI state
 
 ## Remaining static dependency hotspots
 

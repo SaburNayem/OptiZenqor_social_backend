@@ -55,11 +55,18 @@ This is a backend-first audit of the current `Socity_backend` workspace, now cro
   - `../OptiZenqor_social/lib/feature/calls/repository/calls_repository.dart`
   - `../OptiZenqor_social/lib/feature/calls/controller/calls_controller.dart`
   - `../OptiZenqor_social/lib/feature/calls/screen/calls_screen.dart`
+- Hidden-posts feed state now uses backend hide/hidden-post routes instead of `HomeFeedController` local-only authority:
+  - `../OptiZenqor_social/lib/feature/home_feed/repository/home_feed_repository.dart`
+  - `../OptiZenqor_social/lib/feature/home_feed/controller/home_feed_controller.dart`
+  - `../OptiZenqor_social/lib/feature/home_feed/screen/home_feed_screen.dart`
+  - `../OptiZenqor_social/lib/feature/home_feed/screen/hidden_posts_screen.dart`
+- Live-stream setup/create/start/end/comment reply is now routed through backend persistence:
+  - `../OptiZenqor_social/lib/feature/live_stream/repository/live_stream_repository.dart`
+  - `../OptiZenqor_social/lib/feature/live_stream/controller/live_stream_controller.dart`
+  - `../OptiZenqor_social/lib/feature/live_stream/screen/live_broadcast_screen.dart`
 - Remaining high-risk mismatch areas from the endpoint map are still concentrated in:
   - chat thread settings and presence
-  - live stream setup/comments/reactions
   - onboarding and app utility routes
-  - archive/hide/hidden post flows
   - admin/support helper routes still backed by `src/data/*`
 
 ## Latest Completed Files
@@ -145,6 +152,9 @@ This is a backend-first audit of the current `Socity_backend` workspace, now cro
 - `GET /live-stream/:id`
 - `GET /live-stream/setup`
 - `GET /live-stream/studio`
+- `POST /live-stream`
+- `PATCH /live-stream/:id/start`
+- `PATCH /live-stream/:id/end`
 - `GET /live-stream/:id/comments`
 - `POST /live-stream/:id/comments`
 - `GET /live-stream/:id/reactions`
@@ -185,7 +195,8 @@ This is a backend-first audit of the current `Socity_backend` workspace, now cro
 - Group chat screen no longer stops at a backend-placeholder error for create/add/remove actions; it now posts to durable group chat mutation routes.
 - Subscription plan selection no longer stays device-local only; it now posts to `/subscriptions/change-plan` before updating local cache.
 - Support utility payloads now read durable FAQ/ticket/conversation state, while support mail contact details remain environment configuration rather than user data.
-- The remaining live-stream lifecycle UI is still a migration target.
+- Hidden posts no longer remain device-local only in the feed; hide and restore now round-trip through backend routes and the hidden-posts screen loads the persisted backend list.
+- Live-stream screen no longer stops at setup-only data; start/end lifecycle and moderator reply comments now persist through backend live-stream routes.
 - Account switching, activity session management, and verification request screens can now rely on authenticated DB-backed state instead of snapshot-backed app extension memory.
 
 ## Latest Verification
@@ -220,6 +231,8 @@ This is a backend-first audit of the current `Socity_backend` workspace, now cro
 - On 2026-04-29, `account-switching.controller.ts`, `activity-sessions.controller.ts`, and `verification-request.controller.ts` moved off snapshot-backed app extension state by introducing `AppExtensionsDatabaseService`.
 - On 2026-04-30, `realtime.controller.ts` moved `group-chat` and `calls` reads plus call session creation/end flows onto authenticated backend state instead of seeded ecosystem payloads, and the frontend calls feature was switched from local repository data to the backend API.
 - On 2026-04-30, `realtime.controller.ts` gained durable group-chat create/update/delete/member-management routes and `engagement.controller.ts` gained durable subscription change/cancel/renew routes, with matching frontend repository integrations.
+- On 2026-04-30, `realtime.controller.ts` added validated live-stream create/start/end lifecycle DTO usage, while the Flutter live-stream screen moved from UI-local lifecycle state to backend create/start/end/comment calls.
+- On 2026-04-30, the Flutter home feed and hidden-posts screens stopped using `HomeFeedController` local-only hidden state as the source of truth and now read/write hidden-post persistence through `/hidden-posts` and `/hide/posts/:postId`.
 - The backend currently uses a deliberate hybrid database access style: Prisma for many newer modules and raw `pg` for the core social/auth layer.
 - Remaining seeded dependencies for the current target slice are now concentrated in support/app-utility controllers and live-stream lifecycle areas beyond the new durable list/detail/comment/reaction routes.
 - Latest verification for completed areas: `npm.cmd install`, `npx.cmd prisma generate`, `npx.cmd prisma migrate dev`, `npm.cmd run typecheck`, `npm.cmd run build`, `flutter pub get`, and `dart analyze lib --no-fatal-warnings` all pass, with frontend warnings remaining non-fatal.

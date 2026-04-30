@@ -5,6 +5,7 @@ import { SessionAuthGuard } from '../auth/session-auth.guard';
 import {
   CreateGroupChatDto,
   CreateCallSessionDto,
+  CreateLiveStreamDto,
   EndCallSessionDto,
   GroupChatMemberDto,
   LiveCommentDto,
@@ -305,16 +306,7 @@ export class RealtimeController {
   @Post('live-stream')
   async createLiveStream(
     @CurrentUser() user: { id: string },
-    @Body()
-    body: {
-      title?: string;
-      description?: string;
-      category?: string;
-      location?: string;
-      audience?: string;
-      quickOptions?: unknown[];
-      previewImageUrl?: string;
-    },
+    @Body() body: CreateLiveStreamDto,
   ) {
     const stream = await this.socialStateDatabase.createLiveStream(user.id, {
       title: body.title ?? 'Go live',
