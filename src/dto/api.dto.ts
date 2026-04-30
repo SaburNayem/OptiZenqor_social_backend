@@ -968,6 +968,13 @@ export class ArchiveEntityDto {
   @ApiProperty()
   @IsString()
   targetId!: string;
+
+  @ApiPropertyOptional({
+    enum: ['post', 'story', 'reel', 'product', 'event', 'job', 'community', 'page'],
+  })
+  @IsOptional()
+  @IsIn(['post', 'story', 'reel', 'product', 'event', 'job', 'community', 'page'])
+  targetType?: 'post' | 'story' | 'reel' | 'product' | 'event' | 'job' | 'community' | 'page';
 }
 
 export class CreateEventDto {

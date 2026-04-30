@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Headers, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { ArchiveEntityDto, PaginationQueryDto } from '../dto/api.dto';
@@ -13,6 +23,22 @@ export class ArchiveController {
     private readonly socialStateDatabase: SocialStateDatabaseService,
     private readonly coreDatabase: CoreDatabaseService,
   ) {}
+
+  @Get()
+  async getArchivedItems(
+    @Query('targetType') targetType: ArchiveEntityDto['targetType'],
+    @Query() query: PaginationQueryDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const resolvedTargetType = targetType?.trim() as ArchiveEntityDto['targetType'];
+    const payload = await this.socialStateDatabase.listArchivedEntities(
+      user.id,
+      resolvedTargetType ?? 'post',
+      query,
+    );
+    return this.wrapListResponse('Archived items fetched successfully.', payload);
+  }
 
   @Get('posts')
   async getArchivedPosts(
@@ -45,6 +71,25 @@ export class ArchiveController {
     return {
       success: true,
       message: 'Post archived successfully.',
+      data: archived,
+      archived,
+    };
+  }
+
+  @Delete('posts/:targetId')
+  async unarchivePost(
+    @Param('targetId') targetId: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const archived = await this.socialStateDatabase.unarchiveEntity(
+      user.id,
+      targetId,
+      'post',
+    );
+    return {
+      success: true,
+      message: 'Post unarchived successfully.',
       data: archived,
       archived,
     };
@@ -86,6 +131,25 @@ export class ArchiveController {
     };
   }
 
+  @Delete('stories/:targetId')
+  async unarchiveStory(
+    @Param('targetId') targetId: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const archived = await this.socialStateDatabase.unarchiveEntity(
+      user.id,
+      targetId,
+      'story',
+    );
+    return {
+      success: true,
+      message: 'Story unarchived successfully.',
+      data: archived,
+      archived,
+    };
+  }
+
   @Get('reels')
   async getArchivedReels(
     @Query() query: PaginationQueryDto,
@@ -117,6 +181,68 @@ export class ArchiveController {
     return {
       success: true,
       message: 'Reel archived successfully.',
+      data: archived,
+      archived,
+    };
+  }
+
+  @Delete('reels/:targetId')
+  async unarchiveReel(
+    @Param('targetId') targetId: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const archived = await this.socialStateDatabase.unarchiveEntity(
+      user.id,
+      targetId,
+      'reel',
+    );
+    return {
+      success: true,
+      message: 'Reel unarchived successfully.',
+      data: archived,
+      archived,
+    };
+  }
+
+  @Post(':targetType')
+  async archiveItemByType(
+    @Param('targetType') targetType: string,
+    @Body() body: ArchiveEntityDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId?.trim() || body.actorId?.trim(),
+    );
+    const archived = await this.socialStateDatabase.archiveEntity(
+      user.id,
+      targetType as NonNullable<ArchiveEntityDto['targetType']>,
+      body.targetId,
+    );
+    return {
+      success: true,
+      message: 'Item archived successfully.',
+      data: archived,
+      archived,
+    };
+  }
+
+  @Delete(':targetType/:targetId')
+  async unarchiveItemByType(
+    @Param('targetType') targetType: string,
+    @Param('targetId') targetId: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const archived = await this.socialStateDatabase.unarchiveEntity(
+      user.id,
+      targetId,
+      targetType as NonNullable<ArchiveEntityDto['targetType']>,
+    );
+    return {
+      success: true,
+      message: 'Item unarchived successfully.',
       data: archived,
       archived,
     };

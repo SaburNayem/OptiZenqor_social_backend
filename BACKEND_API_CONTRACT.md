@@ -189,6 +189,21 @@ Bookmarks are persisted in PostgreSQL.
 
 Draft and scheduling metadata are persisted in PostgreSQL.
 
+### `GET /archive`
+### `GET /archive/posts`
+### `GET /archive/stories`
+### `GET /archive/reels`
+### `POST /archive/posts`
+### `POST /archive/stories`
+### `POST /archive/reels`
+### `POST /archive/:targetType`
+### `DELETE /archive/posts/:targetId`
+### `DELETE /archive/stories/:targetId`
+### `DELETE /archive/reels/:targetId`
+### `DELETE /archive/:targetType/:targetId`
+
+Archive state is persisted in `app_user_archived_entities`. The generic target path now supports durable archive state for `post`, `story`, `reel`, `product`, `event`, `job`, `community`, and `page`.
+
 ### `GET /saved-collections`
 ### `GET /saved-collections/:id`
 ### `POST /saved-collections`

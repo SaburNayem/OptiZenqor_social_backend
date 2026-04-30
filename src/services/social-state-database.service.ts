@@ -12,7 +12,15 @@ import { ReelsDatabaseService } from './reels-database.service';
 import { StoriesDatabaseService } from './stories-database.service';
 
 type TargetType = 'post' | 'story' | 'reel' | 'comment';
-type ArchiveTargetType = 'post' | 'story' | 'reel';
+type ArchiveTargetType =
+  | 'post'
+  | 'story'
+  | 'reel'
+  | 'product'
+  | 'event'
+  | 'job'
+  | 'community'
+  | 'page';
 
 @Injectable()
 export class SocialStateDatabaseService {
@@ -210,7 +218,7 @@ export class SocialStateDatabaseService {
     targetType: ArchiveTargetType,
     targetId: string,
   ) {
-    await this.assertEntityExists(targetType, targetId);
+    await this.assertArchivedEntityExists(targetType, targetId);
     const row = await this.prisma.userArchivedEntity.upsert({
       where: {
         userId_targetId_targetType: {
@@ -237,6 +245,26 @@ export class SocialStateDatabaseService {
       targetType: row.targetType,
       archived: true,
       createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  async unarchiveEntity(
+    userId: string,
+    targetId: string,
+    targetType?: ArchiveTargetType,
+  ) {
+    const deleted = await this.prisma.userArchivedEntity.deleteMany({
+      where: {
+        userId,
+        targetId,
+        ...(targetType ? { targetType } : {}),
+      },
+    });
+    return {
+      targetId,
+      targetType: targetType ?? 'post',
+      archived: false,
+      removedCount: deleted.count,
     };
   }
 
@@ -702,6 +730,70 @@ export class SocialStateDatabaseService {
     }
   }
 
+  private async assertArchivedEntityExists(
+    targetType: ArchiveTargetType,
+    targetId: string,
+  ) {
+    switch (targetType) {
+      case 'post':
+        await this.coreDatabase.getPost(targetId);
+        return;
+      case 'story':
+        await this.storiesDatabase.getStory(targetId);
+        return;
+      case 'reel':
+        await this.reelsDatabase.getReel(targetId);
+        return;
+      case 'product': {
+        const product = await this.prisma.marketplaceProduct.findFirst({
+          where: { id: targetId, deletedAt: null },
+        });
+        if (!product) {
+          throw new NotFoundException(`Marketplace product ${targetId} not found.`);
+        }
+        return;
+      }
+      case 'event': {
+        const event = await this.prisma.event.findFirst({
+          where: { id: targetId, deletedAt: null },
+        });
+        if (!event) {
+          throw new NotFoundException(`Event ${targetId} not found.`);
+        }
+        return;
+      }
+      case 'job': {
+        const job = await this.prisma.job.findFirst({
+          where: { id: targetId, deletedAt: null },
+        });
+        if (!job) {
+          throw new NotFoundException(`Job ${targetId} not found.`);
+        }
+        return;
+      }
+      case 'community': {
+        const community = await this.prisma.community.findFirst({
+          where: { id: targetId, deletedAt: null },
+        });
+        if (!community) {
+          throw new NotFoundException(`Community ${targetId} not found.`);
+        }
+        return;
+      }
+      case 'page': {
+        const page = await this.prisma.page.findFirst({
+          where: { id: targetId, deletedAt: null },
+        });
+        if (!page) {
+          throw new NotFoundException(`Page ${targetId} not found.`);
+        }
+        return;
+      }
+      default:
+        throw new NotFoundException(`Unsupported archive target type ${targetType}.`);
+    }
+  }
+
   private async resolveArchivedEntity(targetType: string, targetId: string) {
     switch (targetType) {
       case 'post':
@@ -710,6 +802,26 @@ export class SocialStateDatabaseService {
         return this.storiesDatabase.getStory(targetId).catch(() => null);
       case 'reel':
         return this.reelsDatabase.getReel(targetId).catch(() => null);
+      case 'product':
+        return this.prisma.marketplaceProduct
+          .findFirst({ where: { id: targetId, deletedAt: null } })
+          .catch(() => null);
+      case 'event':
+        return this.prisma.event
+          .findFirst({ where: { id: targetId, deletedAt: null } })
+          .catch(() => null);
+      case 'job':
+        return this.prisma.job
+          .findFirst({ where: { id: targetId, deletedAt: null } })
+          .catch(() => null);
+      case 'community':
+        return this.prisma.community
+          .findFirst({ where: { id: targetId, deletedAt: null } })
+          .catch(() => null);
+      case 'page':
+        return this.prisma.page
+          .findFirst({ where: { id: targetId, deletedAt: null } })
+          .catch(() => null);
       default:
         return null;
     }

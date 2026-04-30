@@ -22,10 +22,16 @@ Updated: 2026-04-30
 - `POST /live-stream/:id/reactions`
 - `GET /archive/posts`
 - `POST /archive/posts`
+- `DELETE /archive/posts/:targetId`
 - `GET /archive/stories`
 - `POST /archive/stories`
+- `DELETE /archive/stories/:targetId`
 - `GET /archive/reels`
 - `POST /archive/reels`
+- `DELETE /archive/reels/:targetId`
+- `GET /archive`
+- `POST /archive/:targetType`
+- `DELETE /archive/:targetType/:targetId`
 - `GET /hide/posts/all`
 - `POST /hide/posts/:postId`
 - `DELETE /hide/posts/:postId`
