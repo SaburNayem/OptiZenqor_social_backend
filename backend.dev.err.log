@@ -1,4 +1,22 @@
-[31m[Nest] 6340  - [39m05/01/2026, 9:49:33 PM [31m  ERROR[39m [38;5;3m[NestApplication] [39m[31mError: listen EADDRINUSE: address already in use 0.0.0.0:3000[39m[38;5;3m +3ms[39m
+[31m[Nest] 19540  - [39m05/01/2026, 10:03:35 PM [31m  ERROR[39m [38;5;3m[NestApplication] [39m[31mError: listen EADDRINUSE: address already in use 0.0.0.0:3000[39m[38;5;3m +3ms[39m
+Error: listen EADDRINUSE: address already in use 0.0.0.0:3000
+    at Server.setupListenHandle [as _listen2] (node:net:1948:16)
+    at listenInCluster (node:net:2005:12)
+    at node:net:2214:7
+    at processTicksAndRejections (node:internal/process/task_queues:90:21)
+[31m[Nest] 3332  - [39m05/01/2026, 10:21:56 PM [31m  ERROR[39m [38;5;3m[NestApplication] [39m[31mError: listen EADDRINUSE: address already in use 0.0.0.0:3000[39m[38;5;3m +3ms[39m
+Error: listen EADDRINUSE: address already in use 0.0.0.0:3000
+    at Server.setupListenHandle [as _listen2] (node:net:1948:16)
+    at listenInCluster (node:net:2005:12)
+    at node:net:2214:7
+    at processTicksAndRejections (node:internal/process/task_queues:90:21)
+[31m[Nest] 7580  - [39m05/01/2026, 10:42:10 PM [31m  ERROR[39m [38;5;3m[NestApplication] [39m[31mError: listen EADDRINUSE: address already in use 0.0.0.0:3000[39m[38;5;3m +3ms[39m
+Error: listen EADDRINUSE: address already in use 0.0.0.0:3000
+    at Server.setupListenHandle [as _listen2] (node:net:1948:16)
+    at listenInCluster (node:net:2005:12)
+    at node:net:2214:7
+    at processTicksAndRejections (node:internal/process/task_queues:90:21)
+31m[Nest] 3544  - [39m05/01/2026, 10:41:48 PM [31m  ERROR[39m [38;5;3m[NestApplication] [39m[31mError: listen EADDRINUSE: address already in use 0.0.0.0:3000[39m[38;5;3m +3ms[39m
 Error: listen EADDRINUSE: address already in use 0.0.0.0:3000
     at Server.setupListenHandle [as _listen2] (node:net:1948:16)
     at listenInCluster (node:net:2005:12)

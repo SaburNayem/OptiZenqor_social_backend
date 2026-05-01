@@ -1,23 +1,29 @@
 import { Body, Controller, Get, Headers, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { EcosystemDataService } from '../data/ecosystem-data.service';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { ChangeSubscriptionPlanDto, ManageSubscriptionDto } from '../dto/api.dto';
+import { AppUtilityDatabaseService } from '../services/app-utility-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { MonetizationDatabaseService } from '../services/monetization-database.service';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('engagement')
 @Controller()
 export class EngagementController {
   constructor(
-    private readonly ecosystemData: EcosystemDataService,
+    private readonly appUtilityDatabase: AppUtilityDatabaseService,
     private readonly coreDatabase: CoreDatabaseService,
     private readonly monetizationDatabase: MonetizationDatabaseService,
   ) {}
 
   @Get('invite-referral')
-  getReferral() {
-    return this.ecosystemData.getReferral();
+  @UseGuards(SessionAuthGuard)
+  async getReferral(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Invite referral fetched successfully.',
+      await this.appUtilityDatabase.getReferralOverview(user.id),
+    );
   }
 
   @Get('premium-membership')

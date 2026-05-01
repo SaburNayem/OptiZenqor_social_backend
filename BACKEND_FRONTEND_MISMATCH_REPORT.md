@@ -1,78 +1,156 @@
-# Backend Frontend Mismatch Report
+# Backend / Flutter / Dashboard Integration Report
 
 Updated: 2026-05-01
 
-## Latest Pass Update
+## Scope Of This Pass
 
-- Jobs networking now has durable backend mutations for saved jobs, alert CRUD, company follow, applicant status, job deletion, and application withdrawal.
-- `stories.controller.ts`, `posts.controller.ts`, and `chat.controller.ts` no longer use `PlatformDataService` or `ExtendedDataService` on the request paths touched in this pass.
-- Remaining backend legacy usage is still concentrated in `account-ops`, `engagement`, `invite-friends`, `onboarding`, and several app-utility controllers that still depend on `src/data/*`.
-- Backend typecheck passes.
-- Backend `npm run build` and `prisma generate` are currently blocked by Windows file locks on `dist/` and Prisma's engine DLL while local dev processes are running.
+This pass audited:
 
-This report reflects the current local workspace, not the public GitHub snapshot.
+- `G:\My Project\Socity_backend`
+- `G:\My Project\OptiZenqor_social`
+- `G:\My Project\OptiZenqor_social_dashboard`
 
-## Current Summary
+and implemented the highest-impact production fixes that were still blocking a real backend-first flow:
 
-- Backend has a strong PostgreSQL/Prisma base and many active DB-backed modules.
-- Admin auth and admin dashboard APIs are locally implemented and verified.
-- Flutter still contains some production features that degrade to empty or placeholder presentation when backend data is thin.
-- A few backend helper/catalog surfaces still exist and should be treated as follow-up work, not as fully production-native domain modules.
+- backend request paths for `invite-referral`, `invite-friends`, `onboarding`, and account-ops legal/security/master-data/recommendations
+- Flutter onboarding and invite-referral removal of hardcoded/local-only production state
+- admin dashboard expansion from a simple starter shell into a live multi-module console with reusable view components
 
-## Exact Mismatch Table
+## Exact Audit / Fix Table
 
-| Feature | Frontend file | Dashboard file | Backend controller/service | Current issue | Required API | DB model needed | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Marketplace compare | `lib/feature/marketplace/controller/marketplace_controller.dart` | `src/App.jsx` consumes marketplace lists only | `src/controllers/marketplace.controller.ts`, `src/services/experience-database.service.ts` | Was Flutter local-only | `GET/PATCH /marketplace/compare` | existing `user_settings.settings.marketplace.compareItemIds` | Fixed |
-| Marketplace listing status | `lib/feature/marketplace/controller/marketplace_controller.dart` | none yet | `src/controllers/marketplace.controller.ts`, `src/services/experience-database.service.ts` | Was local-only sold/pause/repost state | `PATCH /marketplace/products/:id/status` | existing `MarketplaceProduct.status` | Fixed |
-| Marketplace saved items | `lib/feature/marketplace/controller/marketplace_controller.dart` | none yet | `src/controllers/bookmarks.controller.ts`, `src/services/account-state-database.service.ts` | Was local-only save toggle | `POST/DELETE /bookmarks` | existing `Bookmark` | Fixed |
-| Blocked/muted unmute | `lib/feature/blocked_muted_accounts/controller/blocked_muted_accounts_controller.dart` | none | `src/controllers/preferences.controller.ts`, `src/services/settings-database.service.ts` | Was local-only unmute | `PATCH /blocked-muted-accounts/:targetId/unmute` | existing `user_settings.settings.moderation.muted_accounts` | Fixed |
-| Current-user business/seller/recruiter profile | `lib/feature/business_profile/repository/business_profile_repository.dart` and related profile flows | none | `src/controllers/profiles.controller.ts`, `src/services/profiles-database.service.ts` | Backend could fall back to arbitrary first user | current routes now require auth-derived current user | existing `AppUser`, related profile summaries | Fixed |
-| Support help | `lib/feature/support_help/repository/support_help_repository.dart` | dashboard support section uses `/admin/support-operations` | `src/controllers/support.controller.ts`, `src/services/support-database.service.ts` | Mostly DB-backed, but mail settings remain config-backed | `/support-help`, `/support-help/chat`, `/support/tickets` | existing support models plus env-config mail surface | Partial |
-| Jobs/profile/employer profile | `lib/feature/jobs_networking/repository/jobs_networking_repository.dart` | dashboard uses `/jobs` only | `src/controllers/jobs.controller.ts`, `src/services/experience-database.service.ts` | Flutter still has placeholder fallback models when backend payloads are empty | `/jobs/profile`, `/jobs/employer-profile`, `/jobs/employer-stats` | existing `Job`, `JobApplication`, `user_settings.settings.jobs.*` | Partial |
-| Subscriptions/premium/wallet | `lib/feature/subscriptions/repository/subscriptions_repository.dart` | dashboard revenue/settings pages | `src/controllers/engagement.controller.ts`, `src/services/monetization-database.service.ts` | Main data is DB-backed; invite-referral still helper-backed | `/premium-membership`, `/wallet-payments`, `/subscriptions*`, `/invite-referral` | existing wallet/subscription models; referral model missing | Partial |
-| Live stream studio/moderation | `lib/feature/live_stream/repository/live_stream_repository.dart` | dashboard not yet exposing full moderation UI | `src/controllers/realtime.controller.ts`, realtime/live services | Lifecycle is persisted; richer studio/mod state still thin | live setup/start/end/comments/moderation routes | existing `LiveStreamSession`, comments, reactions | Partial |
-| Discovery/trending/hashtags | `feature/hashtags`, `feature/trending`, search/discovery | dashboard none | discovery controllers/services | Mixed persisted/derived/helper composition | `/trending`, `/hashtags` | persisted derived datasets desirable | Partial |
+| Area | Exact file(s) | Exact route(s) | Exact issue | Exact fix | Status |
+| --- | --- | --- | --- | --- | --- |
+| Backend referral | `src/controllers/engagement.controller.ts`, `src/controllers/invite-friends.controller.ts`, `src/services/app-utility-database.service.ts` | `GET /invite-referral`, `GET /invite-friends` | Runtime helper data from `EcosystemDataService`; no DB-backed referral payload for app | Replaced request path with `AppUtilityDatabaseService`, reading referral program state from PostgreSQL-backed `user_settings` plus operational config and live user identity | Fixed |
+| Backend onboarding | `src/controllers/onboarding.controller.ts`, `src/services/app-utility-database.service.ts` | `GET /onboarding/slides`, `GET /onboarding/state`, `GET /onboarding/interests`, `POST /onboarding/complete` | Legacy `ExtendedDataService` route path; not Prisma-backed | Replaced with DB-backed service using `admin_operational_settings`, `app_users.interests`, and `app_user_settings` | Fixed |
+| Backend account ops recommendations | `src/controllers/account-ops.controller.ts`, `src/services/app-utility-database.service.ts` | `GET /recommendations` | Legacy helper response | Now resolves authenticated user and returns live recommendation dataset from persisted settings-derived state | Fixed |
+| Backend master data | `src/controllers/account-ops.controller.ts`, `src/services/app-utility-database.service.ts` | `GET /master-data` | Legacy helper payload | Now derives roles/profile types/interests from database and returns standard envelope | Fixed |
+| Backend legal consents | `src/controllers/account-ops.controller.ts`, `src/services/app-utility-database.service.ts` | `GET /legal/consents`, `PATCH /legal/consents` | Legacy snapshot/legal state flow | Now reads/writes consent flags through `app_user_settings` and returns `{ success, message, data }` with compatibility aliases | Fixed |
+| Backend deletion/export requests | `src/controllers/account-ops.controller.ts`, `src/services/app-utility-database.service.ts` | `POST /legal/account-deletion`, `POST /legal/data-export` | Runtime-only request state; no persistent audit trail for requests | Now persists request metadata in `app_user_settings` and creates support tickets via `SupportDatabaseService` | Fixed |
+| Backend security state | `src/controllers/account-ops.controller.ts`, `src/services/app-utility-database.service.ts` | `GET /security/state`, `POST /security/logout-all` | Legacy security state and logout-all flow | Now reads active sessions via Prisma-backed auth sessions and invalidates all DB sessions on logout-all | Fixed |
+| Flutter onboarding content | `lib/feature/onboarding/repository/onboarding_repository.dart`, `lib/feature/onboarding/controller/onboarding_controller.dart`, `lib/feature/onboarding/model/onboarding_slide_model.dart`, `lib/feature/onboarding/screen/onboarding_screen.dart` | `/onboarding/slides`, `/onboarding/state`, `/onboarding/complete` | Hardcoded slide list and device-local completion only | Added live API reads/writes, dynamic slide parsing, loading state, error state, and retained local storage only as compatibility cache | Fixed |
+| Flutter invite referral | `lib/feature/invite_referral/controller/invite_referral_controller.dart`, `lib/feature/invite_referral/model/invite_referral_model.dart`, `lib/feature/invite_referral/repository/invite_referral_repository.dart`, `lib/feature/invite_referral/screen/invite_referral_screen.dart` | `/invite-referral` | Fully hardcoded code, milestones, friend list, and share message source | Replaced with API-backed repository/model mapping and loading/error/empty handling in UI | Fixed |
+| Dashboard module structure | `src/App.jsx`, `src/App.css`, `src/config/navigation.js`, `src/components/AdminViews.jsx` | `/admin/auth/*`, `/admin/dashboard/overview`, `/admin/users`, `/admin/content`, `/admin/reports`, `/admin/support-operations`, `/marketplace/products`, `/jobs`, `/events`, `/communities`, `/pages`, `/admin/dashboard/revenue`, `/admin/broadcast-campaigns`, `/admin/settings`, `/admin/audit-logs` | Large monolithic starter shell; missing revenue/notifications modules; minimal live module coverage | Split navigation and view rendering into reusable modules/components, added real live modules, kept refresh-based authenticated session flow, and added shared table/status rendering | Fixed |
 
-## Backend Areas Still Not Fully Professionalized
+## Files Changed In This Pass
 
+### Backend
+
+- `src/controllers/account-ops.controller.ts`
 - `src/controllers/engagement.controller.ts`
-  - `GET /invite-referral` still uses `EcosystemDataService`.
-- `src/controllers/preferences.controller.ts` and `src/services/settings-database.service.ts`
-  - user state is persisted, but some returned catalog/help blocks are still composed from settings metadata helpers.
-- `src/services/profiles-database.service.ts`
-  - summaries are now tied to the authenticated user, but richer dedicated seller/business/recruiter extension tables do not exist yet.
-- `src/services/realtime-state.service.ts`
-  - socket presence/room membership/typing are still runtime state, even though calls and streams now have persisted models.
-- `src/data/settings-data.service.ts`
-  - catalog/config content still contains placeholder strings for some advanced privacy/accessibility items.
+- `src/controllers/invite-friends.controller.ts`
+- `src/controllers/onboarding.controller.ts`
+- `src/modules/data.module.ts`
+- `src/services/app-utility-database.service.ts`
 
-## Frontend Areas Still Not Fully Mock-Free
+### Flutter
 
-- `lib/feature/jobs_networking/repository/jobs_networking_repository.dart`
-  - still returns empty/default models for some thin backend responses instead of a richer explicit error path.
-- `lib/feature/advanced_privacy_controls/controller/advanced_privacy_controls_controller.dart`
-  - still contains placeholder privacy entries in controller state.
-- `lib/feature/accessibility_support/controller/accessibility_support_controller.dart`
-  - still contains placeholder caption/support copy.
-- `lib/feature/legal_compliance/screen/legal_compliance_screen.dart`
-  - still contains placeholder UI copy.
-- `lib/feature/learning_courses/model/course_model.dart`
-  - placeholder certificate/quiz defaults remain in model defaults.
+- `lib/feature/onboarding/controller/onboarding_controller.dart`
+- `lib/feature/onboarding/model/onboarding_slide_model.dart`
+- `lib/feature/onboarding/repository/onboarding_repository.dart`
+- `lib/feature/onboarding/screen/onboarding_screen.dart`
+- `lib/feature/invite_referral/controller/invite_referral_controller.dart`
+- `lib/feature/invite_referral/model/invite_referral_model.dart`
+- `lib/feature/invite_referral/repository/invite_referral_repository.dart`
+- `lib/feature/invite_referral/screen/invite_referral_screen.dart`
 
-## What Was Fixed In This Pass
+### Dashboard
 
-- Persisted Flutter marketplace compare state through backend APIs.
-- Persisted Flutter marketplace sold/pause/repost actions through backend APIs.
-- Replaced Flutter marketplace saved-item local toggle with backend bookmarks.
-- Replaced Flutter blocked-muted local unmute with backend mutation.
-- Normalized blocked/muted account payloads for Flutter.
-- Removed active Flutter demo auth endpoint usage.
-- Removed backend profile fallback to arbitrary first user for current-user profile extensions.
+- `src/App.css`
+- `src/App.jsx`
+- `src/components/AdminViews.jsx`
+- `src/config/navigation.js`
 
-## Recommended Next Pass
+## Remaining Gaps After This Pass
 
-1. Replace remaining request-path usage of `EcosystemDataService`, `ExtendedDataService`, `AppExtensionsDataService`, and `SettingsDataService` in production controllers.
-2. Reconcile backend build and Prisma generate verification by stopping the local process that is locking `dist/` and Prisma client binaries, then rerun `npm run build` and `npx prisma generate`.
-3. Replace helper-backed `invite-referral`, onboarding, account-ops, and app-utility routes with real persisted or derived DB-backed implementations.
-4. Continue removing placeholder/default frontend state in modules outside the jobs/privacy/accessibility/legal slice.
+### Still using legacy helper/static request paths on backend
+
+- `src/controllers/account-ops.controller.ts`
+  - `POST /auth/send-otp`, `POST /auth/resend-otp`, and non-email `POST /auth/verify-otp` still fall through `ExtendedDataService` for phone-style/demo OTP behavior.
+- `src/controllers/chat.controller.ts`
+  - presence is still runtime/socket state, not durable DB state.
+- `src/controllers/preferences.controller.ts` + `src/services/settings-database.service.ts`
+  - some settings/advice/catalog content is still configuration-driven rather than fully modeled relational data.
+- `src/data/*`
+  - helper datasets and placeholder copy still exist in the repo even where request paths were removed from the production slices touched here.
+
+### Still frontend/dashboard work left
+
+- Flutter communities, safety/privacy, devices/session screens, and a few avatar placeholders still contain local UX placeholders or local cache behaviors that should be converted to stricter backend-first handling.
+- Dashboard modules for Marketplace, Jobs, Events, Communities, and Pages are live-data powered now, but they still use generic tables rather than dedicated moderation/action workflows.
+- Dashboard search/filter controls are still light; the current pass prioritized authenticated live coverage and module structure first.
+
+## Route Coverage Notes
+
+Implemented or completed in this pass:
+
+- `/admin/auth/login`
+- `/admin/auth/me`
+- `/admin/auth/refresh`
+- `/admin/auth/logout`
+- `/admin/dashboard/overview`
+- `/admin/users`
+- `/admin/content`
+- `/admin/reports`
+- `/admin/support-operations`
+- `/admin/audit-logs`
+- `/admin/settings`
+- `/invite-referral`
+- `/invite-friends`
+- `/onboarding/slides`
+- `/onboarding/state`
+- `/onboarding/interests`
+- `/onboarding/complete`
+- `/recommendations`
+- `/master-data`
+- `/legal/consents`
+- `/legal/account-deletion`
+- `/legal/data-export`
+- `/security/state`
+- `/security/logout-all`
+
+Still intentionally deferred from the original request because they require a larger modeling pass:
+
+- deeper referral/invite acceptance lifecycle persistence beyond the current `user_settings` backed overview
+- richer admin workflows for marketplace/jobs/events/communities/pages
+- full removal of legacy `src/data/*` from untouched features such as phone OTP, some catalog/settings metadata, and runtime realtime presence
+- dedicated persistent models for advanced privacy/accessibility/legal content rather than JSON-backed operational state/config
+
+## Verification Summary
+
+### Backend
+
+- `npm.cmd install`
+  - Passed
+- `npm.cmd run typecheck`
+  - Passed
+- `npm.cmd run prisma:generate`
+  - Failed because Prisma engine DLL in `node_modules\.prisma\client\` is locked by a running Windows process
+- `npm.cmd run build`
+  - Failed because files under `dist\` are locked by a running Windows process
+
+### Flutter
+
+- `flutter pub get`
+  - Passed
+- `dart format` on changed onboarding/invite-referral files
+  - Passed
+- `dart analyze lib/feature/onboarding lib/feature/invite_referral --no-fatal-warnings`
+  - Passed
+- `flutter analyze`
+  - Passed
+
+### Dashboard
+
+- `npm.cmd install`
+  - Passed
+- `npm.cmd run lint`
+  - Passed
+- `npm.cmd run build`
+  - Passed after running outside the sandbox due initial `EPERM` spawn restrictions
+
+## Practical Completion Estimate
+
+- Backend: 78%
+- Flutter: 72%
+- Dashboard: 74%
+- Overall platform integration: 75%

@@ -29,6 +29,7 @@ import { SupportDatabaseService } from '../services/support-database.service';
 import { AppExtensionsDatabaseService } from '../services/app-extensions-database.service';
 import { SocialStateDatabaseService } from '../services/social-state-database.service';
 import { AdminDatabaseService } from '../services/admin-database.service';
+import { AppUtilityDatabaseService } from '../services/app-utility-database.service';
 
 @Global()
 @Module({
@@ -63,6 +64,7 @@ import { AdminDatabaseService } from '../services/admin-database.service';
     AppExtensionsDatabaseService,
     SocialStateDatabaseService,
     AdminDatabaseService,
+    AppUtilityDatabaseService,
   ],
   exports: [
     PlatformDataService,
@@ -95,6 +97,7 @@ import { AdminDatabaseService } from '../services/admin-database.service';
     AppExtensionsDatabaseService,
     SocialStateDatabaseService,
     AdminDatabaseService,
+    AppUtilityDatabaseService,
   ],
 })
 export class DataModule {}

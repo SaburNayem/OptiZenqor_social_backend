@@ -3,6 +3,8 @@ import { ApiTags } from '@nestjs/swagger';
 import { ExtendedDataService } from '../data/extended-data.service';
 import { ResendOtpDto, SendOtpDto, VerifyOtpDto } from '../dto/api.dto';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
+import { AppExtensionsDatabaseService } from '../services/app-extensions-database.service';
+import { AppUtilityDatabaseService } from '../services/app-utility-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { MailService } from '../services/mail.service';
 import { MonetizationDatabaseService } from '../services/monetization-database.service';
@@ -24,6 +26,8 @@ export class AccountOpsController {
     private readonly mailService: MailService,
     private readonly socialStateDatabase: SocialStateDatabaseService,
     private readonly supportDatabase: SupportDatabaseService,
+    private readonly appExtensionsDatabase: AppExtensionsDatabaseService,
+    private readonly appUtilityDatabase: AppUtilityDatabaseService,
   ) {}
 
   @Post('auth/send-otp')
@@ -96,8 +100,13 @@ export class AccountOpsController {
   }
 
   @Get('recommendations')
-  getRecommendations() {
-    return this.extendedData.getRecommendations();
+  async getRecommendations(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return {
+      success: true,
+      message: 'Recommendations fetched successfully.',
+      data: await this.appUtilityDatabase.getRecommendations(user.id),
+    };
   }
 
   @Get('chat/presence')
@@ -173,23 +182,50 @@ export class AccountOpsController {
   }
 
   @Get('master-data')
-  getMasterData() {
-    return this.extendedData.getMasterData();
+  async getMasterData() {
+    return {
+      success: true,
+      message: 'Master data fetched successfully.',
+      data: await this.appUtilityDatabase.getMasterData(),
+    };
   }
 
   @Get('legal/consents')
-  getLegalConsents() {
-    return this.extendedData.getLegalState();
+  async getLegalConsents(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const data = await this.appUtilityDatabase.getLegalConsents(user.id);
+    return {
+      success: true,
+      message: 'Legal consents fetched successfully.',
+      data,
+      result: data,
+    };
   }
 
   @Patch('legal/consents')
-  updateLegalConsents(@Body() body: Record<string, boolean>) {
-    return this.extendedData.updateLegalConsents(body);
+  async updateLegalConsents(
+    @Body() body: Record<string, boolean>,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return {
+      success: true,
+      message: 'Legal consents updated successfully.',
+      data: await this.appUtilityDatabase.updateLegalConsents(user.id, body),
+    };
   }
 
   @Post('legal/account-deletion')
-  requestAccountDeletion(@Body() body: { reason?: string }) {
-    return this.extendedData.requestAccountDeletion(body.reason);
+  async requestAccountDeletion(
+    @Body() body: { reason?: string },
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return {
+      success: true,
+      message: 'Account deletion requested successfully.',
+      data: await this.appUtilityDatabase.requestAccountDeletion(user.id, body.reason),
+    };
   }
 
   @Post('legal/data-export')
@@ -197,37 +233,40 @@ export class AccountOpsController {
     @Body() body: { format?: string; userId?: string },
     @Headers('authorization') authorization?: string,
   ) {
-    const exportRequest = await this.extendedData.requestDataExport(body.format);
     const userId = await this.resolveExportUserId(body.userId, authorization);
-    const user = await this.coreDatabase.getUser(userId);
-    const posts = await this.coreDatabase.getPosts(userId);
-    const reels = await this.reelsDatabase.getReels(userId);
-    const summary = {
-      username: user.username,
-      posts: posts.length,
-      reels: reels.length,
-      followers: user.followers,
-      following: user.following,
-      verificationStatus: user.verificationStatus,
-    };
+    const exportRequest = await this.appUtilityDatabase.requestDataExport(userId, body.format);
 
     return {
-      ...exportRequest,
-      message: 'Export requested',
+      success: true,
+      message: 'Data export requested successfully.',
       userId,
-      data: summary,
-      result: summary,
+      data: exportRequest.summary,
+      result: exportRequest.summary,
+      exportRequest,
     };
   }
 
   @Get('security/state')
-  getSecurityState() {
-    return this.extendedData.getSecurityState();
+  async getSecurityState(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const data = await this.appUtilityDatabase.getSecurityState(user.id);
+    return {
+      success: true,
+      message: 'Security state fetched successfully.',
+      data,
+      result: data,
+    };
   }
 
   @Post('security/logout-all')
-  logoutAll() {
-    return this.extendedData.logoutAllSessions();
+  async logoutAll(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const data = await this.appUtilityDatabase.logoutAllSessions(user.id);
+    return {
+      success: true,
+      message: 'All sessions logged out successfully.',
+      data,
+    };
   }
 
   private async sendEmailOtp(destination: string, verificationStatus: 'sent' | 'resent') {
@@ -278,6 +317,9 @@ export class AccountOpsController {
 
     const token = authorization?.replace(/^Bearer\s+/i, '');
     const user = await this.coreDatabase.resolveUserFromAccessToken(token);
-    return user?.id ?? 'u1';
+    if (!user?.id) {
+      throw new BadRequestException('A valid authenticated user is required for data export.');
+    }
+    return user.id;
   }
 }
