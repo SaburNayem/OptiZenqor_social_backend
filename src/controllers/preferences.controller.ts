@@ -1,6 +1,7 @@
-import { Controller, Get, Headers, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Patch, Query, UseGuards } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
+import { MutedAccountActionDto } from '../dto/api.dto';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { SettingsDatabaseService } from '../services/settings-database.service';
@@ -89,6 +90,33 @@ export class PreferencesController {
     return successResponse(
       'Blocked and muted accounts fetched successfully.',
       await this.settingsDatabase.getBlockedMutedAccounts(user.id),
+    );
+  }
+
+  @Patch('blocked-muted-accounts/:targetId/mute')
+  @UseGuards(SessionAuthGuard)
+  async muteAccount(
+    @Param('targetId') targetId: string,
+    @Body() body: MutedAccountActionDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Account muted successfully.',
+      await this.settingsDatabase.muteAccount(user.id, targetId, body.reason),
+    );
+  }
+
+  @Patch('blocked-muted-accounts/:targetId/unmute')
+  @UseGuards(SessionAuthGuard)
+  async unmuteAccount(
+    @Param('targetId') targetId: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Account unmuted successfully.',
+      await this.settingsDatabase.unmuteAccount(user.id, targetId),
     );
   }
 }

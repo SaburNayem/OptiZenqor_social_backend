@@ -189,14 +189,76 @@ export class SettingsDatabaseService {
       this.accountStateDatabase.getSettingsState(userId),
     ]);
     const state = rawState as Record<string, unknown>;
+    const mutedAccounts = this.readArrayObjects(state['moderation.muted_accounts']).map((item) =>
+      this.normalizeRestrictedAccount(item, 'muted'),
+    );
+    const blockedAccounts = blocked.map((item) => ({
+      id: item.id,
+      name: item.user.name,
+      username: item.user.username,
+      handle: item.user.username ? `@${item.user.username}` : '@account',
+      avatarUrl: item.user.avatar,
+      blockedAt: item.blockedAt,
+      reason: item.reason,
+      status: 'blocked',
+    }));
+
     return {
-      blocked,
-      muted: this.readArrayObjects(state['moderation.muted_accounts']),
-      blockedAccounts: blocked,
-      mutedAccounts: this.readArrayObjects(state['moderation.muted_accounts']),
+      blocked: blockedAccounts,
+      muted: mutedAccounts,
+      blockedAccounts,
+      mutedAccounts,
       restrictedAccounts: this.readArrayObjects(
         state['moderation.restricted_accounts'],
       ),
+    };
+  }
+
+  async muteAccount(actorUserId: string, targetUserId: string, reason?: string) {
+    await this.coreDatabase.getUser(actorUserId);
+    const target = await this.coreDatabase.getUser(targetUserId);
+    const current = (await this.accountStateDatabase.getSettingsState(
+      actorUserId,
+    )) as Record<string, unknown>;
+    const existing = this.readArrayObjects(current['moderation.muted_accounts'])
+      .map((item) => this.normalizeRestrictedAccount(item, 'muted'))
+      .filter((item) => item.id !== targetUserId);
+    const mutedAccount = {
+      id: target.id,
+      name: target.name,
+      username: target.username,
+      handle: target.username ? `@${target.username}` : '@account',
+      avatarUrl: target.avatar,
+      mutedAt: new Date().toISOString(),
+      reason: reason?.trim() || null,
+      status: 'muted',
+    };
+
+    await this.accountStateDatabase.updateSettingsState(actorUserId, {
+      'moderation.muted_accounts': [mutedAccount, ...existing],
+    });
+
+    return mutedAccount;
+  }
+
+  async unmuteAccount(actorUserId: string, targetUserId: string) {
+    await this.coreDatabase.getUser(actorUserId);
+    const current = (await this.accountStateDatabase.getSettingsState(
+      actorUserId,
+    )) as Record<string, unknown>;
+    const existing = this.readArrayObjects(current['moderation.muted_accounts']).map((item) =>
+      this.normalizeRestrictedAccount(item, 'muted'),
+    );
+    const mutedAccount = existing.find((item) => item.id === targetUserId) ?? null;
+
+    await this.accountStateDatabase.updateSettingsState(actorUserId, {
+      'moderation.muted_accounts': existing.filter((item) => item.id !== targetUserId),
+    });
+
+    return {
+      id: targetUserId,
+      removed: true,
+      mutedAccount,
     };
   }
 
@@ -616,6 +678,28 @@ export class SettingsDatabaseService {
             Boolean(item) && typeof item === 'object' && !Array.isArray(item),
         )
       : [];
+  }
+
+  private normalizeRestrictedAccount(
+    value: Record<string, unknown>,
+    status: 'blocked' | 'muted',
+  ) {
+    const username = this.readString(value.username) ?? this.readString(value.handle);
+    const normalizedHandle = username
+      ? username.startsWith('@')
+        ? username
+        : `@${username}`
+      : '@account';
+
+    return {
+      ...value,
+      id: this.readString(value.id) ?? '',
+      name: this.readString(value.name) ?? this.readString(value.displayName) ?? normalizedHandle,
+      username: username?.replace(/^@/, '') ?? '',
+      handle: normalizedHandle,
+      avatarUrl: this.readString(value.avatarUrl) ?? this.readString(value.avatar) ?? '',
+      status,
+    };
   }
 
   private readArrayLength(value: unknown) {

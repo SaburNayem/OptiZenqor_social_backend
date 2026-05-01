@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { makeId } from '../common/id.util';
 import {
@@ -90,7 +90,17 @@ export class ExperienceDatabaseService {
         : undefined,
     };
     const orderBy = this.resolveMarketplaceOrder(query.sort, query.order);
-    const [products, totalProducts, orders, followedSellerRows, draftRows, conversationRows, offerRows] =
+    const [
+      products,
+      totalProducts,
+      orders,
+      followedSellerRows,
+      draftRows,
+      conversationRows,
+      offerRows,
+      bookmarkRows,
+      compareState,
+    ] =
       await Promise.all([
       this.prisma.marketplaceProduct.findMany({
         where,
@@ -144,6 +154,16 @@ export class ExperienceDatabaseService {
             take: 50,
           })
         : Promise.resolve([]),
+      userId
+        ? this.prisma.bookmark.findMany({
+            where: {
+              userId,
+              productId: { not: null },
+            },
+            orderBy: { createdAt: 'desc' },
+          })
+        : Promise.resolve([]),
+      userId ? this.getMarketplaceCompareState(userId) : Promise.resolve({ productIds: [] }),
     ]);
 
     const mappedProducts = await Promise.all(products.map((row) => this.mapMarketplaceProduct(row)));
@@ -162,6 +182,8 @@ export class ExperienceDatabaseService {
       sellers,
       orders: orders.map((row) => this.mapMarketplaceOrder(row)),
       drafts: draftRows.map((row) => this.mapMarketplaceDraft(row)),
+      savedItemIds: bookmarkRows.map((row) => row.entityId),
+      compareItemIds: compareState.productIds,
       followedSellerIds,
       chatMessages: conversationRows
         .flatMap((row) => row.messages)
@@ -302,6 +324,38 @@ export class ExperienceDatabaseService {
     };
   }
 
+  async getMarketplaceCompareState(userId: string) {
+    const settings = await this.getUserSettingsState(userId);
+    const marketplace = this.toObject(settings.marketplace);
+    return {
+      productIds: this.readStringArray(marketplace.compareItemIds).slice(0, 3),
+    };
+  }
+
+  async updateMarketplaceCompareState(userId: string, productIds: string[]) {
+    const normalizedIds = [...new Set(productIds.map((item) => item.trim()).filter(Boolean))].slice(0, 3);
+    if (normalizedIds.length > 0) {
+      const matchingProducts = await this.prisma.marketplaceProduct.findMany({
+        where: {
+          id: { in: normalizedIds },
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (matchingProducts.length !== normalizedIds.length) {
+        throw new BadRequestException('One or more marketplace compare items were not found.');
+      }
+    }
+
+    await this.mergeUserSettingsState(userId, {
+      marketplace: {
+        compareItemIds: normalizedIds,
+      },
+    });
+
+    return this.getMarketplaceCompareState(userId);
+  }
+
   async createMarketplaceProduct(body: CreateProductDto) {
     await this.coreDatabase.getUser(body.sellerId);
     const product = await this.prisma.marketplaceProduct.create({
@@ -319,6 +373,35 @@ export class ExperienceDatabaseService {
         status: 'active',
       },
     });
+    return this.mapMarketplaceProduct(product);
+  }
+
+  async updateMarketplaceProductStatus(
+    productId: string,
+    sellerId: string,
+    status: 'active' | 'sold' | 'expired',
+  ) {
+    const existing = await this.prisma.marketplaceProduct.findFirst({
+      where: {
+        id: productId,
+        deletedAt: null,
+      },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Marketplace product ${productId} not found`);
+    }
+    if (existing.sellerId !== sellerId) {
+      throw new ForbiddenException('You can only update your own marketplace listings.');
+    }
+
+    const product = await this.prisma.marketplaceProduct.update({
+      where: { id: productId },
+      data: {
+        status,
+        updatedAt: new Date(),
+      },
+    });
+
     return this.mapMarketplaceProduct(product);
   }
 
@@ -1688,6 +1771,7 @@ export class ExperienceDatabaseService {
       location: row.location ?? '',
       images: Array.isArray(row.images) ? row.images : [],
       status: row.status,
+      listingStatus: row.status,
       stock: row.stock,
       watchers: row.watchers,
       views: row.views,

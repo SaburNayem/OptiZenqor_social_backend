@@ -9,8 +9,10 @@ import {
   CreateMarketplaceOrderDto,
   CreateProductDto,
   MarketplaceProductsQueryDto,
+  UpdateMarketplaceCompareDto,
   UpdateMarketplaceDraftDto,
   UpdateMarketplaceOfferDto,
+  UpdateMarketplaceProductStatusDto,
 } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { ExperienceDatabaseService } from '../services/experience-database.service';
@@ -121,6 +123,43 @@ export class MarketplaceController {
     return successResponse(
       'Marketplace product fetched successfully.',
       await this.experienceDatabase.getMarketplaceProduct(id),
+    );
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Get('compare')
+  async getMarketplaceCompare(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Marketplace compare state fetched successfully.',
+      await this.experienceDatabase.getMarketplaceCompareState(user.id),
+    );
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Patch('compare')
+  async updateMarketplaceCompare(
+    @Body() body: UpdateMarketplaceCompareDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Marketplace compare state updated successfully.',
+      await this.experienceDatabase.updateMarketplaceCompareState(user.id, body.productIds),
+    );
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Patch('products/:id/status')
+  async updateMarketplaceProductStatus(
+    @Param('id') id: string,
+    @Body() body: UpdateMarketplaceProductStatusDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Marketplace product status updated successfully.',
+      await this.experienceDatabase.updateMarketplaceProductStatus(id, user.id, body.status),
     );
   }
 

@@ -1418,6 +1418,19 @@ export class UpdateMarketplaceOfferDto {
   note?: string;
 }
 
+export class UpdateMarketplaceCompareDto {
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @IsString({ each: true })
+  productIds!: string[];
+}
+
+export class UpdateMarketplaceProductStatusDto {
+  @ApiProperty({ enum: ['active', 'sold', 'expired'] })
+  @IsIn(['active', 'sold', 'expired'])
+  status!: 'active' | 'sold' | 'expired';
+}
+
 export class LiveCommentDto {
   @ApiPropertyOptional()
   @IsOptional()
@@ -1616,6 +1629,13 @@ export class VotePollDto {
   @ApiProperty()
   @IsNumber()
   optionIndex!: number;
+}
+
+export class MutedAccountActionDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }
 
 export class ToggleInterestDto {
