@@ -3,6 +3,10 @@ import { ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
 import {
+  UpdateLiveStreamModerationDto,
+  UpdateLiveStreamStudioDto,
+} from '../dto/admin.dto';
+import {
   CreateGroupChatDto,
   CreateCallSessionDto,
   CreateLiveStreamDto,
@@ -303,6 +307,21 @@ export class RealtimeController {
   }
 
   @UseGuards(SessionAuthGuard)
+  @Patch('live-stream/studio')
+  async updateLiveStreamStudio(
+    @CurrentUser() user: { id: string },
+    @Body() body: UpdateLiveStreamStudioDto,
+  ) {
+    const studio = await this.socialStateDatabase.updateLiveStreamStudio(user.id, body);
+    return {
+      success: true,
+      message: 'Live stream studio updated successfully.',
+      data: studio,
+      studio,
+    };
+  }
+
+  @UseGuards(SessionAuthGuard)
   @Post('live-stream')
   async createLiveStream(
     @CurrentUser() user: { id: string },
@@ -344,6 +363,26 @@ export class RealtimeController {
     return {
       success: true,
       message: 'Live stream ended successfully.',
+      data: stream,
+      stream,
+    };
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Patch('live-stream/:id/moderation')
+  async updateLiveStreamModeration(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string },
+    @Body() body: UpdateLiveStreamModerationDto,
+  ) {
+    const stream = await this.socialStateDatabase.updateLiveStreamModeration(
+      id,
+      user.id,
+      body,
+    );
+    return {
+      success: true,
+      message: 'Live stream moderation updated successfully.',
       data: stream,
       stream,
     };

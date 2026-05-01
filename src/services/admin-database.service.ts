@@ -9,11 +9,15 @@ import * as argon2 from 'argon2';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { makeId } from '../common/id.util';
+import { CoreDatabaseService } from './core-database.service';
 import { PrismaService } from './prisma.service';
 
 @Injectable()
 export class AdminDatabaseService implements OnModuleInit {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly coreDatabase: CoreDatabaseService,
+  ) {}
 
   async onModuleInit() {
     await this.ensureDefaultAdmin();
@@ -78,13 +82,94 @@ export class AdminDatabaseService implements OnModuleInit {
       message: 'Admin login successful.',
       data: {
         token: session.accessToken,
+        accessToken: session.accessToken,
         refreshToken: session.refreshToken,
         session: this.mapAdminSession(session, admin),
       },
     };
   }
 
+  async refreshAdminSession(refreshToken: string) {
+    const session = await this.prisma.adminSession.findUnique({
+      where: { refreshToken: refreshToken.trim() },
+      include: { admin: true },
+    });
+    if (!session || session.revokedAt || session.expiresAt <= new Date()) {
+      throw new UnauthorizedException('Invalid or expired admin refresh token.');
+    }
+
+    const refreshed = await this.prisma.adminSession.update({
+      where: { id: session.id },
+      data: {
+        accessToken: `admin_access_${randomUUID().replace(/-/g, '')}`,
+        refreshToken: `admin_refresh_${randomUUID().replace(/-/g, '')}`,
+        lastActive: new Date(),
+        current: true,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
+      },
+      include: { admin: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId: refreshed.adminId,
+      action: 'admin.session.refresh',
+      entityType: 'admin_session',
+      entityId: refreshed.id,
+      metadata: {
+        email: refreshed.admin.email,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Admin session refreshed successfully.',
+      data: {
+        token: refreshed.accessToken,
+        accessToken: refreshed.accessToken,
+        refreshToken: refreshed.refreshToken,
+        session: this.mapAdminSession(refreshed, refreshed.admin),
+      },
+    };
+  }
+
+  async logoutAdmin(accessToken?: string) {
+    const session = await this.resolveAdminSession(accessToken);
+    const revoked = await this.prisma.adminSession.update({
+      where: { id: session.id },
+      data: {
+        current: false,
+        revokedAt: new Date(),
+        lastActive: new Date(),
+      },
+      include: { admin: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId: revoked.adminId,
+      action: 'admin.logout',
+      entityType: 'admin_session',
+      entityId: revoked.id,
+      metadata: {
+        email: revoked.admin.email,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Admin logout successful.',
+      data: {
+        sessionId: revoked.id,
+        loggedOut: true,
+      },
+    };
+  }
+
   async getAdminMe(accessToken?: string) {
+    const session = await this.resolveAdminSession(accessToken);
+    return this.mapAdminSession(session, session.admin);
+  }
+
+  async getAuthenticatedAdmin(accessToken?: string) {
     const session = await this.resolveAdminSession(accessToken);
     return this.mapAdminSession(session, session.admin);
   }
@@ -589,6 +674,188 @@ export class AdminDatabaseService implements OnModuleInit {
     };
   }
 
+  async getDashboardOverview() {
+    const [
+      userCount,
+      activeUserCount,
+      postCount,
+      reelCount,
+      storyCount,
+      reportCount,
+      openReportCount,
+      supportOpenCount,
+      moderationOpenCount,
+      activeSubscriptions,
+      revenueAggregate,
+    ] = await Promise.all([
+      this.prisma.appUser.count(),
+      this.prisma.appUser.count({ where: { blocked: false } }),
+      this.prisma.appPost.count({ where: { deletedAt: null } }),
+      this.prisma.reel.count({ where: { deletedAt: null } }),
+      this.prisma.story.count({ where: { deletedAt: null } }),
+      this.prisma.userReport.count(),
+      this.prisma.userReport.count({ where: { status: { not: 'resolved' } } }),
+      this.prisma.supportTicket.count({ where: { status: 'open' } }),
+      this.prisma.moderationCase.count({ where: { status: { not: 'resolved' } } }),
+      this.prisma.subscription.count({ where: { status: 'active' } }),
+      this.prisma.walletTransaction.aggregate({
+        _sum: { amount: true },
+      }),
+    ]);
+
+    return {
+      totals: {
+        users: userCount,
+        activeUsers: activeUserCount,
+        posts: postCount,
+        reels: reelCount,
+        stories: storyCount,
+        reports: reportCount,
+        openReports: openReportCount,
+        supportTickets: supportOpenCount,
+        moderationCases: moderationOpenCount,
+        activeSubscriptions,
+        revenue: Number(revenueAggregate._sum.amount ?? 0),
+      },
+      health: {
+        moderationQueue: moderationOpenCount,
+        supportQueue: supportOpenCount,
+        reportQueue: openReportCount,
+      },
+    };
+  }
+
+  async getDashboardUsers() {
+    const [recentUsers, roleCounts, verificationCounts] = await Promise.all([
+      this.prisma.appUser.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+      this.prisma.appUser.groupBy({
+        by: ['role'],
+        _count: { role: true },
+      }),
+      this.prisma.appUser.groupBy({
+        by: ['verification'],
+        _count: { verification: true },
+      }),
+    ]);
+
+    return {
+      recentUsers,
+      roleBreakdown: roleCounts.map((row) => ({
+        role: row.role,
+        count: row._count.role,
+      })),
+      verificationBreakdown: verificationCounts.map((row) => ({
+        status: row.verification,
+        count: row._count.verification,
+      })),
+    };
+  }
+
+  async getDashboardContent() {
+    const [recentPosts, recentReels, recentStories] = await Promise.all([
+      this.prisma.appPost.findMany({
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+      this.prisma.reel.findMany({
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+      this.prisma.story.findMany({
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+    ]);
+
+    return {
+      recentPosts,
+      recentReels,
+      recentStories,
+      totals: {
+        posts: await this.prisma.appPost.count({ where: { deletedAt: null } }),
+        reels: await this.prisma.reel.count({ where: { deletedAt: null } }),
+        stories: await this.prisma.story.count({ where: { deletedAt: null } }),
+      },
+    };
+  }
+
+  async getDashboardReports() {
+    const reports = await this.prisma.userReport.findMany({
+      include: {
+        reporter: true,
+        targetUser: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 12,
+    });
+
+    return {
+      recentReports: reports.map((report) => ({
+        id: report.id,
+        status: report.status,
+        reason: report.reason,
+        reporterName: report.reporter.name,
+        targetUserName: report.targetUser?.name ?? null,
+        targetEntityId: report.targetEntityId,
+        targetEntityType: report.targetEntityType,
+        createdAt: report.createdAt.toISOString(),
+      })),
+      totals: {
+        submitted: reports.filter((item) => item.status === 'submitted').length,
+        reviewing: reports.filter((item) => item.status === 'reviewing').length,
+        resolved: reports.filter((item) => item.status === 'resolved').length,
+      },
+    };
+  }
+
+  async getDashboardRevenue() {
+    const [wallet, subscriptions, plans, revenueAggregate] = await Promise.all([
+      this.prisma.walletTransaction.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+      this.prisma.subscription.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+      this.prisma.premiumPlan.findMany({
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.walletTransaction.aggregate({
+        _sum: { amount: true },
+      }),
+    ]);
+
+    return {
+      totalRevenue: Number(revenueAggregate._sum.amount ?? 0),
+      recentTransactions: wallet,
+      subscriptions,
+      plans,
+    };
+  }
+
+  async getDashboardModeration() {
+    const [cases, verificationQueue] = await Promise.all([
+      this.prisma.moderationCase.findMany({
+        include: { assignedAdmin: true },
+        orderBy: { updatedAt: 'desc' },
+        take: 12,
+      }),
+      this.getVerificationQueue(),
+    ]);
+
+    return {
+      moderationCases: cases.map((item) => this.mapModerationCase(item)),
+      verificationQueue: verificationQueue.slice(0, 12),
+    };
+  }
+
   async getDashboardSummary() {
     const [
       users,
@@ -614,6 +881,293 @@ export class AdminDatabaseService implements OnModuleInit {
       openSupportTickets,
       moderationCases,
     };
+  }
+
+  async queryAdminUsers(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    role?: string;
+    status?: string;
+    sort?: string;
+    order?: 'asc' | 'desc';
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const order = query.order === 'asc' ? 'asc' : 'desc';
+    const sortField = this.resolveAdminUserSortField(query.sort);
+    const where: Prisma.AppUserWhereInput = {
+      ...(query.role?.trim() ? { role: query.role.trim() } : {}),
+      ...(query.status?.trim() ? { status: query.status.trim() } : {}),
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { name: { contains: query.search.trim(), mode: 'insensitive' } },
+              { username: { contains: query.search.trim(), mode: 'insensitive' } },
+              { email: { contains: query.search.trim(), mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, items] = await Promise.all([
+      this.prisma.appUser.count({ where }),
+      this.prisma.appUser.findMany({
+        where,
+        orderBy: { [sortField]: order },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return this.wrapPaginated(items, page, limit, total);
+  }
+
+  async updateAdminUser(
+    userId: string,
+    patch: {
+      role?: string;
+      status?: string;
+      verification?: string;
+      blocked?: boolean;
+      note?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    const existing = await this.prisma.appUser.findUnique({
+      where: { id: userId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`User ${userId} not found.`);
+    }
+
+    const updated = await this.prisma.appUser.update({
+      where: { id: userId },
+      data: {
+        role: patch.role?.trim() || undefined,
+        status: patch.status?.trim() || undefined,
+        verification: patch.verification?.trim() || undefined,
+        blocked: patch.blocked ?? undefined,
+        note: patch.note?.trim() || undefined,
+        updatedAt: new Date(),
+      },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'admin.user.update',
+      entityType: 'user',
+      entityId: userId,
+      metadata: patch,
+    });
+
+    return updated;
+  }
+
+  async queryAdminContent(query: {
+    page?: number;
+    limit?: number;
+    targetType?: 'post' | 'reel' | 'story';
+    status?: string;
+    search?: string;
+  }) {
+    const targetType = query.targetType?.trim().toLowerCase() as
+      | 'post'
+      | 'reel'
+      | 'story'
+      | undefined;
+    if (targetType === 'reel') {
+      return this.queryReels(query);
+    }
+    if (targetType === 'story') {
+      return this.queryStories(query);
+    }
+    return this.queryPosts(query);
+  }
+
+  async moderateContent(
+    targetType: 'post' | 'reel' | 'story',
+    id: string,
+    patch: { status?: string; remove?: boolean; note?: string },
+    actorAdminId?: string,
+  ) {
+    const normalizedType = targetType.trim().toLowerCase() as 'post' | 'reel' | 'story';
+    const status = patch.remove ? 'Removed' : patch.status?.trim() || undefined;
+    const deletedAt = patch.remove ? new Date() : undefined;
+
+    if (normalizedType === 'post') {
+      await this.prisma.appPost.update({
+        where: { id },
+        data: {
+          ...(status ? { status } : {}),
+          ...(deletedAt ? { deletedAt } : {}),
+        },
+      });
+    } else if (normalizedType === 'reel') {
+      await this.prisma.reel.update({
+        where: { id },
+        data: {
+          ...(status ? { status } : {}),
+          ...(deletedAt ? { deletedAt } : {}),
+        },
+      });
+    } else {
+      await this.prisma.story.update({
+        where: { id },
+        data: {
+          ...(status ? { status } : {}),
+          ...(deletedAt ? { deletedAt } : {}),
+        },
+      });
+    }
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'admin.content.moderate',
+      entityType: normalizedType,
+      entityId: id,
+      metadata: patch,
+    });
+
+    return this.queryAdminContent({
+      page: 1,
+      limit: 1,
+      targetType: normalizedType,
+      search: id,
+    });
+  }
+
+  async queryReports(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const where: Prisma.UserReportWhereInput = {
+      ...(query.status?.trim() ? { status: query.status.trim() } : {}),
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { reason: { contains: query.search.trim(), mode: 'insensitive' } },
+              { details: { contains: query.search.trim(), mode: 'insensitive' } },
+              { targetEntityId: { contains: query.search.trim(), mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, items] = await Promise.all([
+      this.prisma.userReport.count({ where }),
+      this.prisma.userReport.findMany({
+        where,
+        include: {
+          reporter: true,
+          targetUser: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return this.wrapPaginated(
+      items.map((item) => ({
+        id: item.id,
+        reporterUserId: item.reporterUserId,
+        reporterName: item.reporter.name,
+        targetUserId: item.targetUserId,
+        targetUserName: item.targetUser?.name ?? null,
+        targetEntityId: item.targetEntityId,
+        targetEntityType: item.targetEntityType,
+        reason: item.reason,
+        details: item.details,
+        status: item.status,
+        createdAt: item.createdAt.toISOString(),
+        updatedAt: item.updatedAt.toISOString(),
+      })),
+      page,
+      limit,
+      total,
+    );
+  }
+
+  async updateReport(
+    id: string,
+    patch: { status: string; note?: string },
+    actorAdminId?: string,
+  ) {
+    const existing = await this.prisma.userReport.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Report ${id} not found.`);
+    }
+
+    const updated = await this.prisma.userReport.update({
+      where: { id },
+      data: {
+        status: patch.status,
+        details: patch.note?.trim() || existing.details,
+        updatedAt: new Date(),
+      },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'admin.report.update',
+      entityType: 'user_report',
+      entityId: id,
+      metadata: patch,
+    });
+
+    return updated;
+  }
+
+  async queryAuditLogs(query: {
+    page?: number;
+    limit?: number;
+    entityType?: string;
+    action?: string;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const where: Prisma.AdminAuditLogWhereInput = {
+      ...(query.entityType?.trim() ? { entityType: query.entityType.trim() } : {}),
+      ...(query.action?.trim()
+        ? { action: { contains: query.action.trim(), mode: 'insensitive' } }
+        : {}),
+    };
+    const [total, rows] = await Promise.all([
+      this.prisma.adminAuditLog.count({ where }),
+      this.prisma.adminAuditLog.findMany({
+        where,
+        include: { actorAdmin: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return this.wrapPaginated(
+      rows.map((row) => ({
+        id: row.id,
+        actorAdminId: row.actorAdminId,
+        actorName: row.actorAdmin?.name ?? null,
+        action: row.action,
+        entityType: row.entityType,
+        entityId: row.entityId,
+        metadata: this.readObject(row.metadata),
+        createdAt: row.createdAt.toISOString(),
+      })),
+      page,
+      limit,
+      total,
+    );
   }
 
   async getAdminUsers() {
@@ -704,6 +1258,69 @@ export class AdminDatabaseService implements OnModuleInit {
 
   async getSettings() {
     return this.getOperationalSettings();
+  }
+
+  async registerPushDevice(
+    userId: string,
+    input: { token: string; platform: string; deviceLabel?: string },
+  ) {
+    await this.coreDatabase.getUser(userId);
+    const device = await this.prisma.pushDeviceToken.upsert({
+      where: { token: input.token.trim() },
+      create: {
+        id: makeId('push_device'),
+        userId,
+        token: input.token.trim(),
+        platform: input.platform.trim(),
+        deviceLabel: input.deviceLabel?.trim() || null,
+        isActive: true,
+        lastSeenAt: new Date(),
+      },
+      update: {
+        userId,
+        platform: input.platform.trim(),
+        deviceLabel: input.deviceLabel?.trim() || null,
+        isActive: true,
+        lastSeenAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    return {
+      id: device.id,
+      token: device.token,
+      platform: device.platform,
+      deviceLabel: device.deviceLabel,
+      isActive: device.isActive,
+      lastSeenAt: device.lastSeenAt.toISOString(),
+    };
+  }
+
+  async unregisterPushDevice(userId: string, token: string) {
+    const existing = await this.prisma.pushDeviceToken.findFirst({
+      where: {
+        userId,
+        token: token.trim(),
+      },
+    });
+    if (!existing) {
+      throw new NotFoundException('Push device token not found.');
+    }
+
+    const device = await this.prisma.pushDeviceToken.update({
+      where: { id: existing.id },
+      data: {
+        isActive: false,
+        lastSeenAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    return {
+      id: device.id,
+      token: device.token,
+      isActive: device.isActive,
+    };
   }
 
   private async ensureDefaultAdmin() {
@@ -911,6 +1528,140 @@ export class AdminDatabaseService implements OnModuleInit {
       maintenanceMode: false,
       remoteConfigVersion: '2026.04.30',
       campaignThrottlePerMinute: 1200,
+    };
+  }
+
+  private resolvePage(value?: number) {
+    return value && value > 0 ? value : 1;
+  }
+
+  private resolveLimit(value?: number) {
+    if (!value || value < 1) {
+      return 20;
+    }
+    return Math.min(value, 100);
+  }
+
+  private wrapPaginated(items: unknown[], page: number, limit: number, total: number) {
+    return {
+      items,
+      results: items,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+        hasNextPage: page * limit < total,
+        hasPreviousPage: page > 1,
+      },
+      total,
+      count: items.length,
+    };
+  }
+
+  private resolveAdminUserSortField(sort?: string) {
+    switch (sort) {
+      case 'name':
+        return 'name';
+      case 'followers':
+        return 'followers';
+      case 'following':
+        return 'following';
+      case 'updatedAt':
+        return 'updatedAt';
+      case 'createdAt':
+      default:
+        return 'createdAt';
+    }
+  }
+
+  private async queryPosts(query: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    search?: string;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const where: Prisma.AppPostWhereInput = {
+      ...(query.status?.trim() ? { status: query.status.trim() } : {}),
+      ...(query.search?.trim()
+        ? { caption: { contains: query.search.trim(), mode: 'insensitive' } }
+        : {}),
+    };
+    const [total, items] = await Promise.all([
+      this.prisma.appPost.count({ where }),
+      this.prisma.appPost.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+    return {
+      targetType: 'post',
+      ...this.wrapPaginated(items, page, limit, total),
+    };
+  }
+
+  private async queryReels(query: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    search?: string;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const where: Prisma.ReelWhereInput = {
+      ...(query.status?.trim() ? { status: query.status.trim() } : {}),
+      ...(query.search?.trim()
+        ? { caption: { contains: query.search.trim(), mode: 'insensitive' } }
+        : {}),
+    };
+    const [total, items] = await Promise.all([
+      this.prisma.reel.count({ where }),
+      this.prisma.reel.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+    return {
+      targetType: 'reel',
+      ...this.wrapPaginated(items, page, limit, total),
+    };
+  }
+
+  private async queryStories(query: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    search?: string;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const where: Prisma.StoryWhereInput = {
+      ...(query.status?.trim() ? { status: query.status.trim() } : {}),
+      ...(query.search?.trim()
+        ? { text: { contains: query.search.trim(), mode: 'insensitive' } }
+        : {}),
+    };
+    const [total, items] = await Promise.all([
+      this.prisma.story.count({ where }),
+      this.prisma.story.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+    return {
+      targetType: 'story',
+      ...this.wrapPaginated(items, page, limit, total),
     };
   }
 }

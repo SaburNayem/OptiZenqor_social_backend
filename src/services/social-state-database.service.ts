@@ -508,6 +508,52 @@ export class SocialStateDatabaseService {
     };
   }
 
+  async updateLiveStreamStudio(
+    userId: string,
+    patch: {
+      title?: string;
+      description?: string;
+      category?: string;
+      location?: string;
+      audience?: string;
+      quickOptions?: Record<string, unknown>[];
+      metadata?: Record<string, unknown>;
+      previewImageUrl?: string;
+    },
+  ) {
+    const latest = await this.prisma.liveStreamSession.findFirst({
+      where: { hostId: userId },
+      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+    });
+    if (!latest) {
+      throw new NotFoundException('No live stream studio session found for this host.');
+    }
+
+    await this.prisma.liveStreamSession.update({
+      where: { id: latest.id },
+      data: {
+        title: patch.title?.trim() || undefined,
+        description: patch.description?.trim() || undefined,
+        category: patch.category?.trim() || undefined,
+        location: patch.location?.trim() || undefined,
+        audience: patch.audience?.trim() || undefined,
+        previewImageUrl: patch.previewImageUrl?.trim() || undefined,
+        quickOptions: Array.isArray(patch.quickOptions)
+          ? (patch.quickOptions as Prisma.InputJsonValue)
+          : undefined,
+        metadata: patch.metadata
+          ? (this.mergeObjects(
+              this.readObject(latest.metadata),
+              patch.metadata,
+            ) as Prisma.InputJsonValue)
+          : undefined,
+        updatedAt: new Date(),
+      },
+    });
+
+    return this.getLiveStreamStudio(userId);
+  }
+
   async createLiveStream(
     userId: string,
     input: {
@@ -591,6 +637,45 @@ export class SocialStateDatabaseService {
         updatedAt: new Date(),
       },
     });
+    return this.getLiveStream(streamId);
+  }
+
+  async updateLiveStreamModeration(
+    streamId: string,
+    userId: string,
+    patch: { commentsEnabled?: boolean; slowModeSeconds?: number; note?: string },
+  ) {
+    const stream = await this.prisma.liveStreamSession.findUnique({
+      where: { id: streamId },
+    });
+    if (!stream) {
+      throw new NotFoundException(`Live stream ${streamId} not found.`);
+    }
+    if (stream.hostId !== userId) {
+      throw new ForbiddenException('Only the host can update live stream moderation.');
+    }
+
+    const metadata = this.readObject(stream.metadata);
+    await this.prisma.liveStreamSession.update({
+      where: { id: streamId },
+      data: {
+        metadata: {
+          ...metadata,
+          moderation: {
+            ...(this.readObject(metadata.moderation)),
+            ...(patch.commentsEnabled === undefined
+              ? {}
+              : { commentsEnabled: patch.commentsEnabled }),
+            ...(patch.slowModeSeconds === undefined
+              ? {}
+              : { slowModeSeconds: patch.slowModeSeconds }),
+            ...(patch.note?.trim() ? { note: patch.note.trim() } : {}),
+          },
+        } as Prisma.InputJsonValue,
+        updatedAt: new Date(),
+      },
+    });
+
     return this.getLiveStream(streamId);
   }
 

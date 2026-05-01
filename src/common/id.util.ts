@@ -48,6 +48,7 @@ export type IdPrefix =
   | 'support_message'
   | 'offer'
   | 'admin'
+  | 'push_device'
   | 'audit';
 
 export function makeId<T extends IdPrefix>(prefix: T): `${T}_${string}` {

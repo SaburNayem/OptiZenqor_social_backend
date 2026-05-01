@@ -1,11 +1,13 @@
-import { Body, Controller, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiQuery, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { ApiBody, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { RegisterPushDeviceDto } from '../dto/admin.dto';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
 import {
   CreateNotificationCampaignDto,
   MarkNotificationReadDto,
 } from '../dto/api.dto';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
+import { AdminDatabaseService } from '../services/admin-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { MonetizationDatabaseService } from '../services/monetization-database.service';
 
@@ -16,6 +18,7 @@ export class NotificationsController {
     private readonly coreDatabase: CoreDatabaseService,
     private readonly accountStateDatabase: AccountStateDatabaseService,
     private readonly monetizationDatabase: MonetizationDatabaseService,
+    private readonly adminDatabase: AdminDatabaseService,
   ) {}
 
   @Get()
@@ -87,6 +90,35 @@ export class NotificationsController {
       success: true,
       message: 'Notification campaign created successfully.',
       data: await this.monetizationDatabase.createNotificationCampaign(body),
+    };
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Post('devices')
+  @ApiBody({ type: RegisterPushDeviceDto })
+  async registerDevice(
+    @Body() body: RegisterPushDeviceDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return {
+      success: true,
+      message: 'Push device registered successfully.',
+      data: await this.adminDatabase.registerPushDevice(user.id, body),
+    };
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Delete('devices/:token')
+  async unregisterDevice(
+    @Param('token') token: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return {
+      success: true,
+      message: 'Push device unregistered successfully.',
+      data: await this.adminDatabase.unregisterPushDevice(user.id, token),
     };
   }
 

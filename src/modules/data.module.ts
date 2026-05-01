@@ -5,6 +5,7 @@ import { EcosystemDataService } from '../data/ecosystem-data.service';
 import { ExtendedDataService } from '../data/extended-data.service';
 import { PlatformDataService } from '../data/platform-data.service';
 import { SettingsDataService } from '../data/settings-data.service';
+import { AdminSessionGuard } from '../auth/admin-session.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { CloudinaryUploadService } from '../services/cloudinary-upload.service';
@@ -38,6 +39,7 @@ import { AdminDatabaseService } from '../services/admin-database.service';
     AdminOpsDataService,
     AppExtensionsDataService,
     SettingsDataService,
+    AdminSessionGuard,
     RolesGuard,
     SessionAuthGuard,
     CloudinaryUploadService,
@@ -69,6 +71,7 @@ import { AdminDatabaseService } from '../services/admin-database.service';
     AdminOpsDataService,
     AppExtensionsDataService,
     SettingsDataService,
+    AdminSessionGuard,
     RolesGuard,
     SessionAuthGuard,
     CloudinaryUploadService,
