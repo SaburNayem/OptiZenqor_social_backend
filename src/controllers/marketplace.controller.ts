@@ -41,8 +41,11 @@ export class MarketplaceController {
   }
 
   @Get('create')
-  getMarketplaceCreateOptions() {
-    return this.experienceDatabase.getMarketplaceCreateOptions();
+  async getMarketplaceCreateOptions() {
+    return successResponse(
+      'Marketplace creation options fetched successfully.',
+      await this.experienceDatabase.getMarketplaceCreateOptions(),
+    );
   }
 
   @Get('detail')
@@ -51,7 +54,10 @@ export class MarketplaceController {
     @Headers('authorization') authorization?: string,
   ) {
     const viewer = await this.coreDatabase.requireUserFromAuthorization(authorization).catch(() => null);
-    return this.experienceDatabase.getMarketplaceDetail(id, viewer?.id);
+    return successResponse(
+      'Marketplace detail fetched successfully.',
+      await this.experienceDatabase.getMarketplaceDetail(id, viewer?.id),
+    );
   }
 
   @Get('detail/:id')
@@ -61,13 +67,16 @@ export class MarketplaceController {
   ) {
     const resolvedViewerId =
       (await this.coreDatabase.requireUserFromAuthorization(authorization).catch(() => null))?.id;
-    return this.experienceDatabase.getMarketplaceDetail(id, resolvedViewerId);
+    return successResponse(
+      'Marketplace detail fetched successfully.',
+      await this.experienceDatabase.getMarketplaceDetail(id, resolvedViewerId),
+    );
   }
 
   @Get('checkout')
   async getMarketplaceCheckout(@Query('id') id: string) {
     const product = await this.experienceDatabase.getMarketplaceProduct(id);
-    return {
+    return successResponse('Marketplace checkout state fetched successfully.', {
       product,
       checkoutDefaults: {
         address: 'House 14, Road 7, Dhanmondi, Dhaka',
@@ -77,7 +86,7 @@ export class MarketplaceController {
       deliveryMethods: ['Home delivery', 'Pickup arranged', 'Courier shipping'],
       paymentMethods: ['Cash on delivery', 'Wallet', 'Card'],
       recentOrders: [],
-    };
+    });
   }
 
   @UseGuards(SessionAuthGuard)
@@ -90,7 +99,10 @@ export class MarketplaceController {
       authorization,
       body.buyerId,
     );
-    return this.experienceDatabase.createMarketplaceOrder(buyer.id, body);
+    return successResponse(
+      'Marketplace order created successfully.',
+      await this.experienceDatabase.createMarketplaceOrder(buyer.id, body),
+    );
   }
 
   @Get('products')
@@ -105,8 +117,11 @@ export class MarketplaceController {
   }
 
   @Get('products/:id')
-  getProduct(@Param('id') id: string) {
-    return this.experienceDatabase.getMarketplaceProduct(id);
+  async getProduct(@Param('id') id: string) {
+    return successResponse(
+      'Marketplace product fetched successfully.',
+      await this.experienceDatabase.getMarketplaceProduct(id),
+    );
   }
 
   @UseGuards(SessionAuthGuard)

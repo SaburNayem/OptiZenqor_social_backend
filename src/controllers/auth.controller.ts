@@ -38,26 +38,6 @@ export class AuthController {
     private readonly uploadsDatabase: UploadsDatabaseService,
   ) {}
 
-  @Get('demo-accounts')
-  @ApiOperation({
-    summary: 'List registered test accounts when explicitly enabled',
-    description:
-      'This route is disabled by default and should not be exposed in production. It returns registered accounts without passwords only when AUTH_EXPOSE_TEST_ACCOUNTS=true.',
-  })
-  @ApiOkResponse({
-    description: 'Registered accounts visible for controlled local testing.',
-  })
-  async getDemoAccounts() {
-    if ((process.env.AUTH_EXPOSE_TEST_ACCOUNTS ?? 'false') !== 'true') {
-      throw new UnauthorizedException('Test account listing is disabled.');
-    }
-    return {
-      success: true,
-      message: 'Test accounts fetched successfully.',
-      data: await this.coreDatabase.getDemoAuthAccounts(),
-    };
-  }
-
   @Post('login')
   @ApiOperation({
     summary: 'Login with email and password',

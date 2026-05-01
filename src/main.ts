@@ -103,7 +103,7 @@ async function bootstrap() {
         scheme: 'bearer',
         bearerFormat: 'session-token',
         description:
-          'Admin bearer token. Get it from /admin/auth/login. Demo admin password is admin123.',
+          'Admin bearer token. Get it from /admin/auth/login.',
       },
       'admin-bearer',
     );

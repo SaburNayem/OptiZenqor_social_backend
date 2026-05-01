@@ -65,13 +65,13 @@ export class JobsController {
   }
 
   @Get('jobs/detail')
-  getJobDetail(@Query('id') id: string) {
-    return this.experienceDatabase.getJob(id);
+  async getJobDetail(@Query('id') id: string) {
+    return successResponse('Job fetched successfully.', await this.experienceDatabase.getJob(id));
   }
 
   @Get('jobs/detail/:id')
-  getJobDetailById(@Param('id') id: string) {
-    return this.experienceDatabase.getJob(id);
+  async getJobDetailById(@Param('id') id: string) {
+    return successResponse('Job fetched successfully.', await this.experienceDatabase.getJob(id));
   }
 
   @UseGuards(SessionAuthGuard)
@@ -82,19 +82,22 @@ export class JobsController {
   ) {
     const recruiter = await this.coreDatabase.requireUserFromAuthorization(authorization);
     this.coreDatabase.assertUserCanCreateJobs(recruiter);
-    return this.experienceDatabase.createJob(recruiter.id, body);
+    return successResponse(
+      'Job created successfully.',
+      await this.experienceDatabase.createJob(recruiter.id, body),
+    );
   }
 
   @Get('jobs/apply')
   async getJobApplyState(@Query('id') id: string) {
-    return {
+    return successResponse('Job application state fetched successfully.', {
       job: await this.experienceDatabase.getJob(id),
       defaults: {
         applicantName: 'You',
         resumeRequired: true,
         coverLetterOptional: true,
       },
-    };
+    });
   }
 
   @UseGuards(SessionAuthGuard)
@@ -108,7 +111,10 @@ export class JobsController {
       authorization,
       body.applicantId,
     );
-    return this.experienceDatabase.applyForJob(id, user.id, body.applicantName || user.name);
+    return successResponse(
+      'Job application submitted successfully.',
+      await this.experienceDatabase.applyForJob(id, user.id, body.applicantName || user.name),
+    );
   }
 
   @UseGuards(SessionAuthGuard)
@@ -121,10 +127,13 @@ export class JobsController {
       authorization,
       body.applicantId,
     );
-    return this.experienceDatabase.applyForJob(
-      body.jobId,
-      user.id,
-      body.applicantName || user.name,
+    return successResponse(
+      'Job application submitted successfully.',
+      await this.experienceDatabase.applyForJob(
+        body.jobId,
+        user.id,
+        body.applicantName || user.name,
+      ),
     );
   }
 
@@ -233,8 +242,8 @@ export class JobsController {
   }
 
   @Get('jobs/:id')
-  getJob(@Param('id') id: string) {
-    return this.experienceDatabase.getJob(id);
+  async getJob(@Param('id') id: string) {
+    return successResponse('Job fetched successfully.', await this.experienceDatabase.getJob(id));
   }
 
   @Get('professional-profiles')

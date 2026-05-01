@@ -23,24 +23,6 @@ export class AdminDatabaseService implements OnModuleInit {
     await this.ensureDefaultAdmin();
   }
 
-  async listDemoAccounts() {
-    if ((process.env.ADMIN_EXPOSE_TEST_ACCOUNTS ?? 'false') !== 'true') {
-      throw new UnauthorizedException('Admin test account listing is disabled.');
-    }
-
-    const admins = await this.prisma.adminUser.findMany({
-      where: { isActive: true },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    return admins.map((admin) => ({
-      adminId: admin.id,
-      name: admin.name,
-      email: admin.email,
-      role: admin.role,
-    }));
-  }
-
   async loginAdmin(email: string, password: string) {
     const admin = await this.prisma.adminUser.findUnique({
       where: { email: email.trim().toLowerCase() },
@@ -174,15 +156,18 @@ export class AdminDatabaseService implements OnModuleInit {
     return this.mapAdminSession(session, session.admin);
   }
 
-  async getAdminSessions() {
+  async getAdminSessions(actorAdminId: string) {
+    const actor = await this.getAdminUserById(actorAdminId);
+    const canViewAllSessions = this.hasAdminRole(actor.role, ['Super Admin', 'Operations Admin']);
     const sessions = await this.prisma.adminSession.findMany({
+      where: canViewAllSessions ? undefined : { adminId: actorAdminId },
       include: { admin: true },
       orderBy: { createdAt: 'desc' },
     });
     return sessions.map((session) => this.mapAdminSession(session, session.admin));
   }
 
-  async revokeAdminSession(id: string) {
+  async revokeAdminSession(id: string, actorAdminId?: string) {
     const existing = await this.prisma.adminSession.findUnique({
       where: { id },
       include: { admin: true },
@@ -202,7 +187,7 @@ export class AdminDatabaseService implements OnModuleInit {
     });
 
     await this.createAuditLog({
-      actorAdminId: session.adminId,
+      actorAdminId,
       action: 'admin.session.revoke',
       entityType: 'admin_session',
       entityId: session.id,
@@ -268,6 +253,7 @@ export class AdminDatabaseService implements OnModuleInit {
     userId: string,
     decision: 'approved' | 'rejected',
     note?: string,
+    actorAdminId?: string,
   ) {
     const user = await this.prisma.appUser.findUnique({
       where: { id: userId },
@@ -321,6 +307,7 @@ export class AdminDatabaseService implements OnModuleInit {
     ]);
 
     await this.createAuditLog({
+      actorAdminId,
       action: 'verification.review',
       entityType: 'user',
       entityId: userId,
@@ -345,7 +332,7 @@ export class AdminDatabaseService implements OnModuleInit {
     return items.map((item) => this.mapModerationCase(item));
   }
 
-  async updateModerationCase(id: string, action: string) {
+  async updateModerationCase(id: string, action: string, actorAdminId?: string) {
     const existing = await this.prisma.moderationCase.findUnique({
       where: { id },
     });
@@ -372,6 +359,7 @@ export class AdminDatabaseService implements OnModuleInit {
     });
 
     await this.createAuditLog({
+      actorAdminId,
       action: 'moderation.case.update',
       entityType: 'moderation_case',
       entityId: updated.id,
@@ -384,6 +372,7 @@ export class AdminDatabaseService implements OnModuleInit {
   async updateChatModerationCase(
     id: string,
     patch: { freeze?: boolean; restrictParticipant?: string },
+    actorAdminId?: string,
   ) {
     const existing = await this.prisma.moderationCase.findUnique({
       where: { id },
@@ -410,6 +399,7 @@ export class AdminDatabaseService implements OnModuleInit {
     });
 
     await this.createAuditLog({
+      actorAdminId,
       action: 'moderation.chat.update',
       entityType: 'moderation_case',
       entityId: updated.id,
@@ -431,9 +421,8 @@ export class AdminDatabaseService implements OnModuleInit {
       segmentId: row.audience,
       schedule: row.schedule,
       status: row.status,
-      delivered: 0,
-      openRate: '0%',
       createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
     }));
   }
 
@@ -442,7 +431,7 @@ export class AdminDatabaseService implements OnModuleInit {
     audience: string;
     segmentId: string;
     schedule: string;
-  }) {
+  }, actorAdminId?: string) {
     const item = await this.prisma.notificationCampaign.create({
       data: {
         id: makeId('campaign'),
@@ -454,6 +443,7 @@ export class AdminDatabaseService implements OnModuleInit {
     });
 
     await this.createAuditLog({
+      actorAdminId,
       action: 'campaign.create',
       entityType: 'notification_campaign',
       entityId: item.id,
@@ -467,8 +457,7 @@ export class AdminDatabaseService implements OnModuleInit {
       segmentId: item.audience,
       schedule: item.schedule,
       status: item.status,
-      delivered: 0,
-      openRate: '0%',
+      createdAt: item.createdAt.toISOString(),
     };
   }
 
@@ -543,7 +532,7 @@ export class AdminDatabaseService implements OnModuleInit {
       orderBy: { key: 'asc' },
     });
     if (items.length === 0) {
-      return this.defaultOperationalSettings();
+      return {};
     }
     return items.reduce<Record<string, unknown>>((acc, item) => {
       acc[item.key] = item.value;
@@ -551,7 +540,7 @@ export class AdminDatabaseService implements OnModuleInit {
     }, {});
   }
 
-  async updateOperationalSettings(patch: Record<string, unknown>) {
+  async updateOperationalSettings(patch: Record<string, unknown>, actorAdminId?: string) {
     const entries = Object.entries(patch);
     if (entries.length === 0) {
       throw new ConflictException('At least one operational setting is required.');
@@ -574,6 +563,7 @@ export class AdminDatabaseService implements OnModuleInit {
     );
 
     await this.createAuditLog({
+      actorAdminId,
       action: 'operational_settings.update',
       entityType: 'admin_operational_settings',
       metadata: patch,
@@ -786,14 +776,19 @@ export class AdminDatabaseService implements OnModuleInit {
   }
 
   async getDashboardReports() {
-    const reports = await this.prisma.userReport.findMany({
-      include: {
-        reporter: true,
-        targetUser: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 12,
-    });
+    const [reports, submittedCount, reviewingCount, resolvedCount] = await Promise.all([
+      this.prisma.userReport.findMany({
+        include: {
+          reporter: true,
+          targetUser: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 12,
+      }),
+      this.prisma.userReport.count({ where: { status: 'submitted' } }),
+      this.prisma.userReport.count({ where: { status: 'reviewing' } }),
+      this.prisma.userReport.count({ where: { status: 'resolved' } }),
+    ]);
 
     return {
       recentReports: reports.map((report) => ({
@@ -807,15 +802,15 @@ export class AdminDatabaseService implements OnModuleInit {
         createdAt: report.createdAt.toISOString(),
       })),
       totals: {
-        submitted: reports.filter((item) => item.status === 'submitted').length,
-        reviewing: reports.filter((item) => item.status === 'reviewing').length,
-        resolved: reports.filter((item) => item.status === 'resolved').length,
+        submitted: submittedCount,
+        reviewing: reviewingCount,
+        resolved: resolvedCount,
       },
     };
   }
 
   async getDashboardRevenue() {
-    const [wallet, subscriptions, plans, revenueAggregate] = await Promise.all([
+    const [wallet, subscriptions, plans, revenueAggregate, completedTransactions, activeSubscriptions] = await Promise.all([
       this.prisma.walletTransaction.findMany({
         orderBy: { createdAt: 'desc' },
         take: 10,
@@ -830,10 +825,14 @@ export class AdminDatabaseService implements OnModuleInit {
       this.prisma.walletTransaction.aggregate({
         _sum: { amount: true },
       }),
+      this.prisma.walletTransaction.count({ where: { status: 'completed' } }),
+      this.prisma.subscription.count({ where: { status: 'active' } }),
     ]);
 
     return {
       totalRevenue: Number(revenueAggregate._sum.amount ?? 0),
+      completedTransactions,
+      activeSubscriptions,
       recentTransactions: wallet,
       subscriptions,
       plans,
@@ -1329,17 +1328,13 @@ export class AdminDatabaseService implements OnModuleInit {
       return;
     }
 
-    const isProduction = (process.env.NODE_ENV ?? '').trim().toLowerCase() === 'production';
-    if (isProduction && !process.env.ADMIN_BOOTSTRAP_EMAIL) {
+    const email = process.env.ADMIN_BOOTSTRAP_EMAIL?.trim().toLowerCase();
+    const password = process.env.ADMIN_BOOTSTRAP_PASSWORD?.trim();
+    if (!email || !password) {
       return;
     }
-
-    const email = (process.env.ADMIN_BOOTSTRAP_EMAIL ?? 'admin@optizenqor.app')
-      .trim()
-      .toLowerCase();
-    const password = (process.env.ADMIN_BOOTSTRAP_PASSWORD ?? 'admin123').trim();
-    const name = (process.env.ADMIN_BOOTSTRAP_NAME ?? 'Super Admin').trim();
-    const role = (process.env.ADMIN_BOOTSTRAP_ROLE ?? 'Super Admin').trim();
+    const name = process.env.ADMIN_BOOTSTRAP_NAME?.trim() || 'Admin';
+    const role = process.env.ADMIN_BOOTSTRAP_ROLE?.trim() || 'Super Admin';
 
     await this.prisma.adminUser.create({
       data: {
@@ -1519,18 +1514,6 @@ export class AdminDatabaseService implements OnModuleInit {
     return String(value ?? '');
   }
 
-  private defaultOperationalSettings() {
-    return {
-      safetyDefaults: 'Enabled',
-      storageRetention: '90 days',
-      notificationRateLimit: 'Medium',
-      maintenanceBanner: 'Disabled',
-      maintenanceMode: false,
-      remoteConfigVersion: '2026.04.30',
-      campaignThrottlePerMinute: 1200,
-    };
-  }
-
   private resolvePage(value?: number) {
     return value && value > 0 ? value : 1;
   }
@@ -1573,6 +1556,21 @@ export class AdminDatabaseService implements OnModuleInit {
       default:
         return 'createdAt';
     }
+  }
+
+  private async getAdminUserById(adminId: string) {
+    const admin = await this.prisma.adminUser.findUnique({
+      where: { id: adminId },
+    });
+    if (!admin || !admin.isActive) {
+      throw new UnauthorizedException('Admin session is no longer valid.');
+    }
+    return admin;
+  }
+
+  private hasAdminRole(role: string, allowedRoles: string[]) {
+    const normalizedRole = role.trim().toLowerCase();
+    return allowedRoles.some((item) => item.trim().toLowerCase() === normalizedRole);
   }
 
   private async queryPosts(query: {

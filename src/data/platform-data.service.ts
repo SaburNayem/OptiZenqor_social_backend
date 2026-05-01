@@ -361,7 +361,7 @@ export class PlatformDataService implements OnModuleInit {
     const user = this.users.find((item) => item.email === email);
     if (!user) {
       throw new UnauthorizedException(
-        'Invalid credentials. Use one of the demo emails shown in /auth/demo-accounts.',
+        'Invalid credentials. Use a registered account email and password.',
       );
     }
     return user;

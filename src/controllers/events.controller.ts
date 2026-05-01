@@ -28,31 +28,31 @@ export class EventsController {
 
   @Get('create')
   getEventCreateOptions() {
-    return {
+    return successResponse('Event creation options fetched successfully.', {
       categories: ['conference', 'meetup', 'workshop', 'community'],
       defaultStatuses: ['Review', 'Approved', 'Featured'],
       recommendedLocations: ['Dhaka', 'Remote', 'Online'],
-    };
+    });
   }
 
   @Get('pool/create')
   getEventPoolCreateOptions() {
-    return {
+    return successResponse('Event pool creation options fetched successfully.', {
       categories: ['conference', 'meetup', 'workshop', 'community'],
       pollTemplates: [],
       activePolls: [],
       draftPolls: [],
-    };
+    });
   }
 
   @Get('detail')
-  getEventDetail(@Query('id') id: string) {
-    return this.experienceDatabase.getEvent(id);
+  async getEventDetail(@Query('id') id: string) {
+    return successResponse('Event fetched successfully.', await this.experienceDatabase.getEvent(id));
   }
 
   @Get(':id')
-  getEvent(@Param('id') id: string) {
-    return this.experienceDatabase.getEvent(id);
+  async getEvent(@Param('id') id: string) {
+    return successResponse('Event fetched successfully.', await this.experienceDatabase.getEvent(id));
   }
 
   @Post('create')
@@ -76,7 +76,10 @@ export class EventsController {
     @Headers('authorization') authorization?: string,
   ) {
     const organizer = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return this.experienceDatabase.createEvent(organizer.id, body);
+    return successResponse(
+      'Event created successfully.',
+      await this.experienceDatabase.createEvent(organizer.id, body),
+    );
   }
 
   @UseGuards(SessionAuthGuard)
@@ -90,7 +93,10 @@ export class EventsController {
       authorization,
       body.userId,
     );
-    return this.experienceDatabase.toggleEventRsvp(id, user.id);
+    return successResponse(
+      'Event RSVP updated successfully.',
+      await this.experienceDatabase.toggleEventRsvp(id, user.id),
+    );
   }
 
   @UseGuards(SessionAuthGuard)
@@ -104,6 +110,9 @@ export class EventsController {
       authorization,
       body.userId,
     );
-    return this.experienceDatabase.toggleEventSave(id, user.id);
+    return successResponse(
+      'Event save state updated successfully.',
+      await this.experienceDatabase.toggleEventSave(id, user.id),
+    );
   }
 }

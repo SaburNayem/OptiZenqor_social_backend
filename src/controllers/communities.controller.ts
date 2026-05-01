@@ -38,44 +38,63 @@ export class CommunitiesController {
   }
 
   @Get('communities/:id')
-  getCommunity(@Param('id') id: string) {
-    return this.experienceDatabase.getCommunity(id);
+  async getCommunity(@Param('id') id: string) {
+    return successResponse(
+      'Community fetched successfully.',
+      await this.experienceDatabase.getCommunity(id),
+    );
   }
 
   @Get('communities/:id/posts')
   async getCommunityPosts(@Param('id') id: string) {
     const community = await this.experienceDatabase.getCommunity(id);
-    return community.posts;
+    return successResponse('Community posts fetched successfully.', community.posts, {
+      count: community.posts.length,
+    });
   }
 
   @Get('communities/:id/members')
   async getCommunityMembers(@Param('id') id: string) {
     const community = await this.experienceDatabase.getCommunity(id);
-    return community.members;
+    return successResponse('Community members fetched successfully.', community.members, {
+      count: community.members.length,
+    });
   }
 
   @Get('communities/:id/events')
   async getCommunityEvents(@Param('id') id: string) {
     const community = await this.experienceDatabase.getCommunity(id);
-    return community.events;
+    return successResponse('Community events fetched successfully.', community.events, {
+      count: community.events.length,
+    });
   }
 
   @Get('communities/:id/pinned-posts')
   async getCommunityPinnedPosts(@Param('id') id: string) {
     const community = await this.experienceDatabase.getCommunity(id);
-    return community.pinnedPosts;
+    return successResponse('Community pinned posts fetched successfully.', community.pinnedPosts, {
+      count: community.pinnedPosts.length,
+    });
   }
 
   @Get('communities/:id/trending-posts')
   async getCommunityTrendingPosts(@Param('id') id: string) {
     const community = await this.experienceDatabase.getCommunity(id);
-    return community.trendingPosts;
+    return successResponse(
+      'Community trending posts fetched successfully.',
+      community.trendingPosts,
+      { count: community.trendingPosts.length },
+    );
   }
 
   @Get('communities/:id/announcements')
   async getCommunityAnnouncements(@Param('id') id: string) {
     const community = await this.experienceDatabase.getCommunity(id);
-    return community.announcements;
+    return successResponse(
+      'Community announcements fetched successfully.',
+      community.announcements,
+      { count: community.announcements.length },
+    );
   }
 
   @UseGuards(SessionAuthGuard)
@@ -215,13 +234,13 @@ export class CommunitiesController {
   }
 
   @Get('pages/detail')
-  getPageDetail(@Query('id') id: string) {
-    return this.experienceDatabase.getPage(id);
+  async getPageDetail(@Query('id') id: string) {
+    return successResponse('Page fetched successfully.', await this.experienceDatabase.getPage(id));
   }
 
   @Get('pages/detail/:id')
-  getPageDetailById(@Param('id') id: string) {
-    return this.experienceDatabase.getPage(id);
+  async getPageDetailById(@Param('id') id: string) {
+    return successResponse('Page fetched successfully.', await this.experienceDatabase.getPage(id));
   }
 
   @UseGuards(SessionAuthGuard)
@@ -255,12 +274,15 @@ export class CommunitiesController {
       authorization,
       this.readString(body.userId),
     );
-    return this.experienceDatabase.togglePageFollow(id, user.id);
+    return successResponse(
+      'Page follow state updated successfully.',
+      await this.experienceDatabase.togglePageFollow(id, user.id),
+    );
   }
 
   @Get('pages/:id')
-  getPage(@Param('id') id: string) {
-    return this.experienceDatabase.getPage(id);
+  async getPage(@Param('id') id: string) {
+    return successResponse('Page fetched successfully.', await this.experienceDatabase.getPage(id));
   }
 
   @Get('groups')
@@ -281,20 +303,24 @@ export class CommunitiesController {
   }
 
   @Get('groups/:id')
-  getGroup(@Param('id') id: string) {
-    return this.experienceDatabase.getCommunity(id);
+  async getGroup(@Param('id') id: string) {
+    return successResponse('Group fetched successfully.', await this.experienceDatabase.getCommunity(id));
   }
 
   @Get('groups/:id/posts')
   async getGroupPosts(@Param('id') id: string) {
     const community = await this.experienceDatabase.getCommunity(id);
-    return community.posts;
+    return successResponse('Group posts fetched successfully.', community.posts, {
+      count: community.posts.length,
+    });
   }
 
   @Get('groups/:id/members')
   async getGroupMembers(@Param('id') id: string) {
     const community = await this.experienceDatabase.getCommunity(id);
-    return community.members;
+    return successResponse('Group members fetched successfully.', community.members, {
+      count: community.members.length,
+    });
   }
 
   private normalizeCommunityPatch(body: Record<string, unknown>) {

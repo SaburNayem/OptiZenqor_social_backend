@@ -175,10 +175,14 @@ export class AdminController {
   @Patch('settings')
   @Roles('Super Admin', 'Operations Admin')
   @ApiOperation({ summary: 'Update operational admin settings' })
-  async updateSettings(@Body() body: AdminSettingsPatchDto) {
+  async updateSettings(
+    @Body() body: AdminSettingsPatchDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
     return successResponse(
       'Admin settings updated successfully.',
-      await this.adminDatabase.updateOperationalSettings(body.patch),
+      await this.adminDatabase.updateOperationalSettings(body.patch, admin.adminId),
     );
   }
 

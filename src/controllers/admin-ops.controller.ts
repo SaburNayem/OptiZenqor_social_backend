@@ -29,19 +29,6 @@ import { successResponse } from '../utils/api-response.util';
 export class AdminOpsController {
   constructor(private readonly adminDatabase: AdminDatabaseService) {}
 
-  @Get('auth/demo-accounts')
-  @ApiOperation({
-    summary: 'List admin accounts when explicitly enabled',
-    description:
-      'This route is disabled by default and should not be exposed in production.',
-  })
-  async getDemoAccounts() {
-    return successResponse(
-      'Admin test accounts fetched successfully.',
-      await this.adminDatabase.listDemoAccounts(),
-    );
-  }
-
   @Post('auth/login')
   @ApiOperation({ summary: 'Admin dashboard login' })
   @ApiBody({ type: AdminLoginDto })
@@ -83,10 +70,11 @@ export class AdminOpsController {
   @ApiBearerAuth('admin-bearer')
   @UseGuards(AdminSessionGuard)
   @ApiOperation({ summary: 'List active and revoked admin sessions' })
-  async getSessions() {
+  async getSessions(@Headers('authorization') authorization?: string) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
     return successResponse(
       'Admin sessions fetched successfully.',
-      await this.adminDatabase.getAdminSessions(),
+      await this.adminDatabase.getAdminSessions(admin.adminId),
     );
   }
 
@@ -95,8 +83,12 @@ export class AdminOpsController {
   @UseGuards(AdminSessionGuard, RolesGuard)
   @Roles('Super Admin', 'Operations Admin')
   @ApiOperation({ summary: 'Revoke an admin session' })
-  async revokeSession(@Param('id') id: string) {
-    return this.adminDatabase.revokeAdminSession(id);
+  async revokeSession(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return this.adminDatabase.revokeAdminSession(id, admin.adminId);
   }
 
   @Get('verification-queue')
@@ -116,10 +108,12 @@ export class AdminOpsController {
   async decideVerification(
     @Param('id') id: string,
     @Body() body: { decision: 'approved' | 'rejected'; note?: string },
+    @Headers('authorization') authorization?: string,
   ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
     return successResponse(
       'Verification decision applied successfully.',
-      await this.adminDatabase.decideVerification(id, body.decision, body.note),
+      await this.adminDatabase.decideVerification(id, body.decision, body.note, admin.adminId),
     );
   }
 
@@ -140,10 +134,12 @@ export class AdminOpsController {
   async updateModerationCase(
     @Param('id') id: string,
     @Body() body: { action: string },
+    @Headers('authorization') authorization?: string,
   ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
     return successResponse(
       'Moderation case updated successfully.',
-      await this.adminDatabase.updateModerationCase(id, body.action),
+      await this.adminDatabase.updateModerationCase(id, body.action, admin.adminId),
     );
   }
 
@@ -164,10 +160,12 @@ export class AdminOpsController {
   async updateChatControl(
     @Param('id') id: string,
     @Body() body: { freeze?: boolean; restrictParticipant?: string },
+    @Headers('authorization') authorization?: string,
   ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
     return successResponse(
       'Chat moderation case updated successfully.',
-      await this.adminDatabase.updateChatModerationCase(id, body),
+      await this.adminDatabase.updateChatModerationCase(id, body, admin.adminId),
     );
   }
 
@@ -187,10 +185,12 @@ export class AdminOpsController {
   @Roles('Super Admin', 'Operations Admin', 'Support Admin')
   async createCampaign(
     @Body() body: { name: string; audience: string; segmentId: string; schedule: string },
+    @Headers('authorization') authorization?: string,
   ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
     return successResponse(
       'Broadcast campaign created successfully.',
-      await this.adminDatabase.createCampaign(body),
+      await this.adminDatabase.createCampaign(body, admin.adminId),
     );
   }
 
@@ -238,10 +238,14 @@ export class AdminOpsController {
   @ApiBearerAuth('admin-bearer')
   @UseGuards(AdminSessionGuard, RolesGuard)
   @Roles('Super Admin', 'Operations Admin')
-  async updateOperationalSettings(@Body() body: Record<string, unknown>) {
+  async updateOperationalSettings(
+    @Body() body: Record<string, unknown>,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
     return successResponse(
       'Operational settings updated successfully.',
-      await this.adminDatabase.updateOperationalSettings(body),
+      await this.adminDatabase.updateOperationalSettings(body, admin.adminId),
     );
   }
 
