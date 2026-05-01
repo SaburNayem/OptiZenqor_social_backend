@@ -14,6 +14,20 @@ import {
 
 const prisma = new PrismaClient();
 
+const userIdMap = new Map<string, string>();
+const postIdMap = new Map<string, string>();
+const commentIdMap = new Map<string, string>();
+const threadIdMap = new Map<string, string>();
+const messageIdMap = new Map<string, string>();
+const notificationIdMap = new Map<string, string>();
+
+function seededId(prefix: string, legacyId: string) {
+  const normalized = legacyId.trim().replace(/[^a-zA-Z0-9]+/g, '').toLowerCase();
+  return `${prefix}${normalized}`.startsWith(`${prefix}_`)
+    ? `${prefix}_${normalized.slice(prefix.length)}`
+    : `${prefix}_${normalized}`;
+}
+
 async function hashPassword(password: string) {
   return argon2.hash(password, {
     type: argon2.argon2id,
@@ -53,10 +67,12 @@ async function main() {
   });
 
   for (const user of coreSeedUsers) {
+    const userId = userIdMap.get(user.id) ?? seededId('user', user.id);
+    userIdMap.set(user.id, userId);
     await prisma.appUser.upsert({
-      where: { id: user.id },
+      where: { id: userId },
       create: {
-        id: user.id,
+        id: userId,
         name: user.name,
         username: user.username,
         email: user.email,
@@ -101,13 +117,13 @@ async function main() {
     await prisma.appFollowRelation.upsert({
       where: {
         followerId_targetId: {
-          followerId: relation.followerId,
-          targetId: relation.targetId,
+          followerId: userIdMap.get(relation.followerId) ?? seededId('user', relation.followerId),
+          targetId: userIdMap.get(relation.targetId) ?? seededId('user', relation.targetId),
         },
       },
       create: {
-        followerId: relation.followerId,
-        targetId: relation.targetId,
+        followerId: userIdMap.get(relation.followerId) ?? seededId('user', relation.followerId),
+        targetId: userIdMap.get(relation.targetId) ?? seededId('user', relation.targetId),
         createdAt: new Date(),
       },
       update: {},
@@ -115,11 +131,13 @@ async function main() {
   }
 
   for (const post of coreSeedPosts) {
+    const postId = postIdMap.get(post.id) ?? seededId('post', post.id);
+    postIdMap.set(post.id, postId);
     await prisma.appPost.upsert({
-      where: { id: post.id },
+      where: { id: postId },
       create: {
-        id: post.id,
-        authorId: post.authorId,
+        id: postId,
+        authorId: userIdMap.get(post.authorId) ?? seededId('user', post.authorId),
         caption: post.caption,
         media: post.media,
         tags: post.tags,
@@ -149,13 +167,13 @@ async function main() {
     await prisma.appPostReaction.upsert({
       where: {
         postId_userId: {
-          postId: reaction.postId,
-          userId: reaction.userId,
+          postId: postIdMap.get(reaction.postId) ?? seededId('post', reaction.postId),
+          userId: userIdMap.get(reaction.userId) ?? seededId('user', reaction.userId),
         },
       },
       create: {
-        postId: reaction.postId,
-        userId: reaction.userId,
+        postId: postIdMap.get(reaction.postId) ?? seededId('post', reaction.postId),
+        userId: userIdMap.get(reaction.userId) ?? seededId('user', reaction.userId),
         reaction: reaction.reaction,
         createdAt: new Date(reaction.createdAt),
       },
@@ -167,15 +185,19 @@ async function main() {
   }
 
   for (const comment of coreSeedPostComments) {
+    const commentId = commentIdMap.get(comment.id) ?? seededId('comment', comment.id);
+    commentIdMap.set(comment.id, commentId);
     await prisma.appPostComment.upsert({
-      where: { id: comment.id },
+      where: { id: commentId },
       create: {
-        id: comment.id,
-        postId: comment.postId,
-        authorId: comment.authorId,
+        id: commentId,
+        postId: postIdMap.get(comment.postId) ?? seededId('post', comment.postId),
+        authorId: userIdMap.get(comment.authorId) ?? seededId('user', comment.authorId),
         authorName: comment.author,
         message: comment.message,
-        replyTo: comment.replyTo,
+        replyTo: comment.replyTo
+          ? commentIdMap.get(comment.replyTo) ?? seededId('comment', comment.replyTo)
+          : null,
         createdAt: new Date(comment.createdAt),
         likeCount: comment.likeCount,
         isLikedByMe: comment.isLikedByMe,
@@ -184,10 +206,12 @@ async function main() {
         mentions: comment.mentions,
       },
       update: {
-        authorId: comment.authorId,
+        authorId: userIdMap.get(comment.authorId) ?? seededId('user', comment.authorId),
         authorName: comment.author,
         message: comment.message,
-        replyTo: comment.replyTo,
+        replyTo: comment.replyTo
+          ? commentIdMap.get(comment.replyTo) ?? seededId('comment', comment.replyTo)
+          : null,
         likeCount: comment.likeCount,
         isLikedByMe: comment.isLikedByMe,
         isReported: comment.isReported,
@@ -201,13 +225,13 @@ async function main() {
     await prisma.appPostCommentReaction.upsert({
       where: {
         commentId_userId: {
-          commentId: reaction.commentId,
-          userId: reaction.userId,
+          commentId: commentIdMap.get(reaction.commentId) ?? seededId('comment', reaction.commentId),
+          userId: userIdMap.get(reaction.userId) ?? seededId('user', reaction.userId),
         },
       },
       create: {
-        commentId: reaction.commentId,
-        userId: reaction.userId,
+        commentId: commentIdMap.get(reaction.commentId) ?? seededId('comment', reaction.commentId),
+        userId: userIdMap.get(reaction.userId) ?? seededId('user', reaction.userId),
         reaction: reaction.reaction,
         createdAt: new Date(reaction.createdAt),
       },
@@ -219,10 +243,12 @@ async function main() {
   }
 
   for (const thread of coreSeedThreads) {
+    const threadId = threadIdMap.get(thread.id) ?? seededId('conversation', thread.id);
+    threadIdMap.set(thread.id, threadId);
     await prisma.chatThread.upsert({
-      where: { id: thread.id },
+      where: { id: threadId },
       create: {
-        id: thread.id,
+        id: threadId,
         title: thread.title,
         participantsLabel: thread.participantsLabel,
         flag: thread.flag,
@@ -240,13 +266,13 @@ async function main() {
       await prisma.chatThreadParticipant.upsert({
         where: {
           threadId_userId: {
-            threadId: thread.id,
-            userId: participantId,
+            threadId,
+            userId: userIdMap.get(participantId) ?? seededId('user', participantId),
           },
         },
         create: {
-          threadId: thread.id,
-          userId: participantId,
+          threadId,
+          userId: userIdMap.get(participantId) ?? seededId('user', participantId),
           createdAt: new Date(),
         },
         update: {},
@@ -255,17 +281,21 @@ async function main() {
   }
 
   for (const message of coreSeedMessages) {
+    const messageId = messageIdMap.get(message.id) ?? seededId('message', message.id);
+    messageIdMap.set(message.id, messageId);
     await prisma.chatMessage.upsert({
-      where: { id: message.id },
+      where: { id: messageId },
       create: {
-        id: message.id,
-        threadId: message.threadId,
-        senderId: message.senderId,
+        id: messageId,
+        threadId: threadIdMap.get(message.threadId) ?? seededId('thread', message.threadId),
+        senderId: userIdMap.get(message.senderId) ?? seededId('user', message.senderId),
         text: message.text,
         read: message.read,
         timestamp: new Date(message.timestamp),
         attachments: message.attachments,
-        replyToMessageId: message.replyToMessageId,
+        replyToMessageId: message.replyToMessageId
+          ? messageIdMap.get(message.replyToMessageId) ?? seededId('message', message.replyToMessageId)
+          : null,
         deliveryState: message.deliveryState,
         kind: message.kind,
         mediaPath: message.mediaPath,
@@ -275,7 +305,9 @@ async function main() {
         read: message.read,
         timestamp: new Date(message.timestamp),
         attachments: message.attachments,
-        replyToMessageId: message.replyToMessageId,
+        replyToMessageId: message.replyToMessageId
+          ? messageIdMap.get(message.replyToMessageId) ?? seededId('message', message.replyToMessageId)
+          : null,
         deliveryState: message.deliveryState,
         kind: message.kind,
         mediaPath: message.mediaPath,
@@ -284,11 +316,15 @@ async function main() {
   }
 
   for (const notification of coreSeedNotifications) {
+    const notificationId =
+      notificationIdMap.get(notification.id) ?? seededId('notification', notification.id);
+    notificationIdMap.set(notification.id, notificationId);
     await prisma.appNotification.upsert({
-      where: { id: notification.id },
+      where: { id: notificationId },
       create: {
-        id: notification.id,
-        recipientId: notification.recipientId,
+        id: notificationId,
+        recipientId:
+          userIdMap.get(notification.recipientId) ?? seededId('user', notification.recipientId),
         title: notification.title,
         body: notification.body,
         createdAt: new Date(notification.createdAt),

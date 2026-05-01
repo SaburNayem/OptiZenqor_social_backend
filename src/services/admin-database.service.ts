@@ -732,7 +732,7 @@ export class AdminDatabaseService implements OnModuleInit {
     ]);
 
     return {
-      recentUsers,
+      recentUsers: recentUsers.map((user) => this.mapAdminAppUser(user)),
       roleBreakdown: roleCounts.map((row) => ({
         role: row.role,
         count: row._count.role,
@@ -920,7 +920,12 @@ export class AdminDatabaseService implements OnModuleInit {
       }),
     ]);
 
-    return this.wrapPaginated(items, page, limit, total);
+    return this.wrapPaginated(
+      items.map((user) => this.mapAdminAppUser(user)),
+      page,
+      limit,
+      total,
+    );
   }
 
   async updateAdminUser(
@@ -961,7 +966,7 @@ export class AdminDatabaseService implements OnModuleInit {
       metadata: patch,
     });
 
-    return updated;
+    return this.mapAdminAppUser(updated);
   }
 
   async queryAdminContent(query: {
@@ -1571,6 +1576,11 @@ export class AdminDatabaseService implements OnModuleInit {
   private hasAdminRole(role: string, allowedRoles: string[]) {
     const normalizedRole = role.trim().toLowerCase();
     return allowedRoles.some((item) => item.trim().toLowerCase() === normalizedRole);
+  }
+
+  private mapAdminAppUser(user: Prisma.AppUserGetPayload<Record<string, never>>) {
+    const { passwordHash: _passwordHash, ...safeUser } = user;
+    return safeUser;
   }
 
   private async queryPosts(query: {

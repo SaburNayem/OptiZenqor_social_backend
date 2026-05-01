@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Headers, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { FollowUserDto, ProfileTypeSetupDto, UpdateUserDto } from '../dto/api.dto';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
@@ -264,26 +275,29 @@ export class ProfilesController {
   }
 
   @Get('business-profile')
-  async getBusinessProfile() {
+  async getBusinessProfile(@Headers('authorization') authorization?: string) {
+    const viewerId = await this.requireViewerId(authorization);
     return successResponse(
       'Business profile fetched successfully.',
-      await this.profilesDatabase.getBusinessProfile(),
+      await this.profilesDatabase.getBusinessProfile(viewerId),
     );
   }
 
   @Get('seller-profile')
-  async getSellerProfile() {
+  async getSellerProfile(@Headers('authorization') authorization?: string) {
+    const viewerId = await this.requireViewerId(authorization);
     return successResponse(
       'Seller profile fetched successfully.',
-      await this.profilesDatabase.getSellerProfile(),
+      await this.profilesDatabase.getSellerProfile(viewerId),
     );
   }
 
   @Get('recruiter-profile')
-  async getRecruiterProfile() {
+  async getRecruiterProfile(@Headers('authorization') authorization?: string) {
+    const viewerId = await this.requireViewerId(authorization);
     return successResponse(
       'Recruiter profile fetched successfully.',
-      await this.profilesDatabase.getRecruiterProfile(),
+      await this.profilesDatabase.getRecruiterProfile(viewerId),
     );
   }
 
@@ -297,9 +311,7 @@ export class ProfilesController {
     if (viewerId) {
       return viewerId;
     }
-
-    const users = await this.coreDatabase.getUsers();
-    return users[0]?.id ?? 'u1';
+    throw new BadRequestException('A profile id or authenticated session is required.');
   }
 
   private async resolveActorId(body: FollowUserDto, authorization?: string) {
@@ -322,14 +334,21 @@ export class ProfilesController {
     if (viewerId) {
       return viewerId;
     }
-    const users = await this.coreDatabase.getUsers();
-    return users[0]?.id ?? 'u1';
+    throw new UnauthorizedException('An authenticated session is required.');
   }
 
   private async resolveViewerId(authorization?: string) {
     const token = authorization?.replace(/^Bearer\s+/i, '');
     const user = await this.coreDatabase.resolveUserFromAccessToken(token);
     return user?.id;
+  }
+
+  private async requireViewerId(authorization?: string) {
+    const viewerId = await this.resolveViewerId(authorization);
+    if (!viewerId) {
+      throw new UnauthorizedException('An authenticated session is required.');
+    }
+    return viewerId;
   }
 
   private normalizeProfilePatch(body: UpdateUserDto) {

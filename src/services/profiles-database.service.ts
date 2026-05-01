@@ -135,8 +135,8 @@ export class ProfilesDatabaseService {
     };
   }
 
-  async getBusinessProfile() {
-    const user = await this.findUserByRole(['Business', 'Creator', 'Seller']);
+  async getBusinessProfile(userId: string) {
+    const user = await this.coreDatabase.getUser(userId);
     return {
       companyName: user.name,
       category: user.role,
@@ -149,8 +149,8 @@ export class ProfilesDatabaseService {
     };
   }
 
-  async getSellerProfile() {
-    const user = await this.findUserByRole(['Seller', 'Business', 'Creator']);
+  async getSellerProfile(userId: string) {
+    const user = await this.coreDatabase.getUser(userId);
     const products = await this.experienceDatabase.getMarketplaceOverview({
       sellerId: user.id,
       limit: 50,
@@ -163,20 +163,9 @@ export class ProfilesDatabaseService {
     };
   }
 
-  async getRecruiterProfile() {
-    const user = await this.findUserByRole(['Recruiter', 'Business', 'Creator']);
+  async getRecruiterProfile(userId: string) {
+    const user = await this.coreDatabase.getUser(userId);
     return this.experienceDatabase.getEmployerProfile(user.id);
-  }
-
-  private async findUserByRole(roles: string[]) {
-    for (const role of roles) {
-      const users = await this.coreDatabase.getUsers(role);
-      if (users[0]) {
-        return users[0];
-      }
-    }
-    const users = await this.coreDatabase.getUsers();
-    return users[0];
   }
 
   private flattenComments(
