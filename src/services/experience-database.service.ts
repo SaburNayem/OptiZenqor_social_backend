@@ -731,10 +731,10 @@ export class ExperienceDatabaseService {
   async getJobsNetworkingOverview(userId?: string) {
     const [jobsPayload, companies] = await Promise.all([
       this.getJobs(),
-      this.getJobCompanies(),
+      this.getJobCompanies(userId),
     ]);
 
-    const jobs = jobsPayload.jobs;
+    let jobs = jobsPayload.jobs;
     const payload: Record<string, unknown> = {
       totalJobs: jobs.length,
       openJobs: jobs.filter((job) => job.status === 'open').length,
@@ -754,8 +754,22 @@ export class ExperienceDatabaseService {
           this.getEmployerProfile(normalizedUserId),
           this.getApplicantsForRecruiter(normalizedUserId),
         ]);
+      const savedJobIds = new Set(await this.getSavedJobIds(normalizedUserId));
+      const appliedJobIds = new Set(applications.map((item) => item.jobId));
 
-      payload.myJobs = myJobsPayload.jobs;
+      jobs = jobs.map((job) => ({
+        ...job,
+        saved: savedJobIds.has(job.id),
+        applied: appliedJobIds.has(job.id),
+      }));
+      const myJobs = myJobsPayload.jobs.map((job) => ({
+        ...job,
+        saved: savedJobIds.has(job.id),
+        applied: appliedJobIds.has(job.id),
+      }));
+
+      payload.jobs = jobs;
+      payload.myJobs = myJobs;
       payload.applications = applications;
       payload.alerts = alerts;
       payload.profile = profile;
@@ -895,6 +909,98 @@ export class ExperienceDatabaseService {
     });
 
     return alerts;
+  }
+
+  async createJobAlert(
+    userId: string,
+    input: { keyword: string; location?: string; frequency?: 'instant' | 'daily' | 'weekly' },
+  ) {
+    const settings = await this.getUserSettingsState(userId);
+    const jobsState = this.readJobsState(settings);
+    const existingAlerts = (await this.getJobAlerts(userId)).filter(
+      (item): item is { id: string; keyword: string; location: string; frequency: string; enabled: boolean } =>
+        Boolean(item),
+    );
+    const alert = {
+      id: makeId('notification'),
+      keyword: input.keyword.trim(),
+      location: input.location?.trim() || 'Any',
+      frequency: this.normalizeAlertFrequency(input.frequency),
+      enabled: true,
+    };
+    const alerts = [
+      alert,
+      ...existingAlerts.filter(
+        (item): item is typeof alert => Boolean(item) && item.keyword !== alert.keyword,
+      ),
+    ].slice(0, 25);
+    await this.mergeUserSettingsState(userId, {
+      jobs: {
+        ...jobsState,
+        alerts,
+      },
+    });
+    return alert;
+  }
+
+  async updateJobAlert(
+    userId: string,
+    alertId: string,
+    patch: { keyword?: string; location?: string; frequency?: 'instant' | 'daily' | 'weekly'; enabled?: boolean },
+  ) {
+    const settings = await this.getUserSettingsState(userId);
+    const jobsState = this.readJobsState(settings);
+    const alerts = (await this.getJobAlerts(userId)).filter(
+      (item): item is { id: string; keyword: string; location: string; frequency: string; enabled: boolean } =>
+        Boolean(item),
+    );
+    const updatedAlerts = alerts.map((item) =>
+      item.id === alertId
+        ? {
+            ...item,
+            ...(patch.keyword?.trim() ? { keyword: patch.keyword.trim() } : {}),
+            ...(patch.location !== undefined ? { location: patch.location.trim() || 'Any' } : {}),
+            ...(patch.frequency ? { frequency: this.normalizeAlertFrequency(patch.frequency) } : {}),
+            ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
+          }
+        : item,
+    );
+    const updated = updatedAlerts.find(
+      (item): item is NonNullable<(typeof updatedAlerts)[number]> =>
+        Boolean(item) && item.id === alertId,
+    );
+    if (!updated) {
+      throw new NotFoundException(`Job alert ${alertId} not found`);
+    }
+    await this.mergeUserSettingsState(userId, {
+      jobs: {
+        ...jobsState,
+        alerts: updatedAlerts,
+      },
+    });
+    return updated;
+  }
+
+  async deleteJobAlert(userId: string, alertId: string) {
+    const settings = await this.getUserSettingsState(userId);
+    const jobsState = this.readJobsState(settings);
+    const alerts = (await this.getJobAlerts(userId)).filter(
+      (item): item is { id: string; keyword: string; location: string; frequency: string; enabled: boolean } =>
+        Boolean(item),
+    );
+    const nextAlerts = alerts.filter(
+      (item): item is (typeof alerts)[number] => Boolean(item) && item.id !== alertId,
+    );
+    await this.mergeUserSettingsState(userId, {
+      jobs: {
+        ...jobsState,
+        alerts: nextAlerts,
+      },
+    });
+    return {
+      id: alertId,
+      deleted: nextAlerts.length !== alerts.length,
+    };
   }
 
   async getCareerProfile(userId: string) {
@@ -1058,7 +1164,7 @@ export class ExperienceDatabaseService {
     }));
   }
 
-  async getJobCompanies() {
+  async getJobCompanies(userId?: string) {
     const jobs = await this.prisma.job.findMany({
       where: { deletedAt: null },
       include: {
@@ -1081,21 +1187,26 @@ export class ExperienceDatabaseService {
       }
     >();
 
+    const followedCompanyIds = new Set(
+      userId?.trim() ? await this.getFollowedCompanyIds(userId.trim()) : [],
+    );
+
     for (const job of jobs) {
       const key = job.company.trim().toLowerCase();
       if (!key) {
         continue;
       }
       const existing = companies.get(key);
+      const companyId = existing?.id ?? `company_${this.slugify(job.company)}`;
       const tagline = this.compactText(job.recruiter.bio || job.description, 96);
       const next = {
-        id: existing?.id ?? `company_${this.slugify(job.company)}`,
+        id: companyId,
         name: job.company,
         tagline: existing?.tagline || tagline || 'Hiring on OptiZenqor',
         logoInitial: job.company.trim().charAt(0).toUpperCase() || 'C',
         colorValue: existing?.colorValue ?? this.colorFromString(job.company),
         followers: Math.max(existing?.followers ?? 0, job.recruiter.followers),
-        followed: false,
+        followed: followedCompanyIds.has(companyId),
         verified:
           existing?.verified ??
           Boolean(job.recruiter.emailVerified || `${job.recruiter.verification}`.toLowerCase().includes('verified')),
@@ -1104,6 +1215,119 @@ export class ExperienceDatabaseService {
     }
 
     return [...companies.values()];
+  }
+
+  async toggleJobCompanyFollow(userId: string, companyId: string, followed?: boolean) {
+    const settings = await this.getUserSettingsState(userId);
+    const jobsState = this.readJobsState(settings);
+    const currentIds = new Set(await this.getFollowedCompanyIds(userId));
+    const shouldFollow = followed ?? !currentIds.has(companyId);
+    if (shouldFollow) {
+      currentIds.add(companyId);
+    } else {
+      currentIds.delete(companyId);
+    }
+    const followedCompanyIds = [...currentIds];
+    await this.mergeUserSettingsState(userId, {
+      jobs: {
+        ...jobsState,
+        followedCompanyIds,
+      },
+    });
+    return {
+      companyId,
+      followed: shouldFollow,
+    };
+  }
+
+  async toggleSavedJob(userId: string, jobId: string) {
+    await this.getJob(jobId);
+    const settings = await this.getUserSettingsState(userId);
+    const jobsState = this.readJobsState(settings);
+    const currentIds = new Set(await this.getSavedJobIds(userId));
+    const saved = !currentIds.has(jobId);
+    if (saved) {
+      currentIds.add(jobId);
+    } else {
+      currentIds.delete(jobId);
+    }
+    const savedJobIds = [...currentIds];
+    await this.mergeUserSettingsState(userId, {
+      jobs: {
+        ...jobsState,
+        savedJobIds,
+      },
+    });
+    return {
+      jobId,
+      saved,
+    };
+  }
+
+  async withdrawJobApplication(applicationId: string, applicantId: string) {
+    const application = await this.prisma.jobApplication.findUnique({
+      where: { id: applicationId },
+    });
+    if (!application || application.applicantId !== applicantId) {
+      throw new NotFoundException(`Job application ${applicationId} not found`);
+    }
+    const updated = await this.prisma.jobApplication.update({
+      where: { id: applicationId },
+      data: {
+        status: 'withdrawn',
+        updatedAt: new Date(),
+      },
+    });
+    return this.mapJobApplication(updated);
+  }
+
+  async updateJobApplicationStatus(
+    applicationId: string,
+    recruiterId: string,
+    status: 'submitted' | 'viewed' | 'shortlisted' | 'rejected' | 'withdrawn',
+  ) {
+    const application = await this.prisma.jobApplication.findUnique({
+      where: { id: applicationId },
+      include: { job: true, applicant: true },
+    });
+    if (!application || application.job.recruiterId !== recruiterId) {
+      throw new NotFoundException(`Job application ${applicationId} not found`);
+    }
+    const updated = await this.prisma.jobApplication.update({
+      where: { id: applicationId },
+      data: {
+        status,
+        updatedAt: new Date(),
+      },
+      include: { job: true, applicant: true },
+    });
+    return this.mapJobApplication({
+      ...updated,
+      jobTitle: updated.job.title,
+      company: updated.job.company,
+      applicantSkills: this.jsonStringArray(updated.applicant.interests),
+    });
+  }
+
+  async deleteJob(jobId: string, recruiterId: string) {
+    const job = await this.prisma.job.findUnique({
+      where: { id: jobId },
+    });
+    if (!job || job.recruiterId !== recruiterId) {
+      throw new NotFoundException(`Job ${jobId} not found`);
+    }
+    await this.prisma.job.update({
+      where: { id: jobId },
+      data: {
+        deletedAt: new Date(),
+        updatedAt: new Date(),
+        status: 'closed',
+      },
+    });
+    return {
+      id: jobId,
+      deleted: true,
+    };
   }
 
   async getPollsAndSurveys(status?: 'active' | 'draft') {
@@ -2296,6 +2520,18 @@ export class ExperienceDatabaseService {
       : {};
   }
 
+  private async getSavedJobIds(userId: string) {
+    const settings = await this.getUserSettingsState(userId);
+    const jobsState = this.readJobsState(settings);
+    return this.readStringArray(jobsState.savedJobIds);
+  }
+
+  private async getFollowedCompanyIds(userId: string) {
+    const settings = await this.getUserSettingsState(userId);
+    const jobsState = this.readJobsState(settings);
+    return this.readStringArray(jobsState.followedCompanyIds);
+  }
+
   private readPollSurveyEntries(value: Prisma.JsonValue | unknown, fallbackUserId: string) {
     const settings = this.toObject(value);
     const pollsSurveys = this.toObject(settings.pollsSurveys);
@@ -2386,6 +2622,8 @@ export class ExperienceDatabaseService {
       timeline.push('Shortlisted for next review');
     } else if (normalizedStatus === 'rejected') {
       timeline.push('Application closed');
+    } else if (normalizedStatus === 'withdrawn') {
+      timeline.push('Application withdrawn');
     } else if (normalizedStatus === 'submitted') {
       timeline.push('Recruiter review pending');
     }

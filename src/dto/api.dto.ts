@@ -1247,6 +1247,65 @@ export class JobsQueryDto extends PaginationQueryDto {
   userId?: string;
 }
 
+export class CreateJobAlertDto {
+  @ApiProperty()
+  @IsString()
+  keyword!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional({ enum: ['instant', 'daily', 'weekly'], default: 'daily' })
+  @IsOptional()
+  @IsIn(['instant', 'daily', 'weekly'])
+  frequency?: 'instant' | 'daily' | 'weekly';
+}
+
+export class UpdateJobAlertDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  keyword?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional({ enum: ['instant', 'daily', 'weekly'] })
+  @IsOptional()
+  @IsIn(['instant', 'daily', 'weekly'])
+  frequency?: 'instant' | 'daily' | 'weekly';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+}
+
+export class ToggleCompanyFollowDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  followed?: boolean;
+}
+
+export class WithdrawJobApplicationDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  applicantId?: string;
+}
+
+export class UpdateJobApplicationStatusDto {
+  @ApiProperty({ enum: ['submitted', 'viewed', 'shortlisted', 'rejected', 'withdrawn'] })
+  @IsString()
+  @IsIn(['submitted', 'viewed', 'shortlisted', 'rejected', 'withdrawn'])
+  status!: 'submitted' | 'viewed' | 'shortlisted' | 'rejected' | 'withdrawn';
+}
+
 export class CreateMarketplaceOrderDto {
   @ApiProperty()
   @IsString()

@@ -1,6 +1,27 @@
 # Full Backend Frontend Database Integration Report
 
-Generated: 2026-04-30
+Generated: 2026-05-01
+
+## Current Addendum
+
+This report is no longer only about marketplace. In the latest local pass:
+
+- the backend jobs slice gained database-backed mutations for saved jobs, job alerts, company follows, applicant status, withdrawals, and recruiter-owned job deletion
+- Flutter jobs networking stopped relying on local-only mutation state for those flows and now calls the backend
+- Flutter advanced privacy, accessibility support, and legal compliance screens/controllers now load backend state and persist updates through backend settings state instead of shipping placeholder runtime content
+- placeholder defaults were removed from `course_model.dart`
+
+## Verification Snapshot
+
+- Backend `npm run typecheck`: pass
+- Backend `npm run build`: blocked by `EPERM` write lock on `dist/`
+- Backend `npx prisma generate`: blocked by `EPERM` on Prisma engine rename
+- Flutter `flutter pub get`: pass
+- Flutter `dart format .`: pass
+- Flutter `flutter analyze`: pass
+- Flutter `flutter test`: no `_test.dart` files present
+- Dashboard `npm run lint`: pass
+- Dashboard `npm run build`: pass
 
 ## Scope completed in this pass
 

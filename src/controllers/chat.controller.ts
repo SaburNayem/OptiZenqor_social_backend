@@ -1,6 +1,5 @@
 import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { ExtendedDataService } from '../data/extended-data.service';
 import {
   CreateChatThreadDto,
   CreateMessageDto,
@@ -17,7 +16,6 @@ import { SocialStateDatabaseService } from '../services/social-state-database.se
 export class ChatController {
   constructor(
     private readonly coreDatabase: CoreDatabaseService,
-    private readonly extendedData: ExtendedDataService,
     private readonly realtimeState: RealtimeStateService,
     private readonly socialStateDatabase: SocialStateDatabaseService,
   ) {}
@@ -43,7 +41,7 @@ export class ChatController {
         (count, thread) => count + thread.unreadCount,
         0,
       ),
-      presence: this.extendedData.getPresence(),
+      presence: this.realtimeState.getPresenceSnapshot(),
       inboxFilters: ['all', 'unread', 'groups', 'marketplace', 'support'],
     };
   }
@@ -70,13 +68,13 @@ export class ChatController {
       success: true,
       message: 'Chat detail fetched successfully.',
       thread,
-      presence: this.extendedData.getPresence(),
+      presence: this.realtimeState.getPresenceSnapshot(),
       preferences:
         preferences.conversationPreferences.find((item) => item.threadId === id) ??
         null,
       data: {
         thread,
-        presence: this.extendedData.getPresence(),
+        presence: this.realtimeState.getPresenceSnapshot(),
         preferences:
           preferences.conversationPreferences.find((item) => item.threadId === id) ??
           null,
@@ -352,8 +350,21 @@ export class ChatController {
   }
 
   @Post('presence')
-  async updatePresence(@Body() body: UpdateChatPresenceDto) {
-    const presence = await this.extendedData.updatePresence(body);
+  async updatePresence(
+    @Body() body: UpdateChatPresenceDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    const presence = body.typingInThreadId
+      ? await this.realtimeState.setTyping(
+          body.typingInThreadId,
+          actor.id,
+          body.online ?? true,
+        )
+      : this.realtimeState.getPresenceSnapshot();
     return {
       success: true,
       message: 'Chat presence updated successfully.',

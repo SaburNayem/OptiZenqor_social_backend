@@ -1,7 +1,15 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
-import { CreateJobDto, JobsQueryDto } from '../dto/api.dto';
+import {
+  CreateJobAlertDto,
+  CreateJobDto,
+  JobsQueryDto,
+  ToggleCompanyFollowDto,
+  UpdateJobAlertDto,
+  UpdateJobApplicationStatusDto,
+  WithdrawJobApplicationDto,
+} from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { ExperienceDatabaseService } from '../services/experience-database.service';
 import { successResponse } from '../utils/api-response.util';
@@ -171,9 +179,55 @@ export class JobsController {
     };
   }
 
+  @Post('jobs/alerts')
+  @UseGuards(SessionAuthGuard)
+  async createJobAlert(
+    @Body() body: CreateJobAlertDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Job alert created successfully.',
+      await this.experienceDatabase.createJobAlert(user.id, body),
+    );
+  }
+
+  @Patch('jobs/alerts/:id')
+  @UseGuards(SessionAuthGuard)
+  async updateJobAlert(
+    @Param('id') id: string,
+    @Body() body: UpdateJobAlertDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Job alert updated successfully.',
+      await this.experienceDatabase.updateJobAlert(user.id, id, body),
+    );
+  }
+
+  @Delete('jobs/alerts/:id')
+  @UseGuards(SessionAuthGuard)
+  async deleteJobAlert(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Job alert deleted successfully.',
+      await this.experienceDatabase.deleteJobAlert(user.id, id),
+    );
+  }
+
   @Get('jobs/companies')
-  async getCompanies() {
-    const companies = await this.experienceDatabase.getJobCompanies();
+  async getCompanies(
+    @Headers('authorization') authorization?: string,
+    @Query('userId') userId?: string,
+  ) {
+    const viewer = await this.coreDatabase
+      .requireUserFromAuthorization(authorization, userId)
+      .catch(() => null);
+    const companies = await this.experienceDatabase.getJobCompanies(viewer?.id);
     return {
       ...successResponse('Job companies fetched successfully.', {
         items: companies,
@@ -184,6 +238,20 @@ export class JobsController {
       results: companies,
       companies,
     };
+  }
+
+  @Patch('jobs/companies/:companyId/follow')
+  @UseGuards(SessionAuthGuard)
+  async toggleCompanyFollow(
+    @Param('companyId') companyId: string,
+    @Body() body: ToggleCompanyFollowDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Company follow status updated successfully.',
+      await this.experienceDatabase.toggleJobCompanyFollow(user.id, companyId, body.followed),
+    );
   }
 
   @Get('jobs/profile')
@@ -239,6 +307,63 @@ export class JobsController {
       results: applicants,
       applicants,
     };
+  }
+
+  @Patch('jobs/applications/:id/withdraw')
+  @UseGuards(SessionAuthGuard)
+  async withdrawApplication(
+    @Param('id') id: string,
+    @Body() body: WithdrawJobApplicationDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.applicantId,
+    );
+    return successResponse(
+      'Job application withdrawn successfully.',
+      await this.experienceDatabase.withdrawJobApplication(id, user.id),
+    );
+  }
+
+  @Patch('jobs/applications/:id/status')
+  @UseGuards(SessionAuthGuard)
+  async updateApplicationStatus(
+    @Param('id') id: string,
+    @Body() body: UpdateJobApplicationStatusDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Job application status updated successfully.',
+      await this.experienceDatabase.updateJobApplicationStatus(id, user.id, body.status),
+    );
+  }
+
+  @Patch('jobs/:id/save')
+  @UseGuards(SessionAuthGuard)
+  async toggleSavedJob(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Job saved state updated successfully.',
+      await this.experienceDatabase.toggleSavedJob(user.id, id),
+    );
+  }
+
+  @Delete('jobs/:id')
+  @UseGuards(SessionAuthGuard)
+  async deleteJob(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Job deleted successfully.',
+      await this.experienceDatabase.deleteJob(id, user.id),
+    );
   }
 
   @Get('jobs/:id')

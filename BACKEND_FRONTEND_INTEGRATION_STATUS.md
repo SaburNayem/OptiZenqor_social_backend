@@ -1,6 +1,29 @@
 # Backend Frontend Integration Status
 
-Last updated: 2026-04-30
+Last updated: 2026-05-01
+
+## 2026-05-01 Delta
+
+- Added durable job-networking mutations:
+  - `PATCH /jobs/:id/save`
+  - `PATCH /jobs/applications/:id/withdraw`
+  - `PATCH /jobs/applications/:id/status`
+  - `POST /jobs/alerts`
+  - `PATCH /jobs/alerts/:id`
+  - `DELETE /jobs/alerts/:id`
+  - `PATCH /jobs/companies/:companyId/follow`
+  - `DELETE /jobs/:id`
+- Removed legacy request-path reads from:
+  - `src/controllers/stories.controller.ts`
+  - `src/controllers/posts.controller.ts`
+  - `src/controllers/chat.controller.ts`
+- Verification state now is:
+  - `npm.cmd run typecheck`: pass
+  - `flutter analyze`: pass
+  - dashboard `npm.cmd run lint`: pass
+  - dashboard `npm.cmd run build`: pass
+  - backend `npm.cmd run build`: blocked by Windows file lock on `dist/`
+  - `npx.cmd prisma generate`: blocked by Windows file lock on Prisma engine DLL
 
 This is a backend-first audit of the current `Socity_backend` workspace, now cross-checked against the local `OptiZenqor_social` frontend endpoint map and the current calls integration slice.
 

@@ -2,6 +2,14 @@
 
 Updated: 2026-05-01
 
+## Latest Pass Update
+
+- Jobs networking now has durable backend mutations for saved jobs, alert CRUD, company follow, applicant status, job deletion, and application withdrawal.
+- `stories.controller.ts`, `posts.controller.ts`, and `chat.controller.ts` no longer use `PlatformDataService` or `ExtendedDataService` on the request paths touched in this pass.
+- Remaining backend legacy usage is still concentrated in `account-ops`, `engagement`, `invite-friends`, `onboarding`, and several app-utility controllers that still depend on `src/data/*`.
+- Backend typecheck passes.
+- Backend `npm run build` and `prisma generate` are currently blocked by Windows file locks on `dist/` and Prisma's engine DLL while local dev processes are running.
+
 This report reflects the current local workspace, not the public GitHub snapshot.
 
 ## Current Summary
@@ -64,7 +72,7 @@ This report reflects the current local workspace, not the public GitHub snapshot
 
 ## Recommended Next Pass
 
-1. Replace placeholder advanced-privacy/accessibility controller data in Flutter with backend-only reads.
-2. Remove remaining empty-model fallback behavior in Flutter jobs/profile/business modules and surface explicit error/empty states.
-3. Replace helper-backed `invite-referral` and remaining discovery/helper payloads with real persisted or derived DB-backed implementations.
-4. Add dedicated Prisma-backed seller/business/recruiter extension tables if richer profile editing is required beyond `AppUser`.
+1. Replace remaining request-path usage of `EcosystemDataService`, `ExtendedDataService`, `AppExtensionsDataService`, and `SettingsDataService` in production controllers.
+2. Reconcile backend build and Prisma generate verification by stopping the local process that is locking `dist/` and Prisma client binaries, then rerun `npm run build` and `npx prisma generate`.
+3. Replace helper-backed `invite-referral`, onboarding, account-ops, and app-utility routes with real persisted or derived DB-backed implementations.
+4. Continue removing placeholder/default frontend state in modules outside the jobs/privacy/accessibility/legal slice.

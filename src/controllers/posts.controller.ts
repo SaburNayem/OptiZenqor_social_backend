@@ -1,6 +1,5 @@
 import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, ForbiddenException } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
-import { ExtendedDataService } from '../data/extended-data.service';
 import { CreatePostDto, UpdatePostDto } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
 
@@ -9,7 +8,6 @@ import { CoreDatabaseService } from '../services/core-database.service';
 export class PostsController {
   constructor(
     private readonly coreDatabase: CoreDatabaseService,
-    private readonly extendedData: ExtendedDataService,
   ) {}
 
   @Get()
@@ -35,17 +33,9 @@ export class PostsController {
     const comments = await this.coreDatabase.getPostComments(id);
     const reactions = await this.coreDatabase.getPostReactions(id);
 
-    let detail: Record<string, unknown> | null = null;
-    try {
-      detail = this.extendedData.getPostDetail(id);
-    } catch {
-      detail = null;
-    }
-
     const payload = {
       ...post,
       author,
-      detail,
       comments,
       reactions,
     };

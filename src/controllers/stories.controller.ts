@@ -1,7 +1,5 @@
 import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
-import { ExtendedDataService } from '../data/extended-data.service';
-import { PlatformDataService } from '../data/platform-data.service';
 import {
   CreateStoryDto,
   StoryCommentDto,
@@ -11,16 +9,16 @@ import {
   UpdateStoryDto,
 } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { SocialStateDatabaseService } from '../services/social-state-database.service';
 import { StoriesDatabaseService } from '../services/stories-database.service';
 
 @ApiTags('stories')
 @Controller('stories')
 export class StoriesController {
   constructor(
-    private readonly platformData: PlatformDataService,
-    private readonly extendedData: ExtendedDataService,
     private readonly coreDatabase: CoreDatabaseService,
     private readonly storiesDatabase: StoriesDatabaseService,
+    private readonly socialStateDatabase: SocialStateDatabaseService,
   ) {}
 
   @Get()
@@ -37,11 +35,18 @@ export class StoriesController {
   }
 
   @Get('archive')
-  getArchivedStories() {
-    const stories = this.extendedData
-      .getArchivedStoryIds()
-      .map((storyId) => this.platformData.getStory(storyId));
-    return this.wrapListResponse('Archived stories fetched successfully.', stories);
+  async getArchivedStories(@Headers('authorization') authorization?: string) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const payload = await this.socialStateDatabase.listArchivedEntities(
+      user.id,
+      'story',
+      {},
+    );
+    return {
+      success: true,
+      message: 'Archived stories fetched successfully.',
+      ...payload,
+    };
   }
 
   @Get(':id/viewers')
