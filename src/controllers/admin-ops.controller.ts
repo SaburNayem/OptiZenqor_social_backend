@@ -8,25 +8,24 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AdminLoginDto } from '../dto/auth.dto';
-import { AdminOpsDataService } from '../data/admin-ops-data.service';
-import { extractMockEntityIdFromAuthHeader } from '../utils/token.util';
+import { AdminDatabaseService } from '../services/admin-database.service';
 
 @ApiTags('admin-ops')
 @Controller('admin')
 export class AdminOpsController {
-  constructor(private readonly adminOpsData: AdminOpsDataService) {}
+  constructor(private readonly adminDatabase: AdminDatabaseService) {}
 
   @Get('auth/demo-accounts')
   @ApiOperation({
-    summary: 'List seeded demo admin accounts',
+    summary: 'List admin accounts when explicitly enabled',
     description:
-      'Use these original admin emails to log in from Swagger. Demo admin password is admin123.',
+      'This route is disabled by default and should not be exposed in production.',
   })
-  getDemoAccounts() {
+  async getDemoAccounts() {
     return {
       success: true,
-      message: 'Demo admin accounts fetched successfully.',
-      data: this.adminOpsData.getAdminDemoAccounts(),
+      message: 'Admin test accounts fetched successfully.',
+      data: await this.adminDatabase.listDemoAccounts(),
     };
   }
 
@@ -34,13 +33,13 @@ export class AdminOpsController {
   @ApiOperation({
     summary: 'Admin dashboard login',
     description:
-      'Use one of the original seeded admin emails from GET /admin/auth/demo-accounts. Demo password is admin123.',
+      'Authenticates an admin user against persisted PostgreSQL-backed admin accounts.',
   })
   @ApiBody({ type: AdminLoginDto })
   @ApiOkResponse({ description: 'Admin login successful.' })
   @ApiUnauthorizedResponse({ description: 'Invalid admin credentials.' })
   login(@Body() body: AdminLoginDto) {
-    return this.adminOpsData.loginAdmin(body.email, body.password);
+    return this.adminDatabase.loginAdmin(body.email, body.password);
   }
 
   @Get('auth/me')
@@ -49,119 +48,114 @@ export class AdminOpsController {
     summary: 'Get current admin session from bearer token',
     description: 'Use the token returned from /admin/auth/login in Swagger Authorize.',
   })
-  me(@Headers('authorization') authorization?: string) {
-    const adminId = extractMockEntityIdFromAuthHeader(authorization, 'admin-token-');
-    const admin = this.adminOpsData
-      .getAdminSessions()
-      .find((item) => item.adminId === adminId) ?? null;
-
+  async me(@Headers('authorization') authorization?: string) {
     return {
       success: true,
       message: 'Current admin fetched successfully.',
-      data: admin,
+      data: await this.adminDatabase.getAdminMe(authorization),
     };
   }
 
   @Get('auth/sessions')
-  getSessions() {
-    return this.adminOpsData.getAdminSessions();
+  async getSessions() {
+    return this.adminDatabase.getAdminSessions();
   }
 
   @Patch('auth/sessions/:id/revoke')
-  revokeSession(@Param('id') id: string) {
-    return this.adminOpsData.revokeAdminSession(id);
+  async revokeSession(@Param('id') id: string) {
+    return this.adminDatabase.revokeAdminSession(id);
   }
 
   @Get('verification-queue')
-  getVerificationQueue() {
-    return this.adminOpsData.getVerificationQueue();
+  async getVerificationQueue() {
+    return this.adminDatabase.getVerificationQueue();
   }
 
   @Patch('verification-queue/:id')
-  decideVerification(
+  async decideVerification(
     @Param('id') id: string,
     @Body() body: { decision: 'approved' | 'rejected'; note?: string },
   ) {
-    return this.adminOpsData.decideVerification(id, body.decision, body.note);
+    return this.adminDatabase.decideVerification(id, body.decision, body.note);
   }
 
   @Get('moderation-cases')
-  getModerationCases() {
-    return this.adminOpsData.getModerationCases();
+  async getModerationCases() {
+    return this.adminDatabase.getModerationCases();
   }
 
   @Patch('moderation-cases/:id')
-  updateModerationCase(@Param('id') id: string, @Body() body: { action: string }) {
-    return this.adminOpsData.updateModerationCase(id, body.action);
+  async updateModerationCase(@Param('id') id: string, @Body() body: { action: string }) {
+    return this.adminDatabase.updateModerationCase(id, body.action);
   }
 
   @Get('chat-control')
-  getChatControl() {
-    return this.adminOpsData.getChatModerationCases();
+  async getChatControl() {
+    return this.adminDatabase.getModerationCases('chat_thread');
   }
 
   @Patch('chat-control/:id')
-  updateChatControl(
+  async updateChatControl(
     @Param('id') id: string,
     @Body() body: { freeze?: boolean; restrictParticipant?: string },
   ) {
-    return this.adminOpsData.updateChatModerationCase(id, body);
+    return this.adminDatabase.updateChatModerationCase(id, body);
   }
 
   @Get('broadcast-campaigns')
-  getCampaigns() {
-    return this.adminOpsData.getCampaigns();
+  async getCampaigns() {
+    return this.adminDatabase.getCampaigns();
   }
 
   @Post('broadcast-campaigns')
-  createCampaign(
+  async createCampaign(
     @Body() body: { name: string; audience: string; segmentId: string; schedule: string },
   ) {
-    return this.adminOpsData.createCampaign(body);
+    return this.adminDatabase.createCampaign(body);
   }
 
   @Get('audience-segments')
-  getAudienceSegments() {
-    return this.adminOpsData.getAudienceSegments();
+  async getAudienceSegments() {
+    return this.adminDatabase.getAudienceSegments();
   }
 
   @Get('analytics-pipeline')
-  getAnalyticsPipeline() {
-    return this.adminOpsData.getAnalyticsPipeline();
+  async getAnalyticsPipeline() {
+    return this.adminDatabase.getAnalyticsPipeline();
   }
 
   @Get('rbac')
   getRbac() {
-    return this.adminOpsData.getPermissionMatrix();
+    return this.adminDatabase.getPermissionMatrix();
   }
 
   @Get('operational-settings')
-  getOperationalSettings() {
-    return this.adminOpsData.getOperationalSettings();
+  async getOperationalSettings() {
+    return this.adminDatabase.getOperationalSettings();
   }
 
   @Patch('operational-settings')
-  updateOperationalSettings(@Body() body: Record<string, unknown>) {
-    return this.adminOpsData.updateOperationalSettings(body);
+  async updateOperationalSettings(@Body() body: Record<string, unknown>) {
+    return this.adminDatabase.updateOperationalSettings(body);
   }
 
   @Get('audit-log-system')
-  getAuditLogs() {
-    return this.adminOpsData.getAuditLogs();
+  async getAuditLogs() {
+    return this.adminDatabase.getAuditLogs();
   }
 
   @Get('content-operations')
-  getContentOperations() {
-    return this.adminOpsData.getContentOperations();
+  async getContentOperations() {
+    return this.adminDatabase.getContentOperations();
   }
 
   @Get('commerce-risk')
-  getCommerceRisk() {
-    return this.adminOpsData.getCommerceRisk();
+  async getCommerceRisk() {
+    return this.adminDatabase.getCommerceRisk();
   }
 
   @Get('support-operations')
-  getSupportOperations() {
-    return this.adminOpsData.getSupportOperations();
+  async getSupportOperations() {
+    return this.adminDatabase.getSupportOperations();
   }
 }

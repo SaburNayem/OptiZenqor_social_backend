@@ -1,0 +1,916 @@
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  OnModuleInit,
+  UnauthorizedException,
+} from '@nestjs/common';
+import * as argon2 from 'argon2';
+import { Prisma } from '@prisma/client';
+import { randomUUID } from 'crypto';
+import { makeId } from '../common/id.util';
+import { PrismaService } from './prisma.service';
+
+@Injectable()
+export class AdminDatabaseService implements OnModuleInit {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async onModuleInit() {
+    await this.ensureDefaultAdmin();
+  }
+
+  async listDemoAccounts() {
+    if ((process.env.ADMIN_EXPOSE_TEST_ACCOUNTS ?? 'false') !== 'true') {
+      throw new UnauthorizedException('Admin test account listing is disabled.');
+    }
+
+    const admins = await this.prisma.adminUser.findMany({
+      where: { isActive: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return admins.map((admin) => ({
+      adminId: admin.id,
+      name: admin.name,
+      email: admin.email,
+      role: admin.role,
+    }));
+  }
+
+  async loginAdmin(email: string, password: string) {
+    const admin = await this.prisma.adminUser.findUnique({
+      where: { email: email.trim().toLowerCase() },
+    });
+    if (!admin || !admin.isActive) {
+      throw new UnauthorizedException('Invalid admin credentials.');
+    }
+
+    const valid = await argon2.verify(admin.passwordHash, password);
+    if (!valid) {
+      throw new UnauthorizedException('Invalid admin password.');
+    }
+
+    const session = await this.prisma.adminSession.create({
+      data: {
+        id: makeId('session'),
+        adminId: admin.id,
+        accessToken: `admin_access_${randomUUID().replace(/-/g, '')}`,
+        refreshToken: `admin_refresh_${randomUUID().replace(/-/g, '')}`,
+        device: 'Dashboard session',
+        ipAddress: '0.0.0.0',
+        current: true,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
+      },
+    });
+
+    await this.createAuditLog({
+      actorAdminId: admin.id,
+      action: 'admin.login',
+      entityType: 'admin_session',
+      entityId: session.id,
+      metadata: {
+        email: admin.email,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Admin login successful.',
+      data: {
+        token: session.accessToken,
+        refreshToken: session.refreshToken,
+        session: this.mapAdminSession(session, admin),
+      },
+    };
+  }
+
+  async getAdminMe(accessToken?: string) {
+    const session = await this.resolveAdminSession(accessToken);
+    return this.mapAdminSession(session, session.admin);
+  }
+
+  async getAdminSessions() {
+    const sessions = await this.prisma.adminSession.findMany({
+      include: { admin: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return sessions.map((session) => this.mapAdminSession(session, session.admin));
+  }
+
+  async revokeAdminSession(id: string) {
+    const existing = await this.prisma.adminSession.findUnique({
+      where: { id },
+      include: { admin: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Admin session ${id} not found`);
+    }
+
+    const session = await this.prisma.adminSession.update({
+      where: { id },
+      data: {
+        current: false,
+        revokedAt: new Date(),
+        lastActive: new Date(),
+      },
+      include: { admin: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId: session.adminId,
+      action: 'admin.session.revoke',
+      entityType: 'admin_session',
+      entityId: session.id,
+      metadata: {
+        email: session.admin.email,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Admin session revoked successfully.',
+      data: this.mapAdminSession(session, session.admin),
+    };
+  }
+
+  async getVerificationQueue() {
+    const users = await this.prisma.appUser.findMany({
+      where: {
+        OR: [
+          { verification: { in: ['pending', 'rejected', 'approved'] } },
+          { role: { in: ['Creator', 'Business', 'Seller', 'Recruiter'] } },
+        ],
+      },
+      include: { settings: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 200,
+    });
+
+    return users.map((user) => {
+      const settings = this.readObject(user.settings?.settings);
+      const verification = this.readObject(settings.verificationRequest);
+      const selectedDocuments = this.readStringArray(verification.selectedDocuments);
+      const requiredDocuments = this.readStringArray(verification.requiredDocuments);
+      const status = this.normalizeVerificationStatus(
+        this.readString(verification.status) ?? user.verification,
+      );
+
+      return {
+        id: user.id,
+        userId: user.id,
+        name: user.name,
+        roleType: user.role,
+        verificationState: status,
+        documentType: selectedDocuments[0] ?? requiredDocuments[0] ?? 'Documents pending',
+        submittedAt:
+          this.readString(verification.submittedAt) ?? user.updatedAt.toISOString(),
+        notes: this.readStringArray(verification.notes),
+        history: [
+          `Profile type: ${user.role}`,
+          `Email verified: ${user.emailVerified ? 'yes' : 'no'}`,
+        ],
+        decision:
+          status === 'approved'
+            ? 'approved'
+            : status === 'rejected'
+              ? 'rejected'
+              : null,
+      };
+    });
+  }
+
+  async decideVerification(
+    userId: string,
+    decision: 'approved' | 'rejected',
+    note?: string,
+  ) {
+    const user = await this.prisma.appUser.findUnique({
+      where: { id: userId },
+      include: { settings: true },
+    });
+    if (!user) {
+      throw new NotFoundException(`Verification ${userId} not found`);
+    }
+
+    const currentSettings = this.readObject(user.settings?.settings);
+    const verification = this.readObject(currentSettings.verificationRequest);
+    const nextVerification = {
+      ...verification,
+      status: decision,
+      reason:
+        decision === 'approved'
+          ? 'Approved. Verification badge is ready to appear on your profile.'
+          : note?.trim() || 'Rejected. Update your documents and try again.',
+      reviewedAt: new Date().toISOString(),
+      notes: [
+        ...this.readStringArray(verification.notes),
+        note?.trim() || `Decision applied: ${decision}`,
+      ],
+    };
+
+    await this.prisma.$transaction([
+      this.prisma.appUser.update({
+        where: { id: userId },
+        data: {
+          verification: decision,
+          updatedAt: new Date(),
+        },
+      }),
+      this.prisma.userSettings.upsert({
+        where: { userId },
+        create: {
+          userId,
+          settings: {
+            ...currentSettings,
+            verificationRequest: nextVerification,
+          } as Prisma.InputJsonValue,
+        },
+        update: {
+          settings: {
+            ...currentSettings,
+            verificationRequest: nextVerification,
+          } as Prisma.InputJsonValue,
+          updatedAt: new Date(),
+        },
+      }),
+    ]);
+
+    await this.createAuditLog({
+      action: 'verification.review',
+      entityType: 'user',
+      entityId: userId,
+      metadata: { decision, note: note?.trim() || null },
+    });
+
+    return {
+      id: userId,
+      decision,
+      verificationState: decision,
+      note: note?.trim() || null,
+    };
+  }
+
+  async getModerationCases(targetType?: string) {
+    const items = await this.prisma.moderationCase.findMany({
+      where: targetType ? { targetType } : undefined,
+      include: { assignedAdmin: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 200,
+    });
+    return items.map((item) => this.mapModerationCase(item));
+  }
+
+  async updateModerationCase(id: string, action: string) {
+    const existing = await this.prisma.moderationCase.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Moderation case ${id} not found`);
+    }
+
+    const history = this.readStringArray(existing.history);
+    const enforcementActions = this.readStringArray(existing.enforcementActions);
+    const status = action === 'close' ? 'resolved' : action === 'escalate' ? 'escalated' : 'updated';
+
+    const updated = await this.prisma.moderationCase.update({
+      where: { id },
+      data: {
+        status,
+        history: [
+          ...history,
+          `Action applied: ${action} at ${new Date().toISOString()}`,
+        ] as Prisma.InputJsonValue,
+        enforcementActions: [...enforcementActions, action] as Prisma.InputJsonValue,
+        updatedAt: new Date(),
+      },
+      include: { assignedAdmin: true },
+    });
+
+    await this.createAuditLog({
+      action: 'moderation.case.update',
+      entityType: 'moderation_case',
+      entityId: updated.id,
+      metadata: { action },
+    });
+
+    return this.mapModerationCase(updated);
+  }
+
+  async updateChatModerationCase(
+    id: string,
+    patch: { freeze?: boolean; restrictParticipant?: string },
+  ) {
+    const existing = await this.prisma.moderationCase.findUnique({
+      where: { id },
+    });
+    if (!existing || existing.targetType !== 'chat_thread') {
+      throw new NotFoundException(`Chat moderation case ${id} not found`);
+    }
+
+    const metadata = this.readObject(existing.metadata);
+    const restrictedParticipants = this.readStringArray(metadata.restrictedParticipants);
+    const updated = await this.prisma.moderationCase.update({
+      where: { id },
+      data: {
+        metadata: {
+          ...metadata,
+          frozen: typeof patch.freeze === 'boolean' ? patch.freeze : metadata.frozen ?? false,
+          restrictedParticipants: patch.restrictParticipant
+            ? [...new Set([...restrictedParticipants, patch.restrictParticipant])]
+            : restrictedParticipants,
+        } as Prisma.InputJsonValue,
+        updatedAt: new Date(),
+      },
+      include: { assignedAdmin: true },
+    });
+
+    await this.createAuditLog({
+      action: 'moderation.chat.update',
+      entityType: 'moderation_case',
+      entityId: updated.id,
+      metadata: patch,
+    });
+
+    return this.mapModerationCase(updated);
+  }
+
+  async getCampaigns() {
+    const rows = await this.prisma.notificationCampaign.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      audience: row.audience,
+      segmentId: row.audience,
+      schedule: row.schedule,
+      status: row.status,
+      delivered: 0,
+      openRate: '0%',
+      createdAt: row.createdAt.toISOString(),
+    }));
+  }
+
+  async createCampaign(input: {
+    name: string;
+    audience: string;
+    segmentId: string;
+    schedule: string;
+  }) {
+    const item = await this.prisma.notificationCampaign.create({
+      data: {
+        id: makeId('campaign'),
+        name: input.name.trim(),
+        audience: input.segmentId?.trim() || input.audience.trim(),
+        schedule: input.schedule.trim(),
+        status: 'scheduled',
+      },
+    });
+
+    await this.createAuditLog({
+      action: 'campaign.create',
+      entityType: 'notification_campaign',
+      entityId: item.id,
+      metadata: input,
+    });
+
+    return {
+      id: item.id,
+      name: item.name,
+      audience: input.audience,
+      segmentId: item.audience,
+      schedule: item.schedule,
+      status: item.status,
+      delivered: 0,
+      openRate: '0%',
+    };
+  }
+
+  async getAudienceSegments() {
+    const [totalUsers, verifiedUsers, creators, businesses, premiumSubscribers] =
+      await Promise.all([
+        this.prisma.appUser.count(),
+        this.prisma.appUser.count({ where: { emailVerified: true } }),
+        this.prisma.appUser.count({ where: { role: 'Creator' } }),
+        this.prisma.appUser.count({ where: { role: 'Business' } }),
+        this.prisma.subscription.count({ where: { status: 'active' } }),
+      ]);
+
+    return [
+      { id: 'all_users', name: 'All users', size: totalUsers },
+      { id: 'verified_users', name: 'Verified users', size: verifiedUsers },
+      { id: 'creators', name: 'Creators', size: creators },
+      { id: 'businesses', name: 'Businesses', size: businesses },
+      { id: 'premium', name: 'Premium subscribers', size: premiumSubscribers },
+    ];
+  }
+
+  async getAnalyticsPipeline() {
+    const [users, posts, reports, revenue, eventsRsvp] = await Promise.all([
+      this.prisma.appUser.count(),
+      this.prisma.appPost.count({ where: { deletedAt: null } }),
+      this.prisma.userReport.count(),
+      this.prisma.walletTransaction.aggregate({
+        _sum: { amount: true },
+      }),
+      this.prisma.eventRsvp.count({ where: { status: 'going' } }),
+    ]);
+
+    return {
+      kpis: {
+        userGrowth: String(users),
+        contentOutput: String(posts),
+        moderationLoad: String(reports),
+        revenue: `$${Number(revenue._sum.amount ?? 0).toFixed(2)}`,
+        eventsRsvp: String(eventsRsvp),
+      },
+      snapshots: [],
+      leaderboards: [],
+      exportJobs: [],
+    };
+  }
+
+  getPermissionMatrix() {
+    return {
+      roles: [
+        'Super Admin',
+        'Operations Admin',
+        'Content Moderator',
+        'Finance Admin',
+        'Support Admin',
+        'Analytics Viewer',
+      ],
+      moduleScopes: {
+        dashboard: ['view'],
+        users: ['view', 'verify', 'suspend'],
+        content: ['view', 'hide', 'feature'],
+        reports: ['view', 'assign', 'resolve', 'escalate'],
+        monetization: ['view', 'hold', 'approve'],
+        settings: ['view', 'edit'],
+        audit: ['view', 'export'],
+      },
+    };
+  }
+
+  async getOperationalSettings() {
+    const items = await this.prisma.adminOperationalSetting.findMany({
+      orderBy: { key: 'asc' },
+    });
+    if (items.length === 0) {
+      return this.defaultOperationalSettings();
+    }
+    return items.reduce<Record<string, unknown>>((acc, item) => {
+      acc[item.key] = item.value;
+      return acc;
+    }, {});
+  }
+
+  async updateOperationalSettings(patch: Record<string, unknown>) {
+    const entries = Object.entries(patch);
+    if (entries.length === 0) {
+      throw new ConflictException('At least one operational setting is required.');
+    }
+
+    await this.prisma.$transaction(
+      entries.map(([key, value]) =>
+        this.prisma.adminOperationalSetting.upsert({
+          where: { key },
+          create: {
+            key,
+            value: this.normalizeJsonValue(value),
+          },
+          update: {
+            value: this.normalizeJsonValue(value),
+            updatedAt: new Date(),
+          },
+        }),
+      ),
+    );
+
+    await this.createAuditLog({
+      action: 'operational_settings.update',
+      entityType: 'admin_operational_settings',
+      metadata: patch,
+    });
+
+    return this.getOperationalSettings();
+  }
+
+  async getAuditLogs() {
+    const rows = await this.prisma.adminAuditLog.findMany({
+      include: { actorAdmin: true },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      actorAdminId: row.actorAdminId,
+      actorName: row.actorAdmin?.name ?? null,
+      action: row.action,
+      entityType: row.entityType,
+      entityId: row.entityId,
+      metadata: this.readObject(row.metadata),
+      createdAt: row.createdAt.toISOString(),
+    }));
+  }
+
+  async getContentOperations() {
+    const [posts, reels, stories, comments] = await Promise.all([
+      this.prisma.appPost.findMany({
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+      this.prisma.reel.findMany({
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+      this.prisma.story.findMany({
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+      this.prisma.appPostComment.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    ]);
+
+    return {
+      posts,
+      reels,
+      stories,
+      comments,
+    };
+  }
+
+  async getCommerceRisk() {
+    const [orders, offers] = await Promise.all([
+      this.prisma.marketplaceOrder.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      this.prisma.marketplaceOffer.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+    ]);
+
+    return {
+      disputes: orders.filter((item) => item.status !== 'completed'),
+      payoutReviews: offers.filter((item) => item.status === 'pending'),
+    };
+  }
+
+  async getSupportOperations() {
+    const [tickets, actions] = await Promise.all([
+      this.prisma.supportTicket.findMany({
+        orderBy: { updatedAt: 'desc' },
+        take: 100,
+      }),
+      this.prisma.adminAuditLog.findMany({
+        where: { entityType: 'support_ticket' },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
+    ]);
+
+    return {
+      tickets,
+      actions: actions.map((row) => ({
+        id: row.id,
+        action: row.action,
+        entityId: row.entityId,
+        metadata: this.readObject(row.metadata),
+        createdAt: row.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  async getDashboardSummary() {
+    const [
+      users,
+      posts,
+      reports,
+      activeSubscriptions,
+      openSupportTickets,
+      moderationCases,
+    ] = await Promise.all([
+      this.prisma.appUser.count(),
+      this.prisma.appPost.count({ where: { deletedAt: null } }),
+      this.prisma.userReport.count(),
+      this.prisma.subscription.count({ where: { status: 'active' } }),
+      this.prisma.supportTicket.count({ where: { status: 'open' } }),
+      this.prisma.moderationCase.count({ where: { status: { not: 'resolved' } } }),
+    ]);
+
+    return {
+      users,
+      posts,
+      reports,
+      activeSubscriptions,
+      openSupportTickets,
+      moderationCases,
+    };
+  }
+
+  async getAdminUsers() {
+    return this.prisma.appUser.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+  }
+
+  async getAdminContent() {
+    return {
+      posts: await this.prisma.appPost.findMany({
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      stories: await this.prisma.story.findMany({
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      reels: await this.prisma.reel.findMany({
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+    };
+  }
+
+  async getReports() {
+    return this.prisma.userReport.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+  }
+
+  async getChatCases() {
+    return this.getModerationCases('chat_thread');
+  }
+
+  async getEvents() {
+    return this.prisma.event.findMany({
+      where: { deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+  }
+
+  async getMonetization() {
+    return {
+      wallet: await this.prisma.walletTransaction.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
+      subscriptions: await this.prisma.subscription.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
+      plans: await this.prisma.premiumPlan.findMany({
+        orderBy: { createdAt: 'desc' },
+      }),
+    };
+  }
+
+  async getNotifications() {
+    return this.getCampaigns();
+  }
+
+  async getAnalytics() {
+    const pipeline = await this.getAnalyticsPipeline();
+    return {
+      userAnalytics: [
+        { label: 'Total users', value: pipeline.kpis.userGrowth },
+        { label: 'Premium revenue', value: pipeline.kpis.revenue },
+      ],
+      contentAnalytics: [
+        { label: 'Content items', value: pipeline.kpis.contentOutput },
+      ],
+      moderationAnalytics: [
+        { label: 'Reports', value: pipeline.kpis.moderationLoad },
+      ],
+    };
+  }
+
+  getRoles() {
+    return this.getPermissionMatrix();
+  }
+
+  async getSettings() {
+    return this.getOperationalSettings();
+  }
+
+  private async ensureDefaultAdmin() {
+    const count = await this.prisma.adminUser.count();
+    if (count > 0) {
+      return;
+    }
+
+    const isProduction = (process.env.NODE_ENV ?? '').trim().toLowerCase() === 'production';
+    if (isProduction && !process.env.ADMIN_BOOTSTRAP_EMAIL) {
+      return;
+    }
+
+    const email = (process.env.ADMIN_BOOTSTRAP_EMAIL ?? 'admin@optizenqor.app')
+      .trim()
+      .toLowerCase();
+    const password = (process.env.ADMIN_BOOTSTRAP_PASSWORD ?? 'admin123').trim();
+    const name = (process.env.ADMIN_BOOTSTRAP_NAME ?? 'Super Admin').trim();
+    const role = (process.env.ADMIN_BOOTSTRAP_ROLE ?? 'Super Admin').trim();
+
+    await this.prisma.adminUser.create({
+      data: {
+        id: makeId('admin'),
+        name,
+        email,
+        role,
+        passwordHash: await argon2.hash(password),
+        mfaEnabled: false,
+        isActive: true,
+      },
+    });
+  }
+
+  private async resolveAdminSession(accessToken?: string) {
+    const token = accessToken?.replace(/^Bearer\s+/i, '').trim();
+    if (!token) {
+      throw new UnauthorizedException('Admin authentication required.');
+    }
+
+    const session = await this.prisma.adminSession.findUnique({
+      where: { accessToken: token },
+      include: { admin: true },
+    });
+    if (!session || session.revokedAt || session.expiresAt <= new Date()) {
+      throw new UnauthorizedException('Invalid or expired admin session.');
+    }
+
+    await this.prisma.adminSession.update({
+      where: { id: session.id },
+      data: {
+        lastActive: new Date(),
+        current: true,
+      },
+    });
+
+    return session;
+  }
+
+  private async createAuditLog(input: {
+    actorAdminId?: string | null;
+    action: string;
+    entityType: string;
+    entityId?: string | null;
+    metadata?: Record<string, unknown>;
+  }) {
+    await this.prisma.adminAuditLog.create({
+      data: {
+        id: makeId('audit'),
+        actorAdminId: input.actorAdminId ?? null,
+        action: input.action,
+        entityType: input.entityType,
+        entityId: input.entityId ?? null,
+        metadata: (input.metadata ?? {}) as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  private mapAdminSession(
+    session: {
+      id: string;
+      adminId: string;
+      device: string;
+      ipAddress: string;
+      current: boolean;
+      createdAt: Date;
+      lastActive: Date;
+      revokedAt: Date | null;
+      accessToken?: string;
+      refreshToken?: string;
+    },
+    admin: {
+      id: string;
+      name: string;
+      email: string;
+      role: string;
+      mfaEnabled: boolean;
+    },
+  ) {
+    return {
+      id: session.id,
+      adminId: admin.id,
+      name: admin.name,
+      email: admin.email,
+      role: admin.role,
+      mfaEnabled: admin.mfaEnabled,
+      device: session.device,
+      ipAddress: session.ipAddress,
+      lastActive: session.lastActive.toISOString(),
+      createdAt: session.createdAt.toISOString(),
+      current: session.current && !session.revokedAt,
+      token: session.accessToken,
+      refreshToken: session.refreshToken,
+    };
+  }
+
+  private mapModerationCase(item: {
+    id: string;
+    title: string;
+    type: string;
+    targetType: string;
+    severity: string;
+    targetId: string | null;
+    targetLabel: string | null;
+    reason: string;
+    evidence: Prisma.JsonValue;
+    history: Prisma.JsonValue;
+    status: string;
+    enforcementActions: Prisma.JsonValue;
+    metadata: Prisma.JsonValue;
+    assignedAdmin?: { id: string; name: string } | null;
+  }) {
+    const metadata = this.readObject(item.metadata);
+    return {
+      id: item.id,
+      title: item.title,
+      type: item.type,
+      targetType: item.targetType,
+      severity: item.severity,
+      target: item.targetLabel ?? item.targetId ?? '',
+      targetId: item.targetId,
+      reason: item.reason,
+      evidence: this.readStringArray(item.evidence),
+      history: this.readStringArray(item.history),
+      assignedTo: item.assignedAdmin?.name ?? '',
+      assignedToAdminId: item.assignedAdmin?.id ?? null,
+      status: item.status,
+      enforcementActions: this.readStringArray(item.enforcementActions),
+      frozen: Boolean(metadata.frozen),
+      restrictedParticipants: this.readStringArray(metadata.restrictedParticipants),
+    };
+  }
+
+  private normalizeVerificationStatus(value?: string) {
+    const normalized = (value ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+    if (!normalized) {
+      return 'not_requested';
+    }
+    if (normalized === 'verified') {
+      return 'approved';
+    }
+    return normalized;
+  }
+
+  private readObject(value: unknown) {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  }
+
+  private readString(value: unknown) {
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  }
+
+  private readStringArray(value: unknown) {
+    return Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      : [];
+  }
+
+  private normalizeJsonValue(value: unknown): Prisma.InputJsonValue {
+    if (typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean'
+    ) {
+      return value;
+    }
+    if (value === null) {
+      return {} as Prisma.InputJsonValue;
+    }
+    if (Array.isArray(value)) {
+      return value as Prisma.InputJsonValue;
+    }
+    if (value && typeof value === 'object') {
+      return value as Prisma.InputJsonValue;
+    }
+    return String(value ?? '');
+  }
+
+  private defaultOperationalSettings() {
+    return {
+      safetyDefaults: 'Enabled',
+      storageRetention: '90 days',
+      notificationRateLimit: 'Medium',
+      maintenanceBanner: 'Disabled',
+      maintenanceMode: false,
+      remoteConfigVersion: '2026.04.30',
+      campaignThrottlePerMinute: 1200,
+    };
+  }
+}

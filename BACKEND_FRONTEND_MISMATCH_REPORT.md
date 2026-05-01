@@ -9,12 +9,12 @@ Generated from the latest fetched commits on April 29, 2026.
 
 The Flutter app is already wired to a large backend surface through `lib/core/data/api/api_end_points.dart`, but the integration is not fully production-ready yet.
 
-Primary gaps:
+Primary remaining gaps:
 
 - Flutter still contains repository-level mock and local fallback behavior for multiple shipped features.
-- Backend still exposes many mobile-facing routes through static helper services such as `ExtendedDataService`, `PlatformDataService`, `EcosystemDataService`, and `SettingsDataService`.
+- Backend still exposes some utility/config-style routes through helper services such as `ExtendedDataService`, `PlatformDataService`, `EcosystemDataService`, and `SettingsDataService`.
 - Several backend routes exist, but their response payloads remain placeholder summaries rather than full database-backed feature data.
-- Realtime presence, chat preferences, live streams, and support/help flows are not fully persisted in PostgreSQL.
+- Realtime presence and some settings/catalog helper surfaces are still not fully persisted in PostgreSQL.
 
 ## Frontend expects backend, but still falls back to mock or local state
 
@@ -43,30 +43,32 @@ These frontend files still use mock, static, or local-first behavior:
 
 ## Backend routes still backed by seeded or static runtime services
 
-These controllers still rely on non-Prisma runtime data sources:
+These backend areas still need follow-up because they either remain helper-backed or are only partially database-driven:
 
 - `src/controllers/discovery.controller.ts`
   - Uses `EcosystemDataService` and `PlatformDataService` for hashtags, trending, pages, communities, products, events, and previously saved collections.
 - `src/controllers/chat.controller.ts`
   - Chat threads and messages are database-backed, but archive, mute, pin, unread, preferences, and parts of presence still depend on `ExtendedDataService`.
 - `src/controllers/realtime.controller.ts`
-  - Group chat, calls overview, live streams, live comments, and live reactions still depend on `EcosystemDataService`.
+  - Group chat is database-backed and live streams are database-backed.
+  - Call session persistence now exists in PostgreSQL and Prisma schema, but presence/room membership is still runtime socket state.
 - `src/controllers/support.controller.ts`
-  - FAQs, tickets, support chat, and support mail are still static/helper-backed.
+  - FAQs, tickets, support chat, and support mail are database-backed or config-backed.
 - `src/controllers/preferences.controller.ts`
-  - Advanced privacy, safety, accessibility support, explore recommendation, push preferences, and legal compliance are still driven by `SettingsDataService`.
+  - Advanced privacy, safety, accessibility support, explore recommendation, push preferences, and legal compliance still compose helper/catalog metadata around persisted user settings.
 - `src/controllers/account-ops.controller.ts`
-  - Recommendations, chat preferences, safety config, support chat, master data, legal consents, and some security helper payloads still come from `ExtendedDataService`.
+  - Recommendations, master data, legal helper payloads, and non-email OTP fallback still come from `ExtendedDataService`.
 - `src/controllers/auth.controller.ts`
   - Main auth flows are database-backed, but demo-account routes and descriptions still expose seeded-demo semantics.
 - `src/controllers/profiles.controller.ts`
-  - Tagged posts, mention history, business profile, seller profile, and recruiter profile still pull from static ecosystem data.
+  - Tagged posts and mention history are database-derived.
+  - Business/seller/recruiter summary blocks still need richer DB-native profile modules.
 - `src/controllers/engagement.controller.ts`
   - Premium membership, premium, wallet-payments, subscriptions, and invite-referral still use `EcosystemDataService`.
 - `src/controllers/archive.controller.ts`
-  - Mixes `ExtendedDataService` and `PlatformDataService`.
+  - Archive state is database-backed through `SocialStateDatabaseService`.
 - `src/controllers/stories.controller.ts`
-  - Main story persistence exists, but controller still imports both `ExtendedDataService` and `PlatformDataService`.
+  - Main story persistence exists, but some supporting presentation helpers are still imported from legacy services.
 - `src/controllers/bookmarks.controller.ts`
   - Main bookmark flow is persisted, but `POST /bookmarks/posts/:postId` still falls back to `PlatformDataService` if the post is missing in the database.
 
@@ -136,25 +138,13 @@ Already present in Prisma:
 - premium plans
 - subscriptions
 
-Still missing in Prisma schema or only implemented outside Prisma:
+Still missing in Prisma schema or not yet fully exposed through mobile-ready routes:
 
-- support tickets
-- admin users and admin session persistence
-- audit logs
-- moderation cases
-- hidden posts
-- mute state
+- mute state route coverage outside chat preferences
 - recommendation/explore datasets
 - saved job alerts
 - employer profiles and candidate career profiles
-- marketplace offers
-- followed sellers
-- marketplace chat specialization
-- push device tokens
-- live stream sessions
-- live stream comments and reactions
-- call sessions and call signals as Prisma models
-- notification delivery device state
+- notification delivery device registration routes
 - page reviews, highlights, and visitor-post rules if Flutter keeps using them
 
 ## Auth and session notes
@@ -219,7 +209,7 @@ Additional backend behavior:
 
 ## Recommended next backend passes
 
-1. Replace support/help static services with Prisma-backed support tickets and support conversations.
-2. Replace realtime live-stream and group-chat static services with Prisma-backed models.
-3. Replace chat preference/archive/mute/pin helper state with persisted tables or structured user settings.
-4. Replace discovery/trending/hashtags static services with query-driven persisted or derived data.
+1. Replace the remaining `ExtendedDataService` helper flows in account/legal/master-data endpoints.
+2. Expose push device token registration/read/revoke routes on top of the new persistence model.
+3. Deepen admin analytics/configuration beyond the new persisted admin auth/session/moderation/audit baseline.
+4. Continue replacing helper-driven settings/discovery presentation data with DB-derived or explicit config-backed responses.

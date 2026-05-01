@@ -30,6 +30,10 @@ Database-backed now:
 - chat preferences and chat thread archive/mute/pin state
 - hidden posts and archived post/story/reel state
 - live stream sessions, comments, and reactions
+- call sessions and call signals
+- admin users and admin sessions
+- moderation cases and admin audit logs
+- admin operational settings
 
 Persisted discovery datasets now exist for:
 
@@ -38,11 +42,11 @@ Persisted discovery datasets now exist for:
 
 Still partially or fully static/mock-backed:
 
-- admin dashboard and admin auth flows
 - some support/help utility surfaces beyond the now-durable FAQs, tickets, and conversations
 - some accessibility/localization/preference helper surfaces
-- advanced moderation and audit trails
-- live/call/session persistence beyond the current realtime layer
+- some admin analytics/configuration surfaces are still derived summaries rather than full CRUD modules
+- advanced moderation workflows beyond the new persisted case/audit baseline
+- push device registration routes are not exposed yet even though persistence tables now exist
 
 ## Main backend rules
 

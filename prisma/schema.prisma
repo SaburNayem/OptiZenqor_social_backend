@@ -103,6 +103,12 @@ model AppUser {
   hostedLiveStreams   LiveStreamSession[]     @relation("LiveStreamHost")
   liveStreamComments  LiveStreamComment[]
   liveStreamReactions LiveStreamReaction[]
+  initiatedCallSessions CallSession[]         @relation("CallSessionInitiator")
+  endedCallSessions   CallSession[]           @relation("CallSessionEndedBy")
+  callSessionParticipants CallSessionParticipant[]
+  sentCallSignals     CallSessionSignal[]     @relation("CallSignalFromUser")
+  receivedCallSignals CallSessionSignal[]     @relation("CallSignalToUser")
+  pushDeviceTokens    PushDeviceToken[]
 
   @@map("app_users")
 }
@@ -255,6 +261,7 @@ model ChatThread {
   messages          ChatMessage[]
   preferences       ChatThreadPreference[]
   liveStreams       LiveStreamSession[]
+  callSessions      CallSession[]
 
   @@map("chat_threads")
 }
@@ -1208,4 +1215,157 @@ model LiveStreamReaction {
   @@index([streamId, createdAt(sort: Desc)])
   @@index([streamId, type, createdAt(sort: Desc)])
   @@map("app_live_stream_reactions")
+}
+
+model CallSession {
+  id           String                   @id @map("id")
+  roomName     String                   @map("room_name")
+  threadId     String?                  @map("thread_id")
+  initiatorId  String                   @map("initiator_id")
+  recipientIds Json                     @default("[]") @map("recipient_ids")
+  mode         String                   @map("mode")
+  status       String                   @map("status")
+  startedAt    DateTime                 @db.Timestamptz(6) @map("started_at")
+  endedAt      DateTime?                @db.Timestamptz(6) @map("ended_at")
+  endedBy      String?                  @map("ended_by")
+  reason       String?                  @map("reason")
+  thread       ChatThread?              @relation(fields: [threadId], references: [id], onDelete: SetNull)
+  initiator    AppUser                  @relation("CallSessionInitiator", fields: [initiatorId], references: [id], onDelete: Cascade)
+  endedByUser  AppUser?                 @relation("CallSessionEndedBy", fields: [endedBy], references: [id], onDelete: SetNull)
+  participants CallSessionParticipant[]
+  signals      CallSessionSignal[]
+
+  @@index([initiatorId, startedAt(sort: Desc)])
+  @@index([status, startedAt(sort: Desc)])
+  @@map("app_call_sessions")
+}
+
+model CallSessionParticipant {
+  sessionId String      @map("session_id")
+  userId    String      @map("user_id")
+  state     String      @map("state")
+  joinedAt  DateTime?   @db.Timestamptz(6) @map("joined_at")
+  leftAt    DateTime?   @db.Timestamptz(6) @map("left_at")
+  session   CallSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user      AppUser     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([sessionId, userId])
+  @@index([userId, joinedAt(sort: Desc)])
+  @@map("app_call_session_participants")
+}
+
+model CallSessionSignal {
+  id         String      @id @map("id")
+  sessionId  String      @map("session_id")
+  fromUserId String      @map("from_user_id")
+  toUserId   String?     @map("to_user_id")
+  type       String      @map("type")
+  payload    Json        @default("{}") @map("payload")
+  createdAt  DateTime    @db.Timestamptz(6) @map("created_at")
+  session    CallSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  fromUser   AppUser     @relation("CallSignalFromUser", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser     AppUser?    @relation("CallSignalToUser", fields: [toUserId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId, createdAt(sort: Asc)])
+  @@index([toUserId, createdAt(sort: Desc)])
+  @@map("app_call_session_signals")
+}
+
+model PushDeviceToken {
+  id          String   @id @map("id")
+  userId      String   @map("user_id")
+  token       String   @unique @map("token")
+  platform    String   @map("platform")
+  deviceLabel String?  @map("device_label")
+  isActive    Boolean  @default(true) @map("is_active")
+  lastSeenAt  DateTime @default(now()) @db.Timestamptz(6) @map("last_seen_at")
+  createdAt   DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt   DateTime @default(now()) @db.Timestamptz(6) @map("updated_at")
+  user        AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive, updatedAt(sort: Desc)])
+  @@map("app_push_device_tokens")
+}
+
+model AdminUser {
+  id           String                  @id @map("id")
+  name         String                  @map("name")
+  email        String                  @unique @map("email")
+  role         String                  @map("role")
+  passwordHash String                  @map("password_hash")
+  mfaEnabled   Boolean                 @default(false) @map("mfa_enabled")
+  isActive     Boolean                 @default(true) @map("is_active")
+  createdAt    DateTime                @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt    DateTime                @default(now()) @db.Timestamptz(6) @map("updated_at")
+  sessions     AdminSession[]
+  auditLogs    AdminAuditLog[]         @relation("AdminAuditActor")
+  assignedCases ModerationCase[]       @relation("ModerationAssignedAdmin")
+
+  @@map("admin_users")
+}
+
+model AdminSession {
+  id           String    @id @map("id")
+  adminId      String    @map("admin_id")
+  accessToken  String    @unique @map("access_token")
+  refreshToken String    @unique @map("refresh_token")
+  device       String    @default("Unknown device") @map("device")
+  ipAddress    String    @default("0.0.0.0") @map("ip_address")
+  current      Boolean   @default(true) @map("current")
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6) @map("created_at")
+  lastActive   DateTime  @default(now()) @db.Timestamptz(6) @map("last_active")
+  expiresAt    DateTime  @db.Timestamptz(6) @map("expires_at")
+  revokedAt    DateTime? @db.Timestamptz(6) @map("revoked_at")
+  admin        AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId, createdAt(sort: Desc)])
+  @@index([accessToken])
+  @@map("admin_sessions")
+}
+
+model AdminAuditLog {
+  id           String     @id @map("id")
+  actorAdminId String?    @map("actor_admin_id")
+  action       String     @map("action")
+  entityType   String     @map("entity_type")
+  entityId     String?    @map("entity_id")
+  metadata     Json       @default("{}") @map("metadata")
+  createdAt    DateTime   @default(now()) @db.Timestamptz(6) @map("created_at")
+  actorAdmin   AdminUser? @relation("AdminAuditActor", fields: [actorAdminId], references: [id], onDelete: SetNull)
+
+  @@index([actorAdminId, createdAt(sort: Desc)])
+  @@index([entityType, createdAt(sort: Desc)])
+  @@map("admin_audit_logs")
+}
+
+model ModerationCase {
+  id                 String     @id @map("id")
+  title              String     @map("title")
+  type               String     @map("type")
+  targetType         String     @map("target_type")
+  severity           String     @map("severity")
+  targetId           String?    @map("target_id")
+  targetLabel        String?    @map("target_label")
+  reason             String     @map("reason")
+  evidence           Json       @default("[]") @map("evidence")
+  history            Json       @default("[]") @map("history")
+  status             String     @default("open") @map("status")
+  enforcementActions Json       @default("[]") @map("enforcement_actions")
+  metadata           Json       @default("{}") @map("metadata")
+  assignedToAdminId  String?    @map("assigned_to_admin_id")
+  createdAt          DateTime   @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt          DateTime   @default(now()) @db.Timestamptz(6) @map("updated_at")
+  assignedAdmin      AdminUser? @relation("ModerationAssignedAdmin", fields: [assignedToAdminId], references: [id], onDelete: SetNull)
+
+  @@index([status, updatedAt(sort: Desc)])
+  @@index([targetType, updatedAt(sort: Desc)])
+  @@map("admin_moderation_cases")
+}
+
+model AdminOperationalSetting {
+  key       String   @id @map("key")
+  value     Json     @default("{}") @map("value")
+  updatedAt DateTime @default(now()) @db.Timestamptz(6) @map("updated_at")
+
+  @@map("admin_operational_settings")
 }
