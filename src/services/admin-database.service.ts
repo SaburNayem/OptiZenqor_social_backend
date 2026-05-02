@@ -1385,6 +1385,142 @@ export class AdminDatabaseService implements OnModuleInit {
     );
   }
 
+  async createAdminMarketplace(
+    input: {
+      sellerId: string;
+      title: string;
+      description: string;
+      price: number;
+      category: string;
+      currency?: string;
+      subcategory?: string;
+      condition?: string;
+      location?: string;
+      images?: string[];
+      status?: string;
+      stock?: number;
+    },
+    actorAdminId?: string,
+  ) {
+    await this.ensureUserExists(input.sellerId);
+    const item = await this.prisma.marketplaceProduct.create({
+      data: {
+        id: makeId('product'),
+        sellerId: input.sellerId.trim(),
+        title: input.title.trim(),
+        description: input.description.trim(),
+        price: new Prisma.Decimal(input.price),
+        currency: input.currency?.trim() || 'BDT',
+        category: input.category.trim(),
+        subcategory: input.subcategory?.trim() || null,
+        condition: input.condition?.trim() || null,
+        location: input.location?.trim() || null,
+        images: (input.images ?? []).map((entry) => entry.trim()),
+        status: input.status?.trim() || 'active',
+        stock: input.stock ?? 1,
+      },
+      include: { seller: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'marketplace.create',
+      entityType: 'marketplace_product',
+      entityId: item.id,
+      metadata: input,
+    });
+
+    return this.mapAdminMarketplaceRow(item);
+  }
+
+  async updateAdminMarketplace(
+    id: string,
+    patch: {
+      sellerId?: string;
+      title?: string;
+      description?: string;
+      price?: number;
+      category?: string;
+      currency?: string;
+      subcategory?: string;
+      condition?: string;
+      location?: string;
+      images?: string[];
+      status?: string;
+      stock?: number;
+    },
+    actorAdminId?: string,
+  ) {
+    if (patch.sellerId?.trim()) {
+      await this.ensureUserExists(patch.sellerId);
+    }
+    const existing = await this.prisma.marketplaceProduct.findUnique({
+      where: { id },
+      include: { seller: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Marketplace item ${id} not found.`);
+    }
+
+    const updated = await this.prisma.marketplaceProduct.update({
+      where: { id },
+      data: {
+        sellerId: patch.sellerId?.trim() || undefined,
+        title: patch.title?.trim() || undefined,
+        description: patch.description?.trim() || undefined,
+        price: patch.price === undefined ? undefined : new Prisma.Decimal(patch.price),
+        category: patch.category?.trim() || undefined,
+        currency: patch.currency?.trim() || undefined,
+        subcategory:
+          patch.subcategory === undefined ? undefined : patch.subcategory.trim() || null,
+        condition: patch.condition === undefined ? undefined : patch.condition.trim() || null,
+        location: patch.location === undefined ? undefined : patch.location.trim() || null,
+        images: patch.images === undefined ? undefined : patch.images.map((entry) => entry.trim()),
+        status: patch.status?.trim() || undefined,
+        stock: patch.stock,
+        updatedAt: new Date(),
+      },
+      include: { seller: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'marketplace.update',
+      entityType: 'marketplace_product',
+      entityId: updated.id,
+      metadata: patch,
+    });
+
+    return this.mapAdminMarketplaceRow(updated);
+  }
+
+  async deleteAdminMarketplace(id: string, actorAdminId?: string) {
+    const existing = await this.prisma.marketplaceProduct.findUnique({
+      where: { id },
+      include: { seller: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Marketplace item ${id} not found.`);
+    }
+
+    await this.prisma.marketplaceProduct.delete({ where: { id } });
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'marketplace.delete',
+      entityType: 'marketplace_product',
+      entityId: id,
+      metadata: {
+        title: existing.title,
+        sellerId: existing.sellerId,
+      },
+    });
+
+    return {
+      id,
+      deleted: true,
+    };
+  }
+
   async queryAdminJobs(query: {
     page?: number;
     limit?: number;
@@ -1433,6 +1569,144 @@ export class AdminDatabaseService implements OnModuleInit {
       limit,
       total,
     );
+  }
+
+  async createAdminJob(
+    input: {
+      recruiterId: string;
+      title: string;
+      company: string;
+      description: string;
+      type: string;
+      location?: string;
+      experienceLevel?: string;
+      salaryMin?: number;
+      salaryMax?: number;
+      currency?: string;
+      status?: string;
+      skills?: string[];
+    },
+    actorAdminId?: string,
+  ) {
+    const recruiter = await this.ensureUserExists(input.recruiterId);
+    const item = await this.prisma.job.create({
+      data: {
+        id: makeId('job'),
+        recruiterId: recruiter.id,
+        title: input.title.trim(),
+        company: input.company.trim(),
+        description: input.description.trim(),
+        location: input.location?.trim() || null,
+        type: input.type.trim(),
+        experienceLevel: input.experienceLevel?.trim() || null,
+        salaryMin: input.salaryMin,
+        salaryMax: input.salaryMax,
+        currency: input.currency?.trim() || 'BDT',
+        status: input.status?.trim() || 'open',
+        skills: (input.skills ?? []).map((entry) => entry.trim()),
+      },
+      include: { recruiter: true, applications: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'job.create',
+      entityType: 'job',
+      entityId: item.id,
+      metadata: input,
+    });
+
+    return this.mapAdminJobRow(item);
+  }
+
+  async updateAdminJob(
+    id: string,
+    patch: {
+      recruiterId?: string;
+      title?: string;
+      company?: string;
+      description?: string;
+      type?: string;
+      location?: string;
+      experienceLevel?: string;
+      salaryMin?: number;
+      salaryMax?: number;
+      currency?: string;
+      status?: string;
+      skills?: string[];
+    },
+    actorAdminId?: string,
+  ) {
+    if (patch.recruiterId?.trim()) {
+      await this.ensureUserExists(patch.recruiterId);
+    }
+    const existing = await this.prisma.job.findUnique({
+      where: { id },
+      include: { recruiter: true, applications: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Job ${id} not found.`);
+    }
+
+    const updated = await this.prisma.job.update({
+      where: { id },
+      data: {
+        recruiterId: patch.recruiterId?.trim() || undefined,
+        title: patch.title?.trim() || undefined,
+        company: patch.company?.trim() || undefined,
+        description: patch.description?.trim() || undefined,
+        type: patch.type?.trim() || undefined,
+        location: patch.location === undefined ? undefined : patch.location.trim() || null,
+        experienceLevel:
+          patch.experienceLevel === undefined
+            ? undefined
+            : patch.experienceLevel.trim() || null,
+        salaryMin: patch.salaryMin,
+        salaryMax: patch.salaryMax,
+        currency: patch.currency?.trim() || undefined,
+        status: patch.status?.trim() || undefined,
+        skills: patch.skills === undefined ? undefined : patch.skills.map((entry) => entry.trim()),
+        updatedAt: new Date(),
+      },
+      include: { recruiter: true, applications: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'job.update',
+      entityType: 'job',
+      entityId: updated.id,
+      metadata: patch,
+    });
+
+    return this.mapAdminJobRow(updated);
+  }
+
+  async deleteAdminJob(id: string, actorAdminId?: string) {
+    const existing = await this.prisma.job.findUnique({
+      where: { id },
+      include: { recruiter: true, applications: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Job ${id} not found.`);
+    }
+
+    await this.prisma.job.delete({ where: { id } });
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'job.delete',
+      entityType: 'job',
+      entityId: id,
+      metadata: {
+        title: existing.title,
+        recruiterId: existing.recruiterId,
+      },
+    });
+
+    return {
+      id,
+      deleted: true,
+    };
   }
 
   async queryAdminEvents(query: {
@@ -1485,6 +1759,133 @@ export class AdminDatabaseService implements OnModuleInit {
     );
   }
 
+  async createAdminEvent(
+    input: {
+      organizerId: string;
+      title: string;
+      date: string;
+      time: string;
+      location: string;
+      description?: string;
+      organizerName?: string;
+      category?: string;
+      price?: number;
+      status?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    const organizer = await this.ensureUserExists(input.organizerId);
+    const item = await this.prisma.event.create({
+      data: {
+        id: makeId('event'),
+        organizerId: organizer.id,
+        organizerName: input.organizerName?.trim() || organizer.name,
+        title: input.title.trim(),
+        description: input.description?.trim() || null,
+        date: input.date.trim(),
+        time: input.time.trim(),
+        location: input.location.trim(),
+        category: input.category?.trim() || null,
+        price: new Prisma.Decimal(input.price ?? 0),
+        status: input.status?.trim() || 'review',
+      },
+      include: { organizer: true, rsvps: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'event.create',
+      entityType: 'event',
+      entityId: item.id,
+      metadata: input,
+    });
+
+    return this.mapAdminEventRow(item);
+  }
+
+  async updateAdminEvent(
+    id: string,
+    patch: {
+      organizerId?: string;
+      title?: string;
+      date?: string;
+      time?: string;
+      location?: string;
+      description?: string;
+      organizerName?: string;
+      category?: string;
+      price?: number;
+      status?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    if (patch.organizerId?.trim()) {
+      await this.ensureUserExists(patch.organizerId);
+    }
+    const existing = await this.prisma.event.findUnique({
+      where: { id },
+      include: { organizer: true, rsvps: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Event ${id} not found.`);
+    }
+
+    const updated = await this.prisma.event.update({
+      where: { id },
+      data: {
+        organizerId: patch.organizerId?.trim() || undefined,
+        organizerName: patch.organizerName?.trim() || undefined,
+        title: patch.title?.trim() || undefined,
+        description: patch.description === undefined ? undefined : patch.description.trim() || null,
+        date: patch.date?.trim() || undefined,
+        time: patch.time?.trim() || undefined,
+        location: patch.location?.trim() || undefined,
+        category: patch.category === undefined ? undefined : patch.category.trim() || null,
+        price: patch.price === undefined ? undefined : new Prisma.Decimal(patch.price),
+        status: patch.status?.trim() || undefined,
+        updatedAt: new Date(),
+      },
+      include: { organizer: true, rsvps: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'event.update',
+      entityType: 'event',
+      entityId: updated.id,
+      metadata: patch,
+    });
+
+    return this.mapAdminEventRow(updated);
+  }
+
+  async deleteAdminEvent(id: string, actorAdminId?: string) {
+    const existing = await this.prisma.event.findUnique({
+      where: { id },
+      include: { organizer: true, rsvps: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Event ${id} not found.`);
+    }
+
+    await this.prisma.event.delete({ where: { id } });
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'event.delete',
+      entityType: 'event',
+      entityId: id,
+      metadata: {
+        title: existing.title,
+        organizerId: existing.organizerId,
+      },
+    });
+
+    return {
+      id,
+      deleted: true,
+    };
+  }
+
   async queryAdminCommunities(query: {
     page?: number;
     limit?: number;
@@ -1534,6 +1935,71 @@ export class AdminDatabaseService implements OnModuleInit {
     );
   }
 
+  async updateAdminCommunity(
+    id: string,
+    patch: {
+      name?: string;
+      description?: string;
+      privacy?: string;
+      category?: string;
+      location?: string;
+      approvalRequired?: boolean;
+      allowEvents?: boolean;
+      allowLive?: boolean;
+      allowPolls?: boolean;
+      allowMarketplace?: boolean;
+      allowChatRoom?: boolean;
+      notificationLevel?: string;
+      status?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    const existing = await this.prisma.community.findUnique({
+      where: { id },
+      include: { owner: true, members: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Community ${id} not found.`);
+    }
+
+    const normalizedStatus = patch.status?.trim().toLowerCase();
+    const updated = await this.prisma.community.update({
+      where: { id },
+      data: {
+        name: patch.name?.trim() || undefined,
+        description: patch.description?.trim() || undefined,
+        privacy: patch.privacy?.trim() || undefined,
+        category: patch.category === undefined ? undefined : patch.category.trim() || null,
+        location: patch.location === undefined ? undefined : patch.location.trim() || null,
+        approvalRequired: patch.approvalRequired,
+        allowEvents: patch.allowEvents,
+        allowLive: patch.allowLive,
+        allowPolls: patch.allowPolls,
+        allowMarketplace: patch.allowMarketplace,
+        allowChatRoom: patch.allowChatRoom,
+        notificationLevel: patch.notificationLevel?.trim() || undefined,
+        deletedAt:
+          normalizedStatus === undefined
+            ? undefined
+            : normalizedStatus === 'deleted'
+              ? new Date()
+              : null,
+        updatedAt: new Date(),
+      },
+      include: { owner: true, members: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'community.update',
+      entityType: 'community',
+      entityId: updated.id,
+      metadata: patch,
+    });
+
+    return this.mapAdminCommunityRow(updated);
+  }
+
   async queryAdminPages(query: {
     page?: number;
     limit?: number;
@@ -1581,6 +2047,50 @@ export class AdminDatabaseService implements OnModuleInit {
       limit,
       total,
     );
+  }
+
+  async updateAdminPage(
+    id: string,
+    patch: {
+      name?: string;
+      about?: string;
+      category?: string;
+      location?: string;
+      contactLabel?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    const existing = await this.prisma.page.findUnique({
+      where: { id },
+      include: { owner: true, followers: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Page ${id} not found.`);
+    }
+
+    const updated = await this.prisma.page.update({
+      where: { id },
+      data: {
+        name: patch.name?.trim() || undefined,
+        about: patch.about?.trim() || undefined,
+        category: patch.category?.trim() || undefined,
+        location: patch.location === undefined ? undefined : patch.location.trim() || null,
+        contactLabel:
+          patch.contactLabel === undefined ? undefined : patch.contactLabel.trim() || null,
+        updatedAt: new Date(),
+      },
+      include: { owner: true, followers: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'page.update',
+      entityType: 'page',
+      entityId: updated.id,
+      metadata: patch,
+    });
+
+    return this.mapAdminPageRow(updated);
   }
 
   async queryAdminLiveStreams(query: {
@@ -1953,6 +2463,171 @@ export class AdminDatabaseService implements OnModuleInit {
       limit,
       total,
     );
+  }
+
+  async queryAdminNotificationCampaigns(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const where: Prisma.NotificationCampaignWhereInput = {
+      ...(query.status?.trim() ? { status: query.status.trim() } : {}),
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { name: { contains: query.search.trim(), mode: 'insensitive' } },
+              { audience: { contains: query.search.trim(), mode: 'insensitive' } },
+              { schedule: { contains: query.search.trim(), mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+    const [total, items] = await Promise.all([
+      this.prisma.notificationCampaign.count({ where }),
+      this.prisma.notificationCampaign.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return this.wrapPaginated(
+      items.map((item) => this.mapAdminNotificationCampaignRow(item)),
+      page,
+      limit,
+      total,
+    );
+  }
+
+  async createAdminNotificationCampaign(
+    input: {
+      name: string;
+      audience: string;
+      schedule: string;
+      status?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    const item = await this.prisma.notificationCampaign.create({
+      data: {
+        id: makeId('campaign'),
+        name: input.name.trim(),
+        audience: input.audience.trim(),
+        schedule: input.schedule.trim(),
+        status: input.status?.trim() || 'scheduled',
+      },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'notification_campaign.create',
+      entityType: 'notification_campaign',
+      entityId: item.id,
+      metadata: input,
+    });
+
+    return this.mapAdminNotificationCampaignRow(item);
+  }
+
+  async updateAdminNotificationCampaign(
+    id: string,
+    patch: {
+      name?: string;
+      audience?: string;
+      schedule?: string;
+      status?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    const existing = await this.prisma.notificationCampaign.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Notification campaign ${id} not found.`);
+    }
+
+    const updated = await this.prisma.notificationCampaign.update({
+      where: { id },
+      data: {
+        name: patch.name?.trim() || undefined,
+        audience: patch.audience?.trim() || undefined,
+        schedule: patch.schedule?.trim() || undefined,
+        status: patch.status?.trim() || undefined,
+        updatedAt: new Date(),
+      },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'notification_campaign.update',
+      entityType: 'notification_campaign',
+      entityId: updated.id,
+      metadata: patch,
+    });
+
+    return this.mapAdminNotificationCampaignRow(updated);
+  }
+
+  async updateAdminWalletSubscription(
+    id: string,
+    patch: {
+      status?: string;
+      autoRenew?: boolean;
+      currentPeriodEnd?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    const existing = await this.prisma.subscription.findUnique({
+      where: { id },
+      include: { user: true, plan: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Subscription ${id} not found.`);
+    }
+
+    const updated = await this.prisma.subscription.update({
+      where: { id },
+      data: {
+        status: patch.status?.trim() || undefined,
+        autoRenew: patch.autoRenew,
+        currentPeriodEnd:
+          patch.currentPeriodEnd === undefined
+            ? undefined
+            : patch.currentPeriodEnd.trim()
+              ? new Date(patch.currentPeriodEnd)
+              : null,
+        updatedAt: new Date(),
+      },
+      include: { user: true, plan: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'subscription.update',
+      entityType: 'subscription',
+      entityId: updated.id,
+      metadata: patch,
+    });
+
+    return {
+      id: updated.id,
+      userName: updated.user.name,
+      userId: updated.userId,
+      planId: updated.planId,
+      planCode: updated.planCode,
+      planName: updated.plan?.name ?? updated.planCode,
+      provider: updated.provider,
+      status: updated.status,
+      autoRenew: updated.autoRenew,
+      currentPeriodEnd: updated.currentPeriodEnd?.toISOString() ?? null,
+      createdAt: updated.createdAt.toISOString(),
+      updatedAt: updated.updatedAt.toISOString(),
+    };
   }
 
   async updateAdminNotificationDevice(
@@ -2446,6 +3121,152 @@ export class AdminDatabaseService implements OnModuleInit {
     };
   }
 
+  private mapAdminMarketplaceRow(item: {
+    id: string;
+    title: string;
+    category: string;
+    price: Prisma.Decimal;
+    currency: string;
+    status: string;
+    stock: number;
+    sellerId: string;
+    views: number;
+    watchers: number;
+    createdAt: Date;
+    seller: { name: string };
+  }) {
+    return {
+      id: item.id,
+      title: item.title,
+      category: item.category,
+      price: Number(item.price),
+      currency: item.currency,
+      status: item.status,
+      stock: item.stock,
+      sellerName: item.seller.name,
+      sellerId: item.sellerId,
+      views: item.views,
+      watchers: item.watchers,
+      createdAt: item.createdAt.toISOString(),
+    };
+  }
+
+  private mapAdminJobRow(item: {
+    id: string;
+    title: string;
+    company: string;
+    status: string;
+    type: string;
+    recruiterId: string;
+    createdAt: Date;
+    recruiter: { name: string };
+    applications: Array<unknown>;
+  }) {
+    return {
+      id: item.id,
+      title: item.title,
+      company: item.company,
+      status: item.status,
+      type: item.type,
+      recruiterName: item.recruiter.name,
+      recruiterId: item.recruiterId,
+      applications: item.applications.length,
+      createdAt: item.createdAt.toISOString(),
+    };
+  }
+
+  private mapAdminEventRow(item: {
+    id: string;
+    title: string;
+    organizerId: string;
+    status: string;
+    location: string;
+    createdAt: Date;
+    price: Prisma.Decimal;
+    organizer: { name: string };
+    rsvps: Array<unknown>;
+  }) {
+    return {
+      id: item.id,
+      title: item.title,
+      organizerName: item.organizer.name,
+      organizerId: item.organizerId,
+      status: item.status,
+      location: item.location,
+      participants: item.rsvps.length,
+      price: Number(item.price),
+      createdAt: item.createdAt.toISOString(),
+    };
+  }
+
+  private mapAdminCommunityRow(item: {
+    id: string;
+    name: string;
+    ownerId: string;
+    privacy: string;
+    category: string | null;
+    createdAt: Date;
+    deletedAt: Date | null;
+    owner: { name: string };
+    members: Array<unknown>;
+  }) {
+    return {
+      id: item.id,
+      name: item.name,
+      ownerName: item.owner.name,
+      ownerId: item.ownerId,
+      privacy: item.privacy,
+      category: item.category,
+      status: item.deletedAt ? 'deleted' : 'active',
+      memberCount: item.members.length,
+      createdAt: item.createdAt.toISOString(),
+    };
+  }
+
+  private mapAdminPageRow(item: {
+    id: string;
+    name: string;
+    ownerId: string;
+    category: string;
+    location: string | null;
+    createdAt: Date;
+    owner: { name: string };
+    followers: Array<unknown>;
+  }) {
+    return {
+      id: item.id,
+      name: item.name,
+      ownerName: item.owner.name,
+      ownerId: item.ownerId,
+      category: item.category,
+      location: item.location,
+      status: 'active',
+      followerCount: item.followers.length,
+      createdAt: item.createdAt.toISOString(),
+    };
+  }
+
+  private mapAdminNotificationCampaignRow(item: {
+    id: string;
+    name: string;
+    audience: string;
+    schedule: string;
+    status: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
+    return {
+      id: item.id,
+      name: item.name,
+      audience: item.audience,
+      segmentId: item.audience,
+      schedule: item.schedule,
+      status: item.status,
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString(),
+    };
+  }
+
   private mapModerationCase(item: {
     id: string;
     title: string;
@@ -2624,6 +3445,16 @@ export class AdminDatabaseService implements OnModuleInit {
       throw new UnauthorizedException('Admin session is no longer valid.');
     }
     return admin;
+  }
+
+  private async ensureUserExists(userId: string) {
+    const user = await this.prisma.appUser.findUnique({
+      where: { id: userId.trim() },
+    });
+    if (!user) {
+      throw new NotFoundException(`User ${userId} not found.`);
+    }
+    return user;
   }
 
   private hasAdminRole(role: string, allowedRoles: string[]) {

@@ -1,265 +1,93 @@
-# Full Backend / Frontend / Dashboard Integration Report
+# Full Backend Frontend Dashboard Integration Report
 
-Updated: 2026-05-02
+Last updated: 2026-05-02
 
-## Repo Reality Check
+## Summary
 
-Requested paths:
+This pass completed the missing backend admin contract needed for a database-driven product surface and aligned the dashboard notification navigation with the live admin API. The backend, dashboard, and Flutter validation checks that were run in this pass all succeeded after environment-related reruns where needed.
 
-- `G:/OptiZenqor_social_dashboard`
-- `G:/OptiZenqor_social`
-- `G:/socity_backend`
-
-Actual local repos audited and edited in this workspace:
-
-- `G:/My Project/OptiZenqor_social_dashboard`
-- `G:/My Project/OptiZenqor_social`
-- `G:/My Project/Socity_backend`
-
-## What Was Fixed
-
-### Backend
-
-- Kept the admin surface on PostgreSQL/Prisma-backed services instead of static admin data.
-- Exposed and validated admin list endpoints now used by the dashboard:
-  - `GET /admin/marketplace`
-  - `GET /admin/jobs`
-  - `GET /admin/events`
-  - `GET /admin/communities`
-  - `GET /admin/pages`
-  - `GET /admin/live-streams`
-  - `GET /admin/monetization`
-  - `GET /admin/wallet-subscriptions`
-  - `GET /admin/notification-devices`
-- Added shared list query DTO support for admin operational entity modules.
-- Removed the now-unused `AdminOpsDataService` from the live data module export/provider path so dashboard-facing admin data is not served from the old static admin helper service.
-- Preserved `{ success, message, data }` response envelopes with pagination metadata for dashboard list views.
-
-### Flutter
-
-- Replaced the remaining local-only settings state repository with authenticated backend reads/writes to `GET /settings/state` and `PATCH /settings/state`.
-- Kept the mobile app on the Vercel backend path rather than localhost when remote-only mode is active.
-- Preserved existing mobile route names and controller usage while moving server-owned settings state off shared preferences.
-- Retained previous live backend integrations completed in the existing working tree for:
-  - offline sync
-  - localization support
-  - personalization onboarding
-  - share/repost options
-  - legal consent actions
-
-### Dashboard
-
-- Switched operational modules that were still hitting app-facing routes onto admin APIs only.
-- Added modular admin navigation entries for:
-  - marketplace
-  - jobs
-  - events
-  - communities
-  - pages
-  - live streams
-  - wallet/subscriptions
-  - notification devices
-- Added a `.env.example` with `VITE_API_BASE_URL`.
-- Removed localhost as the default dashboard API base fallback and aligned it to the deployed backend URL.
-- Expanded live admin view rendering so these modules use explicit tables rather than a single generic fallback:
-  - marketplace
-  - jobs
-  - events
-  - communities
-  - pages
-  - live streams
-  - wallet/subscriptions
-  - notification devices
-
-## APIs Added / Changed
-
-### Backend admin endpoints in active use
-
-- `POST /admin/auth/login`
-- `GET /admin/auth/me`
-- `POST /admin/auth/refresh`
-- `POST /admin/auth/logout`
-- `GET /admin/dashboard/overview`
-- `GET /admin/users`
-- `PATCH /admin/users/:id`
-- `GET /admin/content`
-- `PATCH /admin/content/:type/:id/moderate`
-- `GET /admin/reports`
-- `PATCH /admin/reports/:id`
-- `GET /admin/support-operations`
-- `GET /admin/settings`
-- `PATCH /admin/settings`
-- `GET /admin/audit-logs`
-- `GET /admin/marketplace`
-- `GET /admin/jobs`
-- `GET /admin/events`
-- `GET /admin/communities`
-- `GET /admin/pages`
-- `GET /admin/live-streams`
-- `GET /admin/monetization`
-- `GET /admin/wallet-subscriptions`
-- `GET /admin/notification-devices`
-
-### App endpoints newly aligned in this pass
-
-- `GET /settings/state`
-- `PATCH /settings/state`
-
-### Previously aligned live app endpoints still present in the working tree
-
-- `GET /offline-sync`
-- `POST /offline-sync/retry`
-- `GET /localization-support`
-- `PATCH /localization-support`
-- `GET /personalization-onboarding`
-- `PATCH /personalization-onboarding/interests`
-- `GET /share-repost/options`
-- `POST /share-repost/track`
-- legal consent/account utility routes already moved off local-only flows in the current working tree
-
-## Frontend Screens Connected
-
-### Flutter screens connected or hardened in the current working tree
-
-- `lib/feature/settings/*`
-  - server-owned settings state now uses `/settings/state`
-- `lib/feature/offline_sync/screen/offline_sync_screen.dart`
-  - live backend state
-- `lib/feature/localization_support/screen/localization_support_screen.dart`
-  - live backend locale state
-- `lib/feature/personalization_onboarding/screen/personalization_onboarding_screen.dart`
-  - live backend onboarding state
-- `lib/feature/share_repost_system/screen/share_repost_system_screen.dart`
-  - live backend options
-- `lib/feature/legal_compliance/*`
-  - live backend consent updates
-
-## Dashboard Pages Connected
-
-Connected to authenticated backend admin APIs:
-
-- Overview analytics
-- Users
-- Content moderation
-- Reports
-- Support operations
-- Marketplace
-- Jobs
-- Events
-- Communities
-- Pages
-- Live streams
-- Revenue
-- Wallet/subscriptions
-- Notification campaigns
-- Notification devices
-- Settings
-- Audit logs
-- Admin auth/session refresh/logout
+This pass did not complete the full professional rebuild requested for the Flutter app and React dashboard. The codebase is in a better and more truthful state than before, but the remaining frontend architecture work is still real and is listed below.
 
 ## Exact Files Changed
 
-### Backend
-
 - `src/controllers/admin.controller.ts`
 - `src/dto/admin.dto.ts`
-- `src/modules/data.module.ts`
 - `src/services/admin-database.service.ts`
+- `FULL_BACKEND_FRONTEND_DASHBOARD_INTEGRATION_REPORT.md`
+- `BACKEND_FRONTEND_MISMATCH_REPORT.md`
+- `G:\My Project\OptiZenqor_social\FRONTEND_BACKEND_AUDIT.md`
+- `G:\My Project\OptiZenqor_social_dashboard\src\config\navigation.js`
+- `G:\My Project\OptiZenqor_social_dashboard\DASHBOARD_BACKEND_INTEGRATION_REPORT.md`
 
-### Flutter
+## Backend Endpoints Added Or Completed
 
-- `lib/app_route/app_router.dart`
-- `lib/core/config/app_config.dart`
-- `lib/feature/business_profile/repository/business_profile_repository.dart`
-- `lib/feature/learning_courses/repository/learning_courses_repository.dart`
-- `lib/feature/legal_compliance/controller/legal_compliance_controller.dart`
-- `lib/feature/localization_support/controller/localization_support_controller.dart`
-- `lib/feature/localization_support/screen/localization_support_screen.dart`
-- `lib/feature/offline_sync/controller/offline_sync_controller.dart`
-- `lib/feature/offline_sync/screen/offline_sync_screen.dart`
-- `lib/feature/personalization_onboarding/controller/personalization_onboarding_controller.dart`
-- `lib/feature/personalization_onboarding/screen/personalization_onboarding_screen.dart`
-- `lib/feature/safety_privacy/screen/safety_privacy_screen.dart`
-- `lib/feature/settings/controller/settings_state_controller.dart`
-- `lib/feature/settings/repository/settings_preferences_repository.dart`
-- `lib/feature/settings/screen/devices_sessions_screen.dart`
-- `lib/feature/share_repost_system/controller/share_repost_system_controller.dart`
-- `lib/feature/share_repost_system/screen/share_repost_system_screen.dart`
+- `POST /admin/marketplace`
+- `PATCH /admin/marketplace/:id`
+- `DELETE /admin/marketplace/:id`
+- `POST /admin/jobs`
+- `PATCH /admin/jobs/:id`
+- `DELETE /admin/jobs/:id`
+- `POST /admin/events`
+- `PATCH /admin/events/:id`
+- `DELETE /admin/events/:id`
+- `PATCH /admin/communities/:id`
+- `PATCH /admin/pages/:id`
+- `PATCH /admin/wallet-subscriptions/:id`
+- `GET /admin/notification-campaigns`
+- `POST /admin/notification-campaigns`
+- `PATCH /admin/notification-campaigns/:id`
 
-### Dashboard
+## Backend Implementation Notes
 
-- `.env.example`
-- `src/App.css`
-- `src/App.jsx`
-- `src/components/AdminViews.jsx`
-- `src/config/navigation.js`
-- `src/services/apiClient.js`
+- All newly added admin mutations are Prisma-backed through `AdminDatabaseService`.
+- All newly added admin mutations write admin audit log entries.
+- Existing admin session auth and role guards remain in place.
+- Existing response envelope style `{ success, message, data }` is preserved.
+- Existing list pagination style remains preserved via `meta.pagination` through `successResponse(..., payload, payload.pagination)`.
+
+## Dashboard Changes
+
+- Updated the notification campaigns navigation endpoint from stale `/admin/broadcast-campaigns` to `/admin/notification-campaigns`.
+- Updated the notification devices navigation endpoint from compatibility alias `/admin/notifications/devices` to canonical `/admin/notification-devices`.
+
+## Flutter Audit Outcome
+
+- Core server-owned mobile state endpoints for `settings`, `account-switching`, `activity-sessions`, `blocked-muted-accounts`, `marketplace`, `jobs`, `events`, and related preference/state routes are present in the backend.
+- Flutter validation passed in this run, but the repo still needs a focused cleanup pass to remove remaining local-only production behavior in some feature modules and finish the repository standardization the request called for.
+
+## Validation Commands
+
+Backend:
+
+- `cmd /c npm run typecheck` -> passed
+- `cmd /c npm run build` -> passed
+- `cmd /c npm run prisma:generate` -> passed after rerun outside sandbox because in-sandbox Prisma client generation hit `EPERM` in `node_modules/.prisma`
+
+Dashboard:
+
+- `cmd /c npm run lint` -> passed
+- `cmd /c npm run build` -> passed after rerun outside sandbox because the in-sandbox Vite build hit a `spawn EPERM` environment error
+
+Flutter:
+
+- `flutter pub get` -> passed after rerun outside sandbox
+- `flutter analyze` -> passed after rerun outside sandbox
+- `dart format .` -> not run in this pass to avoid repo-wide formatting churn unrelated to the files changed here
 
 ## Remaining Gaps
 
-### Backend
-
-- `src/services/settings-database.service.ts`
-  - settings catalog responses still depend partly on `SettingsDataService`
-- non-email OTP and some untouched utility flows still depend on older helper/state services
-- runtime chat presence is still not a durable Prisma-backed state model
-- deeper admin mutation workflows for marketplace/jobs/events/communities/pages/live streams still need dedicated CRUD/action routes beyond read/list coverage
-
-### Flutter
-
-- many requested feature slices are already partially backend-backed, but this pass did not finish every remaining server-owned screen called out in the brief:
-  - saved items and compare list edge flows
-  - calls lifecycle edge flows
-  - account switching edge flows
-  - blocked/muted and saved collections edge workflows
-  - jobs/pages/learning/polls/discovery deeper action coverage
-- settings screens now use the backend state endpoint, but they still need richer explicit per-screen error/retry messaging in some views
-
-### Dashboard
-
-- list modules are live and build-clean, but still need richer filters, confirmation dialogs, detail panels, and admin mutations for full operational depth
-- notifications and support sections are still lighter-weight than the requested final console target
-
-## Commands Run And Results
-
-### Backend
-
-- `npm.cmd install`
-  - Passed
-- `npm.cmd run prisma:generate`
-  - Passed
-- `npm.cmd run typecheck`
-  - Passed
-- `npm.cmd run build`
-  - Passed
-
-### Flutter
-
-- `flutter pub get`
-  - Passed
-- `dart format lib/feature/settings/repository/settings_preferences_repository.dart lib/feature/settings/controller/settings_state_controller.dart`
-  - Passed
-- `flutter analyze`
-  - Passed
-
-### Dashboard
-
-- `npm.cmd install`
-  - Passed
-- `npm.cmd run lint`
-  - Passed
-- `npm.cmd run build`
-  - Passed
+- The dashboard is still structurally compact and has not yet been refactored into the requested professional multi-file admin architecture.
+- The dashboard still needs full page-level CRUD UX for all requested admin domains, including role-aware action hiding, drawers, confirmation dialogs, loading skeletons, retry states, and toast handling.
+- The Flutter repo still needs a feature-by-feature source-of-truth audit for `groups`, `pages`, `learning_courses`, `polls_surveys`, `business_profile`, `calls`, and other requested modules to remove any remaining production-local state where it still exists.
+- The shared single integration contract requested in Phase 5 was not fully rebuilt in this pass.
+- `npm run prisma:migrate` was not run because database availability was not verified in this session.
 
 ## Completion Estimate
 
-- Backend: 84%
-- Flutter: 80%
-- Dashboard: 82%
+- Backend: 82%
+- Flutter app: 58%
+- Dashboard: 52%
 
-## Intentionally Deferred
+## Honest Status
 
-- full de-staticization of all settings catalog metadata
-- non-email provider-backed OTP modernization
-- full admin operational CRUD for marketplace/jobs/events/communities/pages/live streams
-- complete backend-only cleanup of every remaining untouched helper-backed app slice
+The backend admin contract is materially closer to the requested production source-of-truth standard and now covers the most obvious missing admin CRUD and mutation gaps. The full three-repo “finish everything in one pass” outcome was not achieved in this session, and the remaining frontend/dashboard architecture work should not be considered complete.

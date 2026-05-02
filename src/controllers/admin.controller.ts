@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   Param,
@@ -21,17 +22,25 @@ import {
   AdminAuditLogsQueryDto,
   AdminContentQueryDto,
   AdminEntityListQueryDto,
+  AdminEventUpsertDto,
+  AdminJobUpsertDto,
+  AdminMarketplaceUpsertDto,
   AdminModerateContentDto,
+  AdminNotificationCampaignCreateDto,
+  AdminNotificationCampaignUpdateDto,
   AdminNotificationDeviceUpdateDto,
+  AdminPageUpdateDto,
   AdminPremiumPlanCreateDto,
   AdminPremiumPlanUpdateDto,
   AdminReportsQueryDto,
+  AdminCommunityUpdateDto,
   AdminSettingsPatchDto,
   AdminUpdateLiveStreamDto,
   AdminUpdateReportDto,
   AdminUpdateUserDto,
   AdminUpdateUserStatusDto,
   AdminUsersQueryDto,
+  AdminWalletSubscriptionUpdateDto,
 } from '../dto/admin.dto';
 import { AdminDatabaseService } from '../services/admin-database.service';
 import { successResponse } from '../utils/api-response.util';
@@ -241,6 +250,49 @@ export class AdminController {
     );
   }
 
+  @Post('marketplace')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Create a marketplace item from the admin surface' })
+  async createMarketplace(
+    @Body() body: AdminMarketplaceUpsertDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin marketplace item created successfully.',
+      await this.adminDatabase.createAdminMarketplace(body, admin.adminId),
+    );
+  }
+
+  @Patch('marketplace/:id')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Update a marketplace item from the admin surface' })
+  async updateMarketplace(
+    @Param('id') id: string,
+    @Body() body: Partial<AdminMarketplaceUpsertDto>,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin marketplace item updated successfully.',
+      await this.adminDatabase.updateAdminMarketplace(id, body, admin.adminId),
+    );
+  }
+
+  @Delete('marketplace/:id')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Delete a marketplace item from the admin surface' })
+  async deleteMarketplace(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin marketplace item deleted successfully.',
+      await this.adminDatabase.deleteAdminMarketplace(id, admin.adminId),
+    );
+  }
+
   @Get('jobs')
   @ApiOperation({ summary: 'List jobs for admin review' })
   async getJobs(@Query() query: AdminEntityListQueryDto) {
@@ -248,11 +300,97 @@ export class AdminController {
     return successResponse('Admin jobs fetched successfully.', payload, payload.pagination);
   }
 
+  @Post('jobs')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Create a job from the admin surface' })
+  async createJob(
+    @Body() body: AdminJobUpsertDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin job created successfully.',
+      await this.adminDatabase.createAdminJob(body, admin.adminId),
+    );
+  }
+
+  @Patch('jobs/:id')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Update a job from the admin surface' })
+  async updateJob(
+    @Param('id') id: string,
+    @Body() body: Partial<AdminJobUpsertDto>,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin job updated successfully.',
+      await this.adminDatabase.updateAdminJob(id, body, admin.adminId),
+    );
+  }
+
+  @Delete('jobs/:id')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Delete a job from the admin surface' })
+  async deleteJob(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin job deleted successfully.',
+      await this.adminDatabase.deleteAdminJob(id, admin.adminId),
+    );
+  }
+
   @Get('events')
   @ApiOperation({ summary: 'List events for admin review' })
   async getEvents(@Query() query: AdminEntityListQueryDto) {
     const payload = await this.adminDatabase.queryAdminEvents(query);
     return successResponse('Admin events fetched successfully.', payload, payload.pagination);
+  }
+
+  @Post('events')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Create an event from the admin surface' })
+  async createEvent(
+    @Body() body: AdminEventUpsertDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin event created successfully.',
+      await this.adminDatabase.createAdminEvent(body, admin.adminId),
+    );
+  }
+
+  @Patch('events/:id')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Update an event from the admin surface' })
+  async updateEvent(
+    @Param('id') id: string,
+    @Body() body: Partial<AdminEventUpsertDto>,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin event updated successfully.',
+      await this.adminDatabase.updateAdminEvent(id, body, admin.adminId),
+    );
+  }
+
+  @Delete('events/:id')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Delete an event from the admin surface' })
+  async deleteEvent(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin event deleted successfully.',
+      await this.adminDatabase.deleteAdminEvent(id, admin.adminId),
+    );
   }
 
   @Get('communities')
@@ -266,11 +404,41 @@ export class AdminController {
     );
   }
 
+  @Patch('communities/:id')
+  @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
+  @ApiOperation({ summary: 'Update a community from the admin surface' })
+  async updateCommunity(
+    @Param('id') id: string,
+    @Body() body: AdminCommunityUpdateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin community updated successfully.',
+      await this.adminDatabase.updateAdminCommunity(id, body, admin.adminId),
+    );
+  }
+
   @Get('pages')
   @ApiOperation({ summary: 'List pages for admin review' })
   async getPages(@Query() query: AdminEntityListQueryDto) {
     const payload = await this.adminDatabase.queryAdminPages(query);
     return successResponse('Admin pages fetched successfully.', payload, payload.pagination);
+  }
+
+  @Patch('pages/:id')
+  @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
+  @ApiOperation({ summary: 'Update a page from the admin surface' })
+  async updatePage(
+    @Param('id') id: string,
+    @Body() body: AdminPageUpdateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin page updated successfully.',
+      await this.adminDatabase.updateAdminPage(id, body, admin.adminId),
+    );
   }
 
   @Get('live-streams')
@@ -314,6 +482,21 @@ export class AdminController {
   @ApiOperation({ summary: 'Backward-compatible wallet and subscription admin route' })
   async getWalletSubscriptions(@Query() query: AdminEntityListQueryDto) {
     return this.getMonetization(query);
+  }
+
+  @Patch('wallet-subscriptions/:id')
+  @Roles('Super Admin', 'Operations Admin', 'Finance Admin')
+  @ApiOperation({ summary: 'Update a subscription from the admin wallet surface' })
+  async updateWalletSubscription(
+    @Param('id') id: string,
+    @Body() body: AdminWalletSubscriptionUpdateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin wallet subscription updated successfully.',
+      await this.adminDatabase.updateAdminWalletSubscription(id, body, admin.adminId),
+    );
   }
 
   @Get('wallet')
@@ -379,6 +562,46 @@ export class AdminController {
     @Headers('authorization') authorization?: string,
   ) {
     return this.updateNotificationDevice(id, body, authorization);
+  }
+
+  @Get('notification-campaigns')
+  @ApiOperation({ summary: 'List notification campaigns for admin review' })
+  async getNotificationCampaigns(@Query() query: AdminEntityListQueryDto) {
+    const payload = await this.adminDatabase.queryAdminNotificationCampaigns(query);
+    return successResponse(
+      'Admin notification campaigns fetched successfully.',
+      payload,
+      payload.pagination,
+    );
+  }
+
+  @Post('notification-campaigns')
+  @Roles('Super Admin', 'Operations Admin', 'Support Admin')
+  @ApiOperation({ summary: 'Create a notification campaign' })
+  async createNotificationCampaign(
+    @Body() body: AdminNotificationCampaignCreateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin notification campaign created successfully.',
+      await this.adminDatabase.createAdminNotificationCampaign(body, admin.adminId),
+    );
+  }
+
+  @Patch('notification-campaigns/:id')
+  @Roles('Super Admin', 'Operations Admin', 'Support Admin')
+  @ApiOperation({ summary: 'Update a notification campaign' })
+  async updateNotificationCampaign(
+    @Param('id') id: string,
+    @Body() body: AdminNotificationCampaignUpdateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin notification campaign updated successfully.',
+      await this.adminDatabase.updateAdminNotificationCampaign(id, body, admin.adminId),
+    );
   }
 
   @Get('premium-plans')

@@ -1,87 +1,77 @@
-# Backend / Flutter / Dashboard Mismatch Report
+# Backend Frontend Mismatch Report
 
-Updated: 2026-05-02
+Last updated: 2026-05-02
 
-## Summary
+## Fixed In This Pass
 
-This pass closed the two highest-value mismatches that were still visible in the current working tree:
+- Added missing admin CRUD endpoints for marketplace, jobs, and events.
+- Added missing admin moderation/update endpoints for communities and pages.
+- Added missing admin mutation endpoint for wallet subscriptions.
+- Added canonical admin notification campaign endpoints for dashboard use.
+- Corrected dashboard navigation from stale notification endpoints to canonical backend endpoints.
 
-- the dashboard was still calling several app-facing routes instead of admin APIs
-- Flutter settings state was still stored locally for server-owned account settings
+## Still Mismatched
 
-## Backend Route vs Client Usage
+- Dashboard architecture still does not match the requested professional page/layout/service split.
+- Dashboard still uses a compact single-app rendering model instead of the requested page modules under `src/pages/*`.
+- Dashboard coverage for admin sections is still partial at the UX layer even when the backend endpoint now exists.
+- Flutter still contains feature modules that need a stricter audit for local-only source-of-truth behavior versus API-backed persistence.
+- The single shared cross-repo integration contract is still incomplete.
 
-| Surface | Client file(s) | Route in client | Backend route status | State after this pass |
-| --- | --- | --- | --- | --- |
-| Dashboard overview | `src/config/navigation.js` | `/admin/dashboard/overview` | Exists and Prisma-backed | Aligned |
-| Dashboard users | `src/config/navigation.js` | `/admin/users` | Exists and Prisma-backed | Aligned |
-| Dashboard content | `src/config/navigation.js` | `/admin/content` | Exists and Prisma-backed | Aligned |
-| Dashboard reports | `src/config/navigation.js` | `/admin/reports` | Exists and Prisma-backed | Aligned |
-| Dashboard support | `src/config/navigation.js` | `/admin/support-operations` | Exists and Prisma-backed | Aligned |
-| Dashboard marketplace | `src/config/navigation.js` | `/admin/marketplace` | Exists and Prisma-backed | Fixed from app route mismatch |
-| Dashboard jobs | `src/config/navigation.js` | `/admin/jobs` | Exists and Prisma-backed | Fixed from app route mismatch |
-| Dashboard events | `src/config/navigation.js` | `/admin/events` | Exists and Prisma-backed | Fixed from app route mismatch |
-| Dashboard communities | `src/config/navigation.js` | `/admin/communities` | Exists and Prisma-backed | Fixed from app route mismatch |
-| Dashboard pages | `src/config/navigation.js` | `/admin/pages` | Exists and Prisma-backed | Fixed from app route mismatch |
-| Dashboard live streams | `src/config/navigation.js` | `/admin/live-streams` | Exists and Prisma-backed | Aligned |
-| Dashboard wallet/subscriptions | `src/config/navigation.js` | `/admin/wallet-subscriptions` | Exists and Prisma-backed alias | Aligned |
-| Dashboard notification devices | `src/config/navigation.js` | `/admin/notification-devices` | Exists and Prisma-backed | Aligned |
-| Flutter settings state | `lib/feature/settings/repository/settings_preferences_repository.dart` | `/settings/state` | Exists and user-authenticated | Fixed from local-only mismatch |
+## Backend Endpoints That Now Exist For Admin
 
-## Database-Backed vs Static / Local-Only
+- `POST /admin/auth/login`
+- `GET /admin/auth/me`
+- `POST /admin/auth/refresh`
+- `POST /admin/auth/logout`
+- `PATCH /admin/auth/sessions/:id/revoke`
+- `GET /admin/dashboard/overview`
+- `GET /admin/users`
+- `PATCH /admin/users/:id`
+- `GET /admin/content`
+- `PATCH /admin/content/:type/:id/moderate`
+- `GET /admin/reports`
+- `PATCH /admin/reports/:id`
+- `GET /admin/support-operations`
+- `GET /admin/settings`
+- `PATCH /admin/settings`
+- `GET /admin/audit-logs`
+- `GET /admin/marketplace`
+- `POST /admin/marketplace`
+- `PATCH /admin/marketplace/:id`
+- `DELETE /admin/marketplace/:id`
+- `GET /admin/jobs`
+- `POST /admin/jobs`
+- `PATCH /admin/jobs/:id`
+- `DELETE /admin/jobs/:id`
+- `GET /admin/events`
+- `POST /admin/events`
+- `PATCH /admin/events/:id`
+- `DELETE /admin/events/:id`
+- `GET /admin/communities`
+- `PATCH /admin/communities/:id`
+- `GET /admin/pages`
+- `PATCH /admin/pages/:id`
+- `GET /admin/live-streams`
+- `PATCH /admin/live-streams/:id`
+- `GET /admin/monetization`
+- `GET /admin/wallet-subscriptions`
+- `PATCH /admin/wallet-subscriptions/:id`
+- `GET /admin/notification-devices`
+- `PATCH /admin/notification-devices/:id`
+- `GET /admin/notification-campaigns`
+- `POST /admin/notification-campaigns`
+- `PATCH /admin/notification-campaigns/:id`
+- `GET /admin/premium-plans`
+- `POST /admin/premium-plans`
+- `PATCH /admin/premium-plans/:id`
 
-### Resolved in this pass
+## Validation Snapshot
 
-| Area | Before | After |
-| --- | --- | --- |
-| Dashboard operational modules | Mixed admin routes and app-facing routes | Admin routes only |
-| Dashboard base URL | Defaulted to localhost when env not set | Defaults to deployed Vercel backend |
-| Flutter settings state | Shared-preferences local persistence for server-owned data | Backend `/settings/state` source of truth |
-| Live admin views | Generic fallback rendering for several modules | Explicit live tables for admin operations |
-
-### Still remaining
-
-| Area | Current gap |
-| --- | --- |
-| Backend settings catalog | `SettingsDataService` still participates in production responses |
-| Backend OTP / legacy utilities | Some untouched flows still depend on older helper/static services |
-| Flutter server-owned settings UX | Better explicit error/retry UI still needed in some screens |
-| Dashboard admin workflows | Read/list coverage is stronger than mutation/action workflow depth |
-
-## Files Audited Most Directly In This Pass
-
-### Backend
-
-- `prisma/schema.prisma`
-- `src/controllers/admin.controller.ts`
-- `src/controllers/admin-ops.controller.ts`
-- `src/services/admin-database.service.ts`
-- `src/services/settings-database.service.ts`
-- `src/data/admin-ops-data.service.ts`
-- `src/data/platform-data.service.ts`
-- `src/modules/data.module.ts`
-- `src/modules/admin-api.module.ts`
-
-### Flutter
-
-- `lib/core/data/api/api_end_points.dart`
-- `lib/core/data/service/api_client_service.dart`
-- `lib/feature/settings/controller/settings_state_controller.dart`
-- `lib/feature/settings/repository/settings_preferences_repository.dart`
-- `lib/feature/settings/screen/privacy_settings_screen.dart`
-- `lib/feature/settings/screen/notifications_settings_screen.dart`
-- `lib/feature/settings/screen/data_privacy_center_screen.dart`
-
-### Dashboard
-
-- `src/App.jsx`
-- `src/services/apiClient.js`
-- `src/App.css`
-- `src/components/AdminViews.jsx`
-- `src/config/navigation.js`
-
-## Current Verdict
-
-- Backend admin list/data routes used by the dashboard are aligned and validated.
-- Flutter no longer treats `/settings/state` as a device-local store.
-- The platform still needs a wider cleanup pass to remove every remaining helper-backed production response, but the current mismatches fixed here were real integration blockers and are now closed.
+- Backend `typecheck` passed
+- Backend `build` passed
+- Backend `prisma generate` passed
+- Dashboard `lint` passed
+- Dashboard `build` passed
+- Flutter `pub get` passed
+- Flutter `analyze` passed
