@@ -643,4 +643,18 @@ export class AdminController {
       await this.adminDatabase.updateAdminPremiumPlan(id, body, admin.adminId),
     );
   }
+
+  @Delete('premium-plans/:id')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Delete a premium plan' })
+  async deletePremiumPlan(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin premium plan deleted successfully.',
+      await this.adminDatabase.deleteAdminPremiumPlan(id, admin.adminId),
+    );
+  }
 }

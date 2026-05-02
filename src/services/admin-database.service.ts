@@ -2859,6 +2859,47 @@ export class AdminDatabaseService implements OnModuleInit {
     };
   }
 
+  async deleteAdminPremiumPlan(id: string, actorAdminId?: string) {
+    const existing = await this.prisma.premiumPlan.findUnique({
+      where: { id },
+      include: { subscriptions: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Premium plan ${id} not found.`);
+    }
+
+    const activeSubscriptions = existing.subscriptions.filter(
+      (item) => item.status.trim().toLowerCase() === 'active',
+    ).length;
+    if (activeSubscriptions > 0) {
+      throw new ConflictException(
+        `Premium plan ${id} cannot be deleted while ${activeSubscriptions} active subscription(s) still depend on it.`,
+      );
+    }
+
+    await this.prisma.premiumPlan.delete({
+      where: { id },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'premium_plan.delete',
+      entityType: 'premium_plan',
+      entityId: id,
+      metadata: {
+        code: existing.code,
+        name: existing.name,
+      },
+    });
+
+    return {
+      id,
+      deleted: true,
+      code: existing.code,
+      name: existing.name,
+    };
+  }
+
   async getAdminUsers() {
     return this.prisma.appUser.findMany({
       orderBy: { createdAt: 'desc' },
