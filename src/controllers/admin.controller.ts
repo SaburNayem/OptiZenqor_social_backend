@@ -22,10 +22,14 @@ import {
   AdminAuditLogsQueryDto,
   AdminContentQueryDto,
   AdminEntityListQueryDto,
+  AdminEventUpdateDto,
   AdminEventUpsertDto,
+  AdminJobUpdateDto,
   AdminJobUpsertDto,
+  AdminMarketplaceUpdateDto,
   AdminMarketplaceUpsertDto,
   AdminModerateContentDto,
+  AdminNotificationCampaignActionDto,
   AdminNotificationCampaignCreateDto,
   AdminNotificationCampaignUpdateDto,
   AdminNotificationDeviceUpdateDto,
@@ -269,7 +273,7 @@ export class AdminController {
   @ApiOperation({ summary: 'Update a marketplace item from the admin surface' })
   async updateMarketplace(
     @Param('id') id: string,
-    @Body() body: Partial<AdminMarketplaceUpsertDto>,
+    @Body() body: AdminMarketplaceUpdateDto,
     @Headers('authorization') authorization?: string,
   ) {
     const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
@@ -319,7 +323,7 @@ export class AdminController {
   @ApiOperation({ summary: 'Update a job from the admin surface' })
   async updateJob(
     @Param('id') id: string,
-    @Body() body: Partial<AdminJobUpsertDto>,
+    @Body() body: AdminJobUpdateDto,
     @Headers('authorization') authorization?: string,
   ) {
     const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
@@ -369,7 +373,7 @@ export class AdminController {
   @ApiOperation({ summary: 'Update an event from the admin surface' })
   async updateEvent(
     @Param('id') id: string,
-    @Body() body: Partial<AdminEventUpsertDto>,
+    @Body() body: AdminEventUpdateDto,
     @Headers('authorization') authorization?: string,
   ) {
     const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
@@ -538,6 +542,15 @@ export class AdminController {
     return this.getNotificationDevices(query);
   }
 
+  @Get('notification-devices/:id')
+  @ApiOperation({ summary: 'Get push notification device detail' })
+  async getNotificationDeviceDetail(@Param('id') id: string) {
+    return successResponse(
+      'Admin notification device fetched successfully.',
+      await this.adminDatabase.getAdminNotificationDevice(id),
+    );
+  }
+
   @Patch('notification-devices/:id')
   @Roles('Super Admin', 'Operations Admin', 'Support Admin')
   @ApiOperation({ summary: 'Activate or deactivate a push notification device' })
@@ -562,6 +575,20 @@ export class AdminController {
     @Headers('authorization') authorization?: string,
   ) {
     return this.updateNotificationDevice(id, body, authorization);
+  }
+
+  @Delete('notification-devices/:id')
+  @Roles('Super Admin', 'Operations Admin', 'Support Admin')
+  @ApiOperation({ summary: 'Delete a push notification device registration' })
+  async deleteNotificationDevice(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin notification device deleted successfully.',
+      await this.adminDatabase.deleteAdminNotificationDevice(id, admin.adminId),
+    );
   }
 
   @Get('notification-campaigns')
@@ -601,6 +628,30 @@ export class AdminController {
     return successResponse(
       'Admin notification campaign updated successfully.',
       await this.adminDatabase.updateAdminNotificationCampaign(id, body, admin.adminId),
+    );
+  }
+
+  @Get('notification-campaigns/:id')
+  @ApiOperation({ summary: 'Get notification campaign detail and lifecycle stats' })
+  async getNotificationCampaignDetail(@Param('id') id: string) {
+    return successResponse(
+      'Admin notification campaign fetched successfully.',
+      await this.adminDatabase.getAdminNotificationCampaign(id),
+    );
+  }
+
+  @Post('notification-campaigns/:id/actions')
+  @Roles('Super Admin', 'Operations Admin', 'Support Admin')
+  @ApiOperation({ summary: 'Send, schedule, cancel, or delete a notification campaign' })
+  async runNotificationCampaignAction(
+    @Param('id') id: string,
+    @Body() body: AdminNotificationCampaignActionDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin notification campaign action applied successfully.',
+      await this.adminDatabase.runAdminNotificationCampaignAction(id, body, admin.adminId),
     );
   }
 

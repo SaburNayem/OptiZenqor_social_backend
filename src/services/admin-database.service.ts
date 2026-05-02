@@ -722,7 +722,14 @@ export class AdminDatabaseService implements OnModuleInit {
 
   async updateSupportTicket(
     id: string,
-    patch: { status?: string; priority?: string; adminNote?: string },
+    patch: {
+      status?: string;
+      priority?: string;
+      adminNote?: string;
+      assignedAdminId?: string;
+      replyMessage?: string;
+      slaHours?: number;
+    },
     actorAdminId?: string,
   ) {
     const existing = await this.prisma.supportTicket.findUnique({
@@ -746,25 +753,59 @@ export class AdminDatabaseService implements OnModuleInit {
     const metadata = this.readObject(existing.metadata);
     const adminNotes = this.readStringArray(metadata.adminNotes);
     const note = patch.adminNote?.trim();
+    const replyMessage = patch.replyMessage?.trim();
     const nextStatus = patch.status?.trim().toLowerCase();
     const nextPriority = patch.priority?.trim().toLowerCase();
+    const assignedAdminId = patch.assignedAdminId?.trim() || null;
 
-    const [ticket] = await this.prisma.$transaction([
-      this.prisma.supportTicket.update({
+    if (assignedAdminId) {
+      await this.getAdminUserById(assignedAdminId);
+    }
+
+    const nextMetadata = {
+      ...metadata,
+      adminNotes: note
+        ? [
+            ...adminNotes,
+            `${new Date().toISOString()} ${note}`,
+          ]
+        : adminNotes,
+      lastAdminActionAt: new Date().toISOString(),
+      assignedAdminId:
+        assignedAdminId === null
+          ? (metadata.assignedAdminId ?? null)
+          : assignedAdminId,
+      assignedAt:
+        assignedAdminId === null
+          ? (metadata.assignedAt ?? null)
+          : new Date().toISOString(),
+      slaHours: patch.slaHours ?? metadata.slaHours ?? null,
+      slaDueAt:
+        patch.slaHours === undefined
+          ? (metadata.slaDueAt ?? null)
+          : new Date(Date.now() + patch.slaHours * 60 * 60 * 1000).toISOString(),
+    };
+
+    const [ticket] = await this.prisma.$transaction(async (tx) => {
+      if (replyMessage && existing.conversation?.id) {
+        await tx.supportMessage.create({
+          data: {
+            id: makeId('support_message'),
+            conversationId: existing.conversation.id,
+            senderType: 'agent',
+            senderUserId: null,
+            body: replyMessage,
+            attachments: [],
+          },
+        });
+      }
+
+      const updatedTicket = await tx.supportTicket.update({
         where: { id },
         data: {
           status: nextStatus ?? undefined,
           priority: nextPriority ?? undefined,
-          metadata: {
-            ...metadata,
-            adminNotes: note
-              ? [
-                  ...adminNotes,
-                  `${new Date().toISOString()} ${note}`,
-                ]
-              : adminNotes,
-            lastAdminActionAt: new Date().toISOString(),
-          } as Prisma.InputJsonValue,
+          metadata: nextMetadata as Prisma.InputJsonValue,
           updatedAt: new Date(),
         },
         include: {
@@ -778,8 +819,9 @@ export class AdminDatabaseService implements OnModuleInit {
             },
           },
         },
-      }),
-      this.prisma.supportConversation.updateMany({
+      });
+
+      await tx.supportConversation.updateMany({
         where: { ticketId: id },
         data: {
           status:
@@ -787,11 +829,15 @@ export class AdminDatabaseService implements OnModuleInit {
               ? 'closed'
               : nextStatus === 'reviewing'
                 ? 'reviewing'
-                : undefined,
+                : nextStatus === 'open'
+                  ? 'open'
+                  : undefined,
           updatedAt: new Date(),
         },
-      }),
-    ]);
+      });
+
+      return [updatedTicket];
+    });
 
     await this.createAuditLog({
       actorAdminId,
@@ -802,10 +848,46 @@ export class AdminDatabaseService implements OnModuleInit {
         status: nextStatus ?? existing.status,
         priority: nextPriority ?? existing.priority,
         adminNote: note ?? null,
+        assignedAdminId,
+        replied: Boolean(replyMessage),
+        slaHours: patch.slaHours ?? null,
       },
     });
 
     return this.mapSupportTicket(ticket);
+  }
+
+  async getSupportOperationDetail(id: string) {
+    const ticket = await this.prisma.supportTicket.findUnique({
+      where: { id },
+      include: {
+        user: true,
+        conversation: {
+          include: {
+            messages: {
+              orderBy: { createdAt: 'asc' },
+            },
+          },
+        },
+      },
+    });
+    if (!ticket) {
+      throw new NotFoundException(`Support ticket ${id} not found.`);
+    }
+
+    const mapped = this.mapSupportTicket(ticket);
+    return {
+      ...mapped,
+      messages:
+        ticket.conversation?.messages.map((message) => ({
+          id: message.id,
+          senderType: message.senderType,
+          senderUserId: message.senderUserId,
+          body: message.body,
+          attachments: this.readStringArray(message.attachments),
+          createdAt: message.createdAt.toISOString(),
+        })) ?? [],
+    };
   }
 
   async getDashboardOverview() {
@@ -2504,6 +2586,41 @@ export class AdminDatabaseService implements OnModuleInit {
     );
   }
 
+  async getAdminNotificationCampaign(id: string) {
+    const item = await this.prisma.notificationCampaign.findUnique({
+      where: { id },
+    });
+    if (!item) {
+      throw new NotFoundException(`Notification campaign ${id} not found.`);
+    }
+
+    const relatedLogs = await this.prisma.adminAuditLog.findMany({
+      where: {
+        entityType: 'notification_campaign',
+        entityId: id,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 25,
+    });
+
+    const lifecycleEvents = relatedLogs.map((log) => ({
+      id: log.id,
+      action: log.action,
+      metadata: this.readObject(log.metadata),
+      createdAt: log.createdAt.toISOString(),
+    }));
+
+    return {
+      ...this.mapAdminNotificationCampaignRow(item),
+      stats: {
+        events: lifecycleEvents.length,
+        lastAction: lifecycleEvents[0]?.action ?? null,
+        lastActionAt: lifecycleEvents[0]?.createdAt ?? item.updatedAt.toISOString(),
+      },
+      lifecycleEvents,
+    };
+  }
+
   async createAdminNotificationCampaign(
     input: {
       name: string;
@@ -2571,6 +2688,86 @@ export class AdminDatabaseService implements OnModuleInit {
     });
 
     return this.mapAdminNotificationCampaignRow(updated);
+  }
+
+  async runAdminNotificationCampaignAction(
+    id: string,
+    input: {
+      action: 'send' | 'schedule' | 'cancel' | 'delete';
+      schedule?: string;
+      note?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    const action = input.action.trim().toLowerCase() as 'send' | 'schedule' | 'cancel' | 'delete';
+    if (action === 'delete') {
+      return this.deleteAdminNotificationCampaign(id, actorAdminId, input.note);
+    }
+
+    const existing = await this.prisma.notificationCampaign.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Notification campaign ${id} not found.`);
+    }
+
+    const nextStatus =
+      action === 'send' ? 'sent' : action === 'cancel' ? 'cancelled' : 'scheduled';
+    const updated = await this.prisma.notificationCampaign.update({
+      where: { id },
+      data: {
+        status: nextStatus,
+        schedule:
+          action === 'schedule' && input.schedule?.trim()
+            ? input.schedule.trim()
+            : existing.schedule,
+        updatedAt: new Date(),
+      },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: `notification_campaign.${action}`,
+      entityType: 'notification_campaign',
+      entityId: updated.id,
+      metadata: {
+        note: input.note?.trim() || null,
+        schedule: input.schedule?.trim() || null,
+      },
+    });
+
+    return this.getAdminNotificationCampaign(updated.id);
+  }
+
+  async deleteAdminNotificationCampaign(id: string, actorAdminId?: string, note?: string) {
+    const existing = await this.prisma.notificationCampaign.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Notification campaign ${id} not found.`);
+    }
+
+    await this.prisma.notificationCampaign.delete({
+      where: { id },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'notification_campaign.delete',
+      entityType: 'notification_campaign',
+      entityId: id,
+      metadata: {
+        name: existing.name,
+        audience: existing.audience,
+        note: note?.trim() || null,
+      },
+    });
+
+    return {
+      id,
+      deleted: true,
+      name: existing.name,
+    };
   }
 
   async updateAdminWalletSubscription(
@@ -2676,6 +2873,61 @@ export class AdminDatabaseService implements OnModuleInit {
       token: updated.token,
       lastSeenAt: updated.lastSeenAt.toISOString(),
       createdAt: updated.createdAt.toISOString(),
+    };
+  }
+
+  async getAdminNotificationDevice(id: string) {
+    const item = await this.prisma.pushDeviceToken.findUnique({
+      where: { id },
+      include: { user: true },
+    });
+    if (!item) {
+      throw new NotFoundException(`Push notification device ${id} not found.`);
+    }
+
+    return {
+      id: item.id,
+      userName: item.user.name,
+      userId: item.userId,
+      platform: item.platform,
+      deviceLabel: item.deviceLabel,
+      status: item.isActive ? 'active' : 'inactive',
+      token: item.token,
+      lastSeenAt: item.lastSeenAt.toISOString(),
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString(),
+    };
+  }
+
+  async deleteAdminNotificationDevice(id: string, actorAdminId?: string) {
+    const existing = await this.prisma.pushDeviceToken.findUnique({
+      where: { id },
+      include: { user: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Push notification device ${id} not found.`);
+    }
+
+    await this.prisma.pushDeviceToken.delete({
+      where: { id },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'notification_device.delete',
+      entityType: 'notification_device',
+      entityId: id,
+      metadata: {
+        userId: existing.userId,
+        platform: existing.platform,
+        deviceLabel: existing.deviceLabel,
+      },
+    });
+
+    return {
+      id,
+      deleted: true,
+      userName: existing.user.name,
     };
   }
 

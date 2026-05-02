@@ -294,6 +294,16 @@ export class AdminOpsController {
     );
   }
 
+  @Get('support-operations/:id')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard)
+  async getSupportOperationDetail(@Param('id') id: string) {
+    return successResponse(
+      'Support ticket fetched successfully.',
+      await this.adminDatabase.getSupportOperationDetail(id),
+    );
+  }
+
   @Patch('support-operations/:id')
   @ApiBearerAuth('admin-bearer')
   @UseGuards(AdminSessionGuard, RolesGuard)

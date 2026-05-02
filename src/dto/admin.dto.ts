@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
@@ -382,6 +383,23 @@ export class AdminSupportTicketUpdateDto {
   @IsOptional()
   @IsString()
   adminNote?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  assignedAdminId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  replyMessage?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  slaHours?: number;
 }
 
 export class AdminNotificationDeviceUpdateDto {
@@ -448,6 +466,23 @@ export class AdminNotificationCampaignUpdateDto {
   status?: string;
 }
 
+export class AdminNotificationCampaignActionDto {
+  @ApiProperty({ enum: ['send', 'schedule', 'cancel', 'delete'] })
+  @IsString()
+  @IsIn(['send', 'schedule', 'cancel', 'delete'])
+  action!: 'send' | 'schedule' | 'cancel' | 'delete';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  schedule?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
 export class AdminMarketplaceUpsertDto {
   @ApiProperty()
   @IsString()
@@ -463,11 +498,78 @@ export class AdminMarketplaceUpsertDto {
 
   @ApiProperty()
   @Type(() => Number)
+  @IsNumber()
   price!: number;
 
   @ApiProperty()
   @IsString()
   category!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  currency?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  subcategory?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  condition?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  images?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  stock?: number;
+}
+
+export class AdminMarketplaceUpdateDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sellerId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  price?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  category?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -568,6 +670,71 @@ export class AdminJobUpsertDto {
   skills?: string[];
 }
 
+export class AdminJobUpdateDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  recruiterId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  company?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  type?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  experienceLevel?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  salaryMin?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  salaryMax?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  currency?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  skills?: string[];
+}
+
 export class AdminEventUpsertDto {
   @ApiProperty()
   @IsString()
@@ -607,6 +774,60 @@ export class AdminEventUpsertDto {
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
+  @IsNumber()
+  price?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
+}
+
+export class AdminEventUpdateDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  organizerId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  date?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  time?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  organizerName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
   price?: number;
 
   @ApiPropertyOptional()

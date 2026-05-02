@@ -14,74 +14,63 @@ Repositories audited and changed from the current local workspace:
 
 ### Backend
 
-- `src/common/id.util.ts`
+- `src/controllers/admin-ops.controller.ts`
 - `src/controllers/admin.controller.ts`
 - `src/dto/admin.dto.ts`
 - `src/services/admin-database.service.ts`
 
 ### Flutter
 
-- `lib/feature/premium_membership/controller/premium_membership_controller.dart`
-- `lib/feature/premium_membership/model/premium_plan_model.dart`
-- `lib/feature/premium_membership/repository/premium_membership_repository.dart`
-- `lib/feature/premium_membership/screen/premium_membership_screen.dart`
-- `lib/feature/subscriptions/repository/subscriptions_repository.dart`
+- `lib/feature/accessibility_support/controller/accessibility_support_controller.dart`
+- `lib/feature/blocked_muted_accounts/repository/blocked_muted_accounts_repository.dart`
+- `lib/feature/legal_compliance/controller/legal_compliance_controller.dart`
+- `lib/feature/localization_support/controller/localization_support_controller.dart`
+- `lib/feature/personalization_onboarding/controller/personalization_onboarding_controller.dart`
 
 ### Dashboard
 
 - `src/App.jsx`
 - `src/components/AdminViews.jsx`
-- `src/config/navigation.js`
 
 ## Routes Added / Changed
 
 ### Backend admin routes added in this pass
 
-- `GET /admin/premium-plans`
-- `POST /admin/premium-plans`
-- `PATCH /admin/premium-plans/:id`
-- `PATCH /admin/users/:id/status`
-- `PATCH /admin/content/:id/moderation`
-- `PATCH /admin/live-streams/:id`
-- `GET /admin/wallet`
-- `GET /admin/subscriptions`
-- `GET /admin/notifications/devices`
+- `GET /admin/support-operations/:id`
+- `GET /admin/notification-devices/:id`
+- `DELETE /admin/notification-devices/:id`
+- `GET /admin/notification-campaigns/:id`
+- `POST /admin/notification-campaigns/:id/actions`
 
-### Existing backend routes now used more directly by clients
+### Backend admin routes tightened in this pass
 
-- `GET /admin/auth/sessions`
-- `PATCH /admin/auth/sessions/:id/revoke`
-- `GET /admin/notification-devices`
-- `GET /admin/wallet-subscriptions`
-- `GET /premium-membership`
-- `GET /premium`
-- `GET /premium-plans`
-- `GET /subscriptions`
-- `POST /subscriptions/change-plan`
+- `PATCH /admin/marketplace/:id`
+- `PATCH /admin/jobs/:id`
+- `PATCH /admin/events/:id`
+- `PATCH /admin/support-operations/:id`
+- `PATCH /admin/notification-devices/:id`
+- `PATCH /admin/notification-campaigns/:id`
 
 ### Dashboard API usage changes
 
-- added admin page usage for `/admin/premium-plans`
-- added admin page usage for `/admin/auth/sessions`
-- added admin page usage for `/admin/wallet`
-- added admin page usage for `/admin/subscriptions`
-- switched notification devices page to `/admin/notifications/devices`
-- kept existing admin-only navigation for marketplace, jobs, events, communities, pages, live streams, wallet/subscriptions, notifications, audit, settings
+- notification campaigns now use live update forms through `/admin/notification-campaigns/:id`
+- notification campaigns now support send/cancel lifecycle actions through `/admin/notification-campaigns/:id/actions`
+- existing notification device state management remains live and backend-backed
 
 ### Flutter integration changes
 
-- premium membership screen now loads plans from backend routes instead of hardcoded arrays
-- subscription plan changes now write through backend only, without local plan-id fallback as source of truth
+- blocked/muted accounts no longer convert request or payload failures into empty production state
+- accessibility, localization, personalization onboarding, and legal compliance controllers now validate the canonical backend envelope more strictly
 
 ## DB Tables / Models Used
 
-- `PremiumPlan` / `app_premium_plans`
-- `Subscription` / `app_subscriptions`
-- `WalletTransaction` / `app_wallet_transactions`
-- `LiveStreamSession` / `app_live_stream_sessions`
+- `SupportTicket` / `support_tickets`
+- `SupportConversation` / `support_conversations`
+- `SupportMessage` / `support_messages`
 - `PushDeviceToken` / `app_push_device_tokens`
-- `AdminSession`
-- `AdminAuditLog`
+- `NotificationCampaign` / `app_notification_campaigns`
+- `AdminSession` / `admin_sessions`
+- `AdminAuditLog` / `admin_audit_logs`
 
 ## New Database Models / Migrations Added
 
@@ -91,44 +80,37 @@ Repositories audited and changed from the current local workspace:
 
 ## Mock / Static / Local-Only Flows Removed
 
-- removed hardcoded premium plan cards from Flutter `premium_membership`
-- removed local stored active subscription plan fallback as the source of truth in Flutter `subscriptions_repository`
-- removed dashboard gap where premium-plan and admin-session pages were missing from live admin API usage
-- removed dashboard dependency on combined-only wallet/subscription views by adding explicit wallet and subscription admin endpoints/pages
+- removed silent empty-list fallback from Flutter blocked/muted account loading
+- removed silent acceptance of empty accessibility/localization/legal/personalization payloads in Flutter
+- removed dashboard read-only behavior for notification campaigns by adding live lifecycle controls
 
 ## What Was Fixed
 
 ### Backend
 
-- Added Prisma-backed admin premium-plan list/create/update flows with DTO validation and audit-log writes.
-- Kept admin session management database-backed and exposed it cleanly for dashboard use.
-- Added backward-compatible admin aliases for user status, content moderation, wallet, subscriptions, and notification devices.
-- Added admin live-stream mutation support with audit-log writes.
-- Extended shared ID generation to support premium plan IDs without unsafe string workarounds.
+- Replaced unvalidated admin update bodies for marketplace, jobs, and events with dedicated DTO classes.
+- Expanded support operations so admins can fetch ticket detail, assign ownership, append admin notes, reply into the support conversation, and attach SLA metadata with audit logging.
+- Expanded notification administration so campaigns support detail plus send/schedule/cancel/delete actions and devices support detail plus delete, all through protected admin routes with audit logs.
 
 ### Flutter
 
-- Replaced the premium membership feature’s hardcoded plan list with a backend-backed repository.
-- Added loading, empty, error, and submitting states for premium plan selection.
-- Kept the existing mobile route intact while moving plan selection to real backend subscription APIs.
+- Tightened blocked/muted account loading so contract drift and request failures now surface to the UI instead of looking like a genuine empty state.
+- Tightened accessibility, localization, personalization onboarding, and legal compliance controllers so malformed backend payloads now produce explicit errors.
 
 ### Dashboard
 
-- Added navigation and live views for premium plans and admin sessions.
-- Added navigation and live views for wallet and subscriptions.
-- Added premium-plan activation/deactivation action support through admin APIs.
-- Added admin-session revoke action support through admin APIs.
-- Replaced the remaining encoding-broken table placeholders in the admin view file while keeping all data live.
+- Added live notification campaign lifecycle controls instead of leaving that module read-only.
+- Added live campaign edit forms wired to backend mutations with no runtime API fallback URL logic.
 
 ## Remaining Gaps
 
-- Backend still has untouched helper/static dependencies outside this slice, especially around older `ExtendedDataService` / `PlatformDataService` usage and some configuration-driven settings surfaces.
-- `src/controllers/account-ops.controller.ts` still imports `ExtendedDataService`.
-- Dashboard is still not fully reorganized into the larger modular folder structure requested, even though the live admin API coverage is stronger.
-- Flutter still has other server-owned flows outside this slice that need the same treatment, including several communities/events/jobs/polls/live-stream/account-utility screens mentioned in the brief.
-- `flutter test` cannot pass yet because the repo currently does not contain any actual `*_test.dart` files.
+- Runtime default business/config data is still present in backend settings, app-utility, and support services; the Prisma catalog/config migration requested in the brief is still outstanding.
+- Backend `/health`, `/health/database`, `/docs-json`, admin login, and full per-route mutation smoke tests were not run in this pass.
+- Dashboard is still not fully rebuilt into the larger modular page/hook structure requested.
+- Flutter still has other server-owned flows outside this slice that need the same strict contract cleanup, including marketplace, jobs networking aggregates, live/call lifecycle, and additional account utility screens.
+- `flutter test` still cannot pass because the repo does not contain any `*_test.dart` files.
+- `npm run prisma:generate` is currently blocked on Windows by an `EPERM` rename failure against `node_modules/.prisma/client/query_engine-windows.dll.node`.
 - I did not run destructive migration/reset operations, and I did not run `prisma migrate` because the task explicitly required a safe non-destructive approach.
-- Smoke tests for `/health`, `/health/database`, `/docs-json`, and live admin login were not executed in this pass because the backend server was not launched as part of the verification loop.
 
 ## Verification Commands And Results
 
@@ -137,7 +119,7 @@ Repositories audited and changed from the current local workspace:
 - `npm.cmd install`
   - Passed
 - `npm.cmd run prisma:generate`
-  - Passed
+  - Failed with Windows `EPERM` while renaming `node_modules/.prisma/client/query_engine-windows.dll.node`
 - `npm.cmd run typecheck`
   - Passed
 - `npm.cmd run build`
@@ -147,7 +129,7 @@ Repositories audited and changed from the current local workspace:
 
 - `flutter pub get`
   - Passed
-- `dart format lib/feature/premium_membership lib/feature/subscriptions/repository/subscriptions_repository.dart`
+- `dart format lib/feature/blocked_muted_accounts/repository/blocked_muted_accounts_repository.dart lib/feature/accessibility_support/controller/accessibility_support_controller.dart lib/feature/localization_support/controller/localization_support_controller.dart lib/feature/legal_compliance/controller/legal_compliance_controller.dart lib/feature/personalization_onboarding/controller/personalization_onboarding_controller.dart`
   - Passed
 - `flutter analyze`
   - Passed
@@ -165,7 +147,7 @@ Repositories audited and changed from the current local workspace:
 
 ## Completion Estimate
 
-- Backend: 88%
-- Flutter: 82%
-- Dashboard: 86%
-- Overall: 85%
+- Backend: 90%
+- Flutter: 84%
+- Dashboard: 88%
+- Overall: 87%

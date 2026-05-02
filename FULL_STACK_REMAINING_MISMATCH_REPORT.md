@@ -2,6 +2,23 @@
 
 Generated: 2026-05-02
 
+## Latest Implementation Delta
+
+Fixed in this pass:
+
+- admin update DTO validation was tightened for marketplace, jobs, and events
+- admin support operations now support ticket detail, assignment, reply, and SLA metadata updates with audit logs
+- admin notification campaigns now support detail plus send/cancel/delete lifecycle actions
+- admin notification devices now support detail plus delete
+- Flutter blocked/muted, accessibility, localization, personalization onboarding, and legal compliance surfaces now fail explicitly on bad backend payloads instead of silently accepting empty state
+- dashboard notification campaigns are no longer read-only
+
+Still remaining after this pass:
+
+- backend runtime default config/catalog data still needs dedicated Prisma-backed catalog persistence
+- dashboard still needs broader module-level mutation UX outside the notification/admin support slice
+- Flutter still needs the same strict cleanup in additional server-owned features, especially marketplace aggregates and jobs networking
+
 This report lists the concrete remaining mismatches found during the cross-repo audit of:
 
 - `G:\My Project\Socity_backend`
