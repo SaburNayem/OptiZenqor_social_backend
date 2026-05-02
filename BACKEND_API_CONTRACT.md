@@ -9,6 +9,19 @@ Current local implementation uses a hybrid database access style:
 
 It is intentionally concise and focused on the mobile-facing routes that are already preferred for real integration.
 
+## 2026-05-03 contract update
+
+The following production-backed changes were completed in the latest backend/mobile pass:
+
+- settings catalog runtime authority moved off `SettingsDataService` and onto persisted PostgreSQL catalog tables:
+  - `app_settings_section_catalog`
+  - `app_settings_item_catalog`
+- Flutter settings landing now consumes `GET /settings` as a real backend catalog instead of a hardcoded client list
+- deep link resolution is now expected to flow through:
+  - `GET /deep-link-handler`
+  - `POST /deep-link-handler/resolve`
+- the backend now returns settings sections/items from database-backed catalog rows plus user-specific dynamic state overlays
+
 ## 2026-05-02 contract update
 
 The following production-backed routes were added or expanded in the latest coordinated backend/mobile/dashboard pass:
@@ -48,7 +61,8 @@ Most routes should return:
 {
   "success": true,
   "message": "Human readable message",
-  "data": {}
+  "data": {},
+  "pagination": null
 }
 ```
 
@@ -64,6 +78,17 @@ Compatibility aliases may also appear, including:
 - `posts`
 - `stories`
 - `reels`
+
+The canonical contract is still:
+
+```json
+{
+  "success": true,
+  "message": "Human readable message",
+  "data": {},
+  "pagination": {}
+}
+```
 
 ## Normalized persistence added in this pass
 
@@ -148,6 +173,29 @@ Returns:
 - `feedPreview`
 
 This route is intended to be the first real backend call from Flutter startup.
+
+## Settings and utility contract
+
+### `GET /settings`
+- Auth: bearer token required
+- Purpose: return the database-backed settings catalog for the authenticated user
+- Source of truth:
+  - catalog structure comes from `app_settings_section_catalog` and `app_settings_item_catalog`
+  - per-user values come from persisted user settings and related domain services
+
+### `GET /settings/items`
+### `GET /settings/items/:itemKey`
+### `GET /settings/:sectionKey`
+### `PATCH /settings/items/:itemKey`
+### `PATCH /settings/:sectionKey`
+### `GET /settings/state`
+### `PATCH /settings/state`
+- Auth: bearer token required
+- Purpose: read and update persisted settings catalog entries and user settings state
+
+### `GET /deep-link-handler`
+### `POST /deep-link-handler/resolve`
+- Purpose: read persisted deep-link handler config and resolve app routes through backend-owned rules
 
 ## Content contract
 

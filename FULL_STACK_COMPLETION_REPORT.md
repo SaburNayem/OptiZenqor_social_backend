@@ -1,6 +1,6 @@
 # Full Stack Completion Report
 
-Updated: 2026-05-02
+Updated: 2026-05-03
 
 ## Scope
 
@@ -8,97 +8,96 @@ Updated: 2026-05-02
 - Flutter: `G:\My Project\OptiZenqor_social`
 - Dashboard: `G:\My Project\OptiZenqor_social_dashboard`
 
-## What Was Fixed
+## What was completed in this pass
 
 ### Backend
 
-- enriched marketplace payloads from the NestJS backend so product responses now include seller metadata and currency, and order responses now include `productTitle`
-- enriched jobs payloads so job responses now include recruiter metadata, currency-aware salary labels, and a structured company block
-- added missing admin detail endpoints and service coverage for:
-  - `GET /admin/marketplace/:id`
-  - `GET /admin/jobs/:id`
-  - `GET /admin/events/:id`
-- expanded admin marketplace and admin jobs row mapping with richer fields used by the dashboard
-- added `userLabel` to admin support ticket payloads so the dashboard does not have to fabricate missing user labels
-- removed the most obvious placeholder wording from runtime settings metadata labels
+- added persisted settings catalog tables for sections and items
+- moved runtime settings catalog reads from `SettingsDataService` to PostgreSQL-backed storage
+- updated dev seed flow so the legacy static settings source is used only to populate database catalog rows
+- kept existing settings routes stable while changing the source of truth underneath them
 
 ### Flutter
 
-- removed fabricated marketplace review author fallback text (`Buyer`)
-- removed fabricated jobs fallback labels including `You`, `Recently`, `Primary resume`, `Any`, and `Company`
-- updated calls repository mapping to prefer backend-provided `userLabel` / `name` over weaker fallback fields
+- settings landing now fetches the settings catalog from backend instead of using a hardcoded local list
+- settings now shows explicit unauthorized/loading/error/empty states
+- deep link resolution now calls backend instead of using local path parsing as the authority
+- fake guest display name/avatar fallback was removed from the main shell user holder
+- Firebase notification helper analyzer issues were cleaned up
 
 ### Dashboard
 
-- extracted support operations into `src/pages/admin/support/SupportOperationsView.jsx`
-- extracted marketplace operations into `src/pages/admin/marketplace/MarketplaceOperationsView.jsx`
-- extracted jobs operations into `src/pages/admin/jobs/JobsOperationsView.jsx`
-- updated `src/components/AdminViews.jsx` to use the extracted pages instead of keeping those sections inline
+- no new dashboard code was required in this pass
+- dashboard validation was rerun successfully
 
-## Remaining Issues
-
-- backend settings and catalog surfaces are still not fully database-backed end to end; `SettingsDataService` remains a static catalog scaffold even though more operational values now come from Prisma-backed services
-- marketplace product persistence still does not fully store all rich listing metadata such as delivery options and some seller/order presentation fields as first-class database columns
-- jobs, live stream, support, and settings flows still contain additional depth gaps beyond this pass
-- dashboard is more modular than before, but the full admin-console brief is not complete yet; several sections still remain inside `AdminViews.jsx` and many routes still need richer CRUD/detail/action/export UX
-- Flutter still has broader no-mock/no-fallback cleanup work left outside the specific marketplace/jobs/calls slices touched here
-
-## Exact Files Changed
+## Exact files changed
 
 ### Backend
 
-- `src/controllers/admin.controller.ts`
-- `src/data/settings-data.service.ts`
-- `src/services/admin-database.service.ts`
-- `src/services/experience-database.service.ts`
+- `prisma/schema.prisma`
+- `prisma/migrations/20260503_settings_catalog_tables/migration.sql`
+- `src/modules/data.module.ts`
+- `src/scripts/seed-dev.ts`
+- `src/services/settings-database.service.ts`
+- `BACKEND_API_CONTRACT.md`
+- `FLUTTER_BACKEND_CONTRACT.md`
+- `DASHBOARD_BACKEND_CONTRACT.md`
+- `FULL_PLATFORM_CURRENT_MISMATCH_REPORT.md`
+- `FULL_STACK_REMAINING_MISMATCH_REPORT.md`
+- `FULL_STACK_PRODUCTION_GAP_REPORT.md`
+- `FINAL_FULL_STACK_COMPLETION_REPORT.md`
 
 ### Flutter
 
-- `lib/feature/calls/repository/calls_repository.dart`
-- `lib/feature/jobs_networking/repository/jobs_networking_repository.dart`
-- `lib/feature/marketplace/model/product_model.dart`
+- `lib/core/data/service/deep_link_service.dart`
+- `lib/core/firebase_masseging/notification_permission.dart`
+- `lib/core/firebase_masseging/notification_receive.dart`
+- `lib/feature/home_feed/controller/main_shell_controller.dart`
+- `lib/feature/settings/controller/settings_controller.dart`
+- `lib/feature/settings/repository/settings_catalog_repository.dart`
+- `lib/feature/settings/screen/settings_screen.dart`
+- `lib/main.dart`
 
 ### Dashboard
 
-- `src/components/AdminViews.jsx`
-- `src/pages/admin/jobs/JobsOperationsView.jsx`
-- `src/pages/admin/marketplace/MarketplaceOperationsView.jsx`
-- `src/pages/admin/support/SupportOperationsView.jsx`
+- no files changed
 
-## Commands Run And Results
+## Commands run and results
 
 ### Backend
 
-- `npm run typecheck`
-  - failed initially because PowerShell execution policy blocked `npm.ps1`, not because of code
-- `npm run build`
-  - failed initially because PowerShell execution policy blocked `npm.ps1`, not because of code
-- `npm.cmd run typecheck`
-  - failed once on a real TypeScript regression: missing `currency` in the enriched `mapJob` input type
-- `npm.cmd run typecheck`
-  - passed after the type fix
-- `npm.cmd run build`
-  - passed
+- `npm install` -> passed
+- `npm run prisma:generate` -> passed
+- `npm run prisma:migrate` -> passed
+- `npm run seed:dev` -> passed
+- `npm run typecheck` -> passed
+- `npm run build` -> passed
+- runtime smoke:
+  - `GET /health` -> passed
+  - `GET /health/database` -> passed
+  - `GET /docs-json` -> passed
 
 ### Flutter
 
-- `flutter analyze`
-  - passed
+- `flutter pub get` -> passed
+- `dart format .` -> passed
+- `flutter analyze` -> passed
+- `flutter test` -> passed
 
 ### Dashboard
 
-- `npm run lint`
-  - passed
-- `npm run build`
-  - passed
+- `npm install` -> passed
+- `npm run lint` -> passed
+- `npm run build` -> passed
 
-## Completion Estimate
+## Completion estimate
 
-- Backend: 95%
-- Flutter: 84%
-- Dashboard: 88%
-- Overall: 89%
+- Backend: 86%
+- Flutter: 70%
+- Dashboard: 79%
+- Database coverage: 85%
+- Full platform: 80%
 
-## Honest Status
+## Honest status
 
-The platform is in a better production direction after this pass: backend contracts are richer, some fabricated client labels are gone, and the dashboard is more modular. It is **not** fully done against the full brief yet, so this report does **not** claim 100% completion.
+This pass removed one of the biggest backend-first risks: static runtime ownership of the settings catalog. The platform is materially closer to production-style behavior, but it is not complete yet because several remaining feature areas still need deeper database-backed payload completeness and richer admin/mobile workflow depth.

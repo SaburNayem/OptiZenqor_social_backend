@@ -8,6 +8,22 @@ The intent is:
 - backend returns durable PostgreSQL-backed data
 - response shapes stay compatible with older mobile screens where possible
 
+## 2026-05-03 mobile contract update
+
+Flutter should now treat these two surfaces as backend-owned instead of locally authored:
+
+- settings landing catalog
+  - `GET /settings`
+- deep link resolution
+  - `GET /deep-link-handler`
+  - `POST /deep-link-handler/resolve`
+
+Latest mobile cleanup in this pass:
+
+- the settings landing page no longer depends on a static client settings catalog
+- unauthenticated settings state is now explicit instead of falling back to a fake guest profile
+- deep link resolution no longer relies on local path parsing as the authority
+
 ## 2026-05-02 mobile contract update
 
 Flutter should now prefer the following production-backed support and device routes instead of count-only or local assumptions:
@@ -69,6 +85,27 @@ Backend payloads in the touched slices now provide richer display fields so Flut
 ### `POST /app/session-init`
 - Purpose: compatibility bootstrap route for app startup
 - Auth: optional bearer token
+
+## Settings and deep links
+
+### `GET /settings`
+- Purpose: fetch the authenticated settings catalog and section/item metadata
+- Auth: required
+- Preferred consumer:
+  - `lib/feature/settings/repository/settings_catalog_repository.dart`
+
+### `GET /settings/state`
+### `PATCH /settings/state`
+- Purpose: read and update persisted account settings state
+- Auth: required
+- Preferred consumer:
+  - `lib/feature/settings/repository/settings_preferences_repository.dart`
+
+### `POST /deep-link-handler/resolve`
+- Purpose: resolve backend-owned deep links into app routes
+- Auth: optional
+- Preferred consumer:
+  - `lib/core/data/service/deep_link_service.dart`
 
 ## Feed and content
 

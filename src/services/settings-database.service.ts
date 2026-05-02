@@ -1,15 +1,53 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import {
-  SettingsDataService,
-  SettingsItemRecord,
-  SettingsSectionRecord,
-} from '../data/settings-data.service';
 import { AccountStateDatabaseService } from './account-state-database.service';
 import { CoreDatabaseService } from './core-database.service';
 import { MonetizationDatabaseService } from './monetization-database.service';
 import { PrismaService } from './prisma.service';
 import { UploadsDatabaseService } from './uploads-database.service';
+
+type SettingsCatalogItemRecord = {
+  key: string;
+  title: string;
+  subtitle: string;
+  routeName: string;
+  data: Record<string, unknown>;
+  sectionKey?: string;
+  sectionTitle?: string;
+};
+
+type SettingsCatalogSectionRecord = {
+  key: string;
+  title: string;
+  description: string;
+  items: SettingsCatalogItemRecord[];
+  updatedAt: string;
+};
+
+type SettingsSectionCatalogRow = {
+  key: string;
+  title: string;
+  description: string;
+  updated_at: Date;
+  item_key: string | null;
+  item_title: string | null;
+  item_subtitle: string | null;
+  item_route_name: string | null;
+  item_default_data: Prisma.JsonValue | null;
+  item_section_key: string | null;
+};
+
+type SettingsItemCatalogRow = {
+  key: string;
+  title: string;
+  subtitle: string | null;
+  route_name: string;
+  default_data: Prisma.JsonValue;
+  section_key: string;
+  section_title: string;
+  section_active: boolean;
+  item_active: boolean;
+};
 
 type SettingsContext = {
   user: Awaited<ReturnType<CoreDatabaseService['getUser']>>;
@@ -31,7 +69,6 @@ type SettingsContext = {
 @Injectable()
 export class SettingsDatabaseService {
   constructor(
-    private readonly settingsData: SettingsDataService,
     private readonly accountStateDatabase: AccountStateDatabaseService,
     private readonly coreDatabase: CoreDatabaseService,
     private readonly monetizationDatabase: MonetizationDatabaseService,
@@ -41,7 +78,7 @@ export class SettingsDatabaseService {
 
   async getSections(userId: string) {
     const context = await this.buildContext(userId);
-    const sections = this.settingsData.getSections();
+    const sections = await this.readSettingsSectionsCatalog();
     return sections.map((section) => this.hydrateSection(section, context));
   }
 
@@ -58,12 +95,12 @@ export class SettingsDatabaseService {
 
   async getItem(userId: string, itemKey: string) {
     const context = await this.buildContext(userId);
-    return this.hydrateItem(this.settingsData.getItem(itemKey), context);
+    return this.hydrateItem(await this.readSettingsItemCatalog(itemKey), context);
   }
 
   async getRouteEntry(userId: string, routePath: string) {
     const context = await this.buildContext(userId);
-    const entry = this.settingsData.getRouteEntry(routePath);
+    const entry = await this.readSettingsRouteEntryCatalog(routePath);
     return this.isSection(entry)
       ? this.hydrateSection(entry, context)
       : this.hydrateItem(entry, context);
@@ -77,7 +114,7 @@ export class SettingsDatabaseService {
   }
 
   async updateRouteEntry(userId: string, routePath: string, patch: Record<string, unknown>) {
-    const entry = this.settingsData.getRouteEntry(routePath);
+    const entry = await this.readSettingsRouteEntryCatalog(routePath);
     if (this.isSection(entry)) {
       await this.accountStateDatabase.updateSettingsState(userId, {
         [`catalog.section_overrides.${entry.key}`]: patch,
@@ -390,8 +427,129 @@ export class SettingsDatabaseService {
       .filter((item) => item.key.length > 0 && item.title.length > 0);
   }
 
+  private async readSettingsSectionsCatalog() {
+    const rows = await this.prisma.$queryRaw<SettingsSectionCatalogRow[]>`
+      select
+        s.key,
+        s.title,
+        s.description,
+        s.updated_at,
+        i.key as item_key,
+        i.title as item_title,
+        i.subtitle as item_subtitle,
+        i.route_name as item_route_name,
+        i.default_data as item_default_data,
+        i.section_key as item_section_key
+      from app_settings_section_catalog s
+      left join app_settings_item_catalog i
+        on i.section_key = s.key
+       and i.is_active = true
+      where s.is_active = true
+      order by s.sort_order asc, s.key asc, i.sort_order asc nulls last, i.key asc nulls last
+    `;
+
+    const sections = new Map<string, SettingsCatalogSectionRecord>();
+    for (const row of rows) {
+      if (!sections.has(row.key)) {
+        sections.set(row.key, {
+          key: row.key,
+          title: row.title,
+          description: row.description,
+          updatedAt: row.updated_at.toISOString(),
+          items: [],
+        });
+      }
+
+      if (row.item_key && row.item_title && row.item_route_name) {
+        sections.get(row.key)!.items.push({
+          key: row.item_key,
+          title: row.item_title,
+          subtitle: row.item_subtitle ?? '',
+          routeName: row.item_route_name,
+          data: this.toObject(row.item_default_data),
+          sectionKey: row.item_section_key ?? row.key,
+          sectionTitle: row.title,
+        });
+      }
+    }
+
+    return [...sections.values()];
+  }
+
+  private async readSettingsItemCatalog(itemKey: string) {
+    const rows = await this.prisma.$queryRaw<SettingsItemCatalogRow[]>`
+      select
+        i.key,
+        i.title,
+        i.subtitle,
+        i.route_name,
+        i.default_data,
+        s.key as section_key,
+        s.title as section_title,
+        s.is_active as section_active,
+        i.is_active as item_active
+      from app_settings_item_catalog i
+      inner join app_settings_section_catalog s on s.key = i.section_key
+      where i.key = ${itemKey}
+      limit 1
+    `;
+    const item = rows[0];
+    if (!item || !item.item_active || !item.section_active) {
+      throw new NotFoundException(`Settings item ${itemKey} not found`);
+    }
+    return {
+      key: item.key,
+      title: item.title,
+      subtitle: item.subtitle ?? '',
+      routeName: item.route_name,
+      data: this.toObject(item.default_data),
+      sectionKey: item.section_key,
+      sectionTitle: item.section_title,
+    } satisfies SettingsCatalogItemRecord;
+  }
+
+  private async readSettingsRouteEntryCatalog(routePath: string) {
+    const rows = await this.prisma.$queryRaw<SettingsItemCatalogRow[]>`
+      select
+        i.key,
+        i.title,
+        i.subtitle,
+        i.route_name,
+        i.default_data,
+        s.key as section_key,
+        s.title as section_title,
+        s.is_active as section_active,
+        i.is_active as item_active
+      from app_settings_item_catalog i
+      inner join app_settings_section_catalog s on s.key = i.section_key
+      where i.route_name = ${routePath}
+      limit 1
+    `;
+    const routeItem = rows[0];
+    if (routeItem && routeItem.item_active && routeItem.section_active) {
+      return {
+        key: routeItem.key,
+        title: routeItem.title,
+        subtitle: routeItem.subtitle ?? '',
+        routeName: routeItem.route_name,
+        data: this.toObject(routeItem.default_data),
+        sectionKey: routeItem.section_key,
+        sectionTitle: routeItem.section_title,
+      } satisfies SettingsCatalogItemRecord;
+    }
+
+    const sectionKey = routePath.replace('/settings/', '').trim();
+    const sections = await this.readSettingsSectionsCatalog();
+    const section = sections.find((item) => item.key === sectionKey);
+    if (section) {
+      return section;
+    }
+
+    return this.readSettingsItemCatalog(sectionKey);
+  }
+
   private hydrateSection(
-    section: SettingsSectionRecord,
+    section: SettingsCatalogSectionRecord,
     context: SettingsContext,
   ) {
     const sectionOverride = this.toObject(
@@ -414,10 +572,7 @@ export class SettingsDatabaseService {
   }
 
   private hydrateItem(
-    item: SettingsItemRecord & {
-      sectionKey?: string;
-      sectionTitle?: string;
-    },
+    item: SettingsCatalogItemRecord,
     context: SettingsContext,
   ) {
     const baseData = this.toObject(item.data);
@@ -430,6 +585,8 @@ export class SettingsDatabaseService {
       ...item,
       data: {
         ...baseData,
+        actions: this.resolveItemActions(item.key),
+        linkedApis: this.resolveItemApis(item.key),
         ...dynamicData,
         ...itemOverride,
       },
@@ -700,6 +857,51 @@ export class SettingsDatabaseService {
     }
   }
 
+  private resolveItemActions(itemKey: string) {
+    switch (itemKey) {
+      case 'account-settings':
+        return ['edit', 'save', 'change_username', 'switch_account_type', 'deactivate_account', 'delete_account'];
+      case 'password-security':
+        return ['change_password', 'enable_2fa', 'enable_biometrics', 'run_security_checkup'];
+      case 'devices-sessions':
+        return ['logout_this_device', 'logout_other_devices', 'view_device'];
+      case 'privacy':
+        return ['manage_hidden_words', 'reset_privacy_defaults'];
+      case 'notifications':
+        return ['preview_notification'];
+      case 'notification-categories':
+        return ['reset_categories'];
+      case 'data-privacy-center':
+        return ['export_data', 'clear_cache', 'retry_sync'];
+      default:
+        return [] as string[];
+    }
+  }
+
+  private resolveItemApis(itemKey: string) {
+    switch (itemKey) {
+      case 'blocked-users':
+      case 'blocked-muted-accounts':
+        return ['/block', '/block/:targetId'];
+      case 'saved-collections':
+        return ['/saved-collections', '/bookmarks'];
+      case 'drafts-scheduling':
+        return ['/drafts', '/scheduling', '/upload-manager'];
+      case 'wallet-payments':
+        return ['/wallet', '/monetization/wallet'];
+      case 'subscriptions':
+      case 'premium-membership':
+        return ['/subscriptions', '/premium-plans'];
+      case 'communities-groups':
+        return ['/communities', '/groups', '/events'];
+      case 'support-help':
+      case 'help-safety':
+        return ['/support/faqs', '/support/tickets'];
+      default:
+        return [] as string[];
+    }
+  }
+
   private resolvePushPreferences(settingsState: Record<string, unknown>) {
     const stored = settingsState['preferences.push_categories'];
     if (Array.isArray(stored)) {
@@ -728,9 +930,9 @@ export class SettingsDatabaseService {
   }
 
   private isSection(
-    value: SettingsSectionRecord | (SettingsItemRecord & { sectionKey?: string }),
-  ): value is SettingsSectionRecord {
-    return Array.isArray((value as SettingsSectionRecord).items);
+    value: SettingsCatalogSectionRecord | SettingsCatalogItemRecord,
+  ): value is SettingsCatalogSectionRecord {
+    return Array.isArray((value as SettingsCatalogSectionRecord).items);
   }
 
   private toObject(value: unknown) {

@@ -1,6 +1,6 @@
 # FULL_PLATFORM_CURRENT_MISMATCH_REPORT
 
-Audit date: 2026-05-02
+Audit date: 2026-05-03
 
 Workspace audited from current local source:
 - `G:\My Project\Socity_backend`
@@ -73,10 +73,15 @@ Current dashboard/backend gaps are feature-depth gaps rather than outright missi
 
 ## Backend routes still using static/data-service/in-memory/default runtime data
 
-Confirmed current production-style blockers:
-- `src/data/settings-data.service.ts` still contains substantial static settings sections, titles, subtitles, route metadata, and default values
-- `src/services/settings-database.service.ts` still hydrates many runtime responses from `SettingsDataService`, even when some pieces are later overlaid from persisted state
-- settings, accessibility, legal, personalization, and related catalog-style flows are not yet fully database-first
+Current status after the latest pass:
+- runtime settings catalog authority has been moved onto persisted PostgreSQL tables:
+  - `app_settings_section_catalog`
+  - `app_settings_item_catalog`
+- `src/services/settings-database.service.ts` now reads settings sections and items from database-backed catalog rows instead of `SettingsDataService`
+- `SettingsDataService` still exists as a legacy/dev seed source, but it is no longer the production runtime authority for settings section/item catalogs
+
+Still remaining production-style blockers:
+- settings, accessibility, legal, personalization, and related catalog-style flows still have some fallback shaping through operational settings and dynamic service defaults
 - create-option style payloads still return runtime-composed catalogs in several places
 - `src/controllers/communities.controller.ts` had mixed response shapes and fake defaults; this pass removed fake community create defaults and normalized several success payloads, but compatibility aliases still remain on list endpoints
 
@@ -86,15 +91,17 @@ Confirmed and still relevant after this pass:
 - `lib/feature/home_feed/helper/home_feed_post_factory.dart`
   - still builds local-only posts with `local_*` ids for production flow paths
 - `lib/feature/home_feed/controller/main_shell_controller.dart`
-  - still falls back to a fake guest user object in controller state
-- `lib/feature/settings/controller/settings_controller.dart`
-  - still uses a fake guest user and static settings section definitions as a runtime authority
+  - no longer fabricates guest display name/avatar, but still carries an empty guest-shaped holder object internally
 - `lib/feature/follow_unfollow/screen/follow_list_screen.dart`
   - still contains static empty-state banner naming that should be revisited once live follow state and errors are fully normalized
-- `lib/core/data/service/deep_link_service.dart`
-  - still resolves links locally with path parsing instead of a backend-issued resolution contract
 
 Improved during this workstream:
+- `lib/feature/settings/controller/settings_controller.dart`
+  - no longer acts as a static settings catalog authority
+- `lib/feature/settings/screen/settings_screen.dart`
+  - now fetches the settings catalog from backend and shows honest unauthorized/loading/error/empty states
+- `lib/core/data/service/deep_link_service.dart`
+  - now resolves links through `POST /deep-link-handler/resolve`
 - `lib/feature/polls_surveys/screen/polls_surveys_screen.dart`
   - removed fake hero metrics and fake snackbar-only actions
 - `lib/feature/chat/screen/chat_screen.dart`
@@ -164,6 +171,9 @@ Improved during this workstream:
 - added `NotificationCampaignActionHistory`
 - added additive migration `20260502_notification_campaign_action_history`
 - notification campaign actions are now persisted rather than only applied procedurally
+- added persisted settings catalog tables and migration:
+  - `app_settings_section_catalog`
+  - `app_settings_item_catalog`
 
 Still missing or under-modeled:
 - deeper support assignment/SLA/action workflow as a first-class support-operations history model
@@ -197,17 +207,17 @@ Dashboard:
 ## Completion percentages
 
 Current-source estimate after the latest pass:
-- Backend: 82%
-- Flutter: 64%
+- Backend: 86%
+- Flutter: 70%
 - Dashboard: 79%
-- Database coverage: 80%
-- Full platform: 75%
+- Database coverage: 85%
+- Full platform: 80%
 
 ## Priority queue from current source
 
-1. Remove `SettingsDataService` as a runtime authority and replace remaining settings/catalog defaults with Prisma-backed catalog/config tables.
+1. Finish removing the remaining operational-setting and fallback shaping around settings/localization/accessibility/legal responses now that section/item catalog authority is in PostgreSQL.
 2. Normalize remaining mixed-shape responses, especially settings/support/community/page compatibility responses.
-3. Remove Flutter fake guest/local runtime behavior in home feed, settings, main shell, and deep-link service flows.
+3. Remove Flutter fake guest/local runtime behavior in home feed and remaining authenticated surfaces.
 4. Finish backend payload completeness so Flutter no longer derives share labels, lifecycle labels, or media URL behavior locally.
 5. Expand dashboard sections from thin list views into full detail/action modules across all navigation sections.
-6. Resolve the local Prisma Windows engine lock so `npm run prisma:generate` passes cleanly in this environment.
+6. Continue deeper support/moderation/call/live persistence where dashboards and mobile flows still rely on shallow state.

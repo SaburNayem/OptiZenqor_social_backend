@@ -4,6 +4,7 @@ import {
   DEFAULT_SETTINGS_STATE,
   DEFAULT_USER_PRIVACY,
 } from '../common/settings-defaults';
+import { SettingsDataService } from '../data/settings-data.service';
 import {
   coreSeedCommentReactions,
   coreSeedFollows,
@@ -17,6 +18,7 @@ import {
 } from '../database/core-seed';
 
 const prisma = new PrismaClient();
+const settingsCatalogSeed = new SettingsDataService();
 
 const userIdMap = new Map<string, string>();
 const postIdMap = new Map<string, string>();
@@ -42,6 +44,57 @@ async function hashPassword(password: string) {
 }
 
 async function main() {
+  const seededSections = settingsCatalogSeed.getSections();
+  for (const [sectionIndex, section] of seededSections.entries()) {
+    await prisma.$executeRaw`
+      insert into app_settings_section_catalog (
+        key, title, description, sort_order, is_active, metadata
+      ) values (
+        ${section.key},
+        ${section.title},
+        ${section.description},
+        ${sectionIndex + 1},
+        true,
+        '{}'::jsonb
+      )
+      on conflict (key) do update set
+        title = excluded.title,
+        description = excluded.description,
+        sort_order = excluded.sort_order,
+        is_active = excluded.is_active,
+        metadata = excluded.metadata,
+        updated_at = now()
+    `;
+
+    for (const [itemIndex, item] of section.items.entries()) {
+      await prisma.$executeRaw`
+        insert into app_settings_item_catalog (
+          key, section_key, title, subtitle, route_name, sort_order, default_data, metadata, is_active
+        ) values (
+          ${item.key},
+          ${section.key},
+          ${item.title},
+          ${item.subtitle},
+          ${item.routeName},
+          ${itemIndex + 1},
+          '{}'::jsonb,
+          '{}'::jsonb,
+          true
+        )
+        on conflict (key) do update set
+          section_key = excluded.section_key,
+          title = excluded.title,
+          subtitle = excluded.subtitle,
+          route_name = excluded.route_name,
+          sort_order = excluded.sort_order,
+          default_data = excluded.default_data,
+          metadata = excluded.metadata,
+          is_active = excluded.is_active,
+          updated_at = now()
+      `;
+    }
+  }
+
   await prisma.adminOperationalSetting.upsert({
     where: { key: 'support.contact' },
     create: {

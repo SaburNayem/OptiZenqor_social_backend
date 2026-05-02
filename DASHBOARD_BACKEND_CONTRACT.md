@@ -1,6 +1,6 @@
 # Dashboard Backend Contract
 
-Generated: 2026-05-02
+Generated: 2026-05-03
 
 This file documents the current admin dashboard to backend contract used by
 `G:\My Project\OptiZenqor_social_dashboard`.
@@ -166,6 +166,7 @@ Runtime requirement:
 
 - The dashboard is authenticated and API-backed for the listed pages.
 - Connectivity and build health are good.
+- No new dashboard route families were required in this pass; the main backend change was moving settings catalog authority into persisted backend tables for mobile/settings flows.
 - The biggest remaining gap is admin-console depth:
   - more modules need dedicated pages instead of a single large `AdminViews.jsx`
   - more sections need create/edit/delete/detail/confirm/drawer flows

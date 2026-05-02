@@ -1395,6 +1395,39 @@ model AdminOperationalSetting {
   @@map("admin_operational_settings")
 }
 
+model SettingsSectionCatalog {
+  key         String                @id @map("key")
+  title       String                @map("title")
+  description String                @map("description")
+  sortOrder   Int                   @default(0) @map("sort_order")
+  isActive    Boolean               @default(true) @map("is_active")
+  metadata    Json                  @default("{}") @map("metadata")
+  createdAt   DateTime              @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt   DateTime              @default(now()) @db.Timestamptz(6) @map("updated_at")
+  items       SettingsItemCatalog[]
+
+  @@index([isActive, sortOrder, key])
+  @@map("app_settings_section_catalog")
+}
+
+model SettingsItemCatalog {
+  key         String                 @id @map("key")
+  sectionKey  String                 @map("section_key")
+  title       String                 @map("title")
+  subtitle    String?                @map("subtitle")
+  routeName   String                 @unique @map("route_name")
+  sortOrder   Int                    @default(0) @map("sort_order")
+  defaultData Json                   @default("{}") @map("default_data")
+  metadata    Json                   @default("{}") @map("metadata")
+  isActive    Boolean                @default(true) @map("is_active")
+  createdAt   DateTime               @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt   DateTime               @default(now()) @db.Timestamptz(6) @map("updated_at")
+  section     SettingsSectionCatalog @relation(fields: [sectionKey], references: [key], onDelete: Cascade)
+
+  @@index([sectionKey, isActive, sortOrder, key])
+  @@map("app_settings_item_catalog")
+}
+
 model LocalizationLocaleCatalog {
   localeCode         String   @id @map("locale_code")
   label              String   @map("label")
