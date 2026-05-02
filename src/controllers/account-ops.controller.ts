@@ -1,6 +1,5 @@
 import { BadRequestException, Body, Controller, Get, Headers, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { ExtendedDataService } from '../data/extended-data.service';
 import { ResendOtpDto, SendOtpDto, VerifyOtpDto } from '../dto/api.dto';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { AppExtensionsDatabaseService } from '../services/app-extensions-database.service';
@@ -17,7 +16,6 @@ import { SupportDatabaseService } from '../services/support-database.service';
 @Controller()
 export class AccountOpsController {
   constructor(
-    private readonly extendedData: ExtendedDataService,
     private readonly realtimeState: RealtimeStateService,
     private readonly coreDatabase: CoreDatabaseService,
     private readonly reelsDatabase: ReelsDatabaseService,
@@ -32,30 +30,20 @@ export class AccountOpsController {
 
   @Post('auth/send-otp')
   async sendOtp(@Body() body: SendOtpDto) {
-    if (body.channel === 'email' && this.looksLikeEmail(body.destination)) {
-      return this.sendEmailOtp(body.destination, 'sent');
-    }
-
-    const result = await this.extendedData.sendOtp(body.destination, body.channel);
-    return {
-      ...result,
-      message: 'OTP sent successfully.',
-      data: result,
-    };
+    return this.sendPersistedOtp(
+      body.destination,
+      body.channel,
+      'sent',
+    );
   }
 
   @Post('auth/resend-otp')
   async resendOtp(@Body() body: ResendOtpDto) {
-    if (this.looksLikeEmail(body.destination)) {
-      return this.sendEmailOtp(body.destination, 'resent');
-    }
-
-    const result = await this.extendedData.resendOtp(body.destination);
-    return {
-      ...result,
-      message: 'OTP resent successfully.',
-      data: result,
-    };
+    return this.sendPersistedOtp(
+      body.destination,
+      this.looksLikeEmail(body.destination) ? 'email' : 'phone',
+      'resent',
+    );
   }
 
   @Post('auth/verify-otp')
@@ -63,9 +51,10 @@ export class AccountOpsController {
     const destination = body.destination?.trim() || body.email?.trim();
 
     if (destination) {
+      const purpose = this.resolveOtpPurpose(destination);
       const verification = await this.coreDatabase.getAuthCode(
         destination,
-        'verify_email',
+        purpose,
       );
       if (!verification) {
         throw new BadRequestException('No OTP request found for this destination.');
@@ -77,26 +66,23 @@ export class AccountOpsController {
         throw new BadRequestException('Invalid OTP code.');
       }
 
-      await this.coreDatabase.deleteAuthCode(destination, 'verify_email');
+      await this.coreDatabase.deleteAuthCode(destination, purpose);
 
       return {
         success: true,
         message: 'OTP verified successfully.',
         destination,
+        channel: purpose === 'verify_email' ? 'email' : 'phone',
         verificationStatus: 'verified',
         data: {
           destination,
+          channel: purpose === 'verify_email' ? 'email' : 'phone',
           verificationStatus: 'verified',
         },
       };
     }
 
-    const result = await this.extendedData.verifyOtp(body.code);
-    return {
-      ...result,
-      message: result.success ? 'OTP verified successfully.' : 'Invalid OTP code.',
-      data: result,
-    };
+    throw new BadRequestException('A destination or email is required to verify OTP.');
   }
 
   @Get('recommendations')
@@ -269,36 +255,54 @@ export class AccountOpsController {
     };
   }
 
-  private async sendEmailOtp(destination: string, verificationStatus: 'sent' | 'resent') {
+  private async sendPersistedOtp(
+    destination: string,
+    channel: 'email' | 'phone',
+    verificationStatus: 'sent' | 'resent',
+  ) {
+    const normalizedDestination = destination.trim();
+    const purpose = this.resolveOtpPurpose(normalizedDestination);
     const code = this.generateVerificationCode();
     await this.coreDatabase.storeAuthCode(
-      destination,
-      'verify_email',
+      normalizedDestination,
+      purpose,
       code,
       new Date(Date.now() + 10 * 60 * 1000),
     );
-    const delivery = await this.mailService.sendVerificationEmail(destination, code);
+    const delivery =
+      channel === 'email'
+        ? await this.mailService.sendVerificationEmail(normalizedDestination, code)
+        : {
+            success: true,
+            mode: 'phone-dev-fallback',
+            message:
+              'Phone OTP delivery provider is not configured. Code was persisted for verification flow.',
+          };
     const message =
       verificationStatus === 'resent'
-        ? 'A new 6-digit verification code has been sent to your email.'
-        : 'A 6-digit verification code has been sent to your email.';
+        ? `A new 6-digit verification code has been sent to your ${channel}.`
+        : `A 6-digit verification code has been sent to your ${channel}.`;
 
     return {
       success: true,
       message,
-      destination,
-      channel: 'email',
+      destination: normalizedDestination,
+      channel,
       cooldownSeconds: 45,
       verificationStatus,
       delivery,
       data: {
-        destination,
-        channel: 'email',
+        destination: normalizedDestination,
+        channel,
         cooldownSeconds: 45,
         verificationStatus,
         delivery,
       },
     };
+  }
+
+  private resolveOtpPurpose(destination: string) {
+    return this.looksLikeEmail(destination) ? 'verify_email' : 'verify_phone';
   }
 
   private generateVerificationCode() {

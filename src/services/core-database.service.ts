@@ -1793,7 +1793,12 @@ export class CoreDatabaseService implements OnModuleInit {
     return this.mapNotification(row);
   }
 
-  async storeAuthCode(email: string, purpose: 'verify_email' | 'reset_password', code: string, expiresAt: Date) {
+  async storeAuthCode(
+    email: string,
+    purpose: 'verify_email' | 'verify_phone' | 'reset_password',
+    code: string,
+    expiresAt: Date,
+  ) {
     await this.database.query(
       `insert into auth_codes (email, purpose, code, expires_at, created_at)
        values ($1,$2,$3,$4,$5)
@@ -1803,7 +1808,10 @@ export class CoreDatabaseService implements OnModuleInit {
     );
   }
 
-  async getAuthCode(email: string, purpose: 'verify_email' | 'reset_password') {
+  async getAuthCode(
+    email: string,
+    purpose: 'verify_email' | 'verify_phone' | 'reset_password',
+  ) {
     const { rows } = await this.database.query<
       QueryResultRow & { email: string; purpose: string; code: string; expires_at: Date | string }
     >(
@@ -1822,7 +1830,10 @@ export class CoreDatabaseService implements OnModuleInit {
     };
   }
 
-  async deleteAuthCode(email: string, purpose: 'verify_email' | 'reset_password') {
+  async deleteAuthCode(
+    email: string,
+    purpose: 'verify_email' | 'verify_phone' | 'reset_password',
+  ) {
     await this.database.query(`delete from auth_codes where email = $1 and purpose = $2`, [
       email,
       purpose,
