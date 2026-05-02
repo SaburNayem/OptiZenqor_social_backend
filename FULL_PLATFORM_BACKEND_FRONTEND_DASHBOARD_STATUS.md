@@ -12,6 +12,10 @@ Updated: 2026-05-02
 
 ### Backend
 
+- added public durable support ticket detail/message/update routes
+- added user-facing notification-device CRUD routes plus compatibility aliases
+- persisted `appVersion` on push-device registrations with a safe Prisma migration
+- expanded admin overview payloads with chart-ready growth series, status breakdowns, business summaries, and recent audit activity
 - cleaned `.env` datasource duplication and introduced `DIRECT_URL` for Prisma
 - updated Prisma datasource config to use `directUrl`
 - changed `npm run prisma:migrate` to production-safe `prisma migrate deploy`
@@ -22,6 +26,7 @@ Updated: 2026-05-02
 
 ### Flutter
 
+- support/help now surfaces synced ticket summaries from backend payloads instead of count-only messaging
 - removed two remaining marketplace silent-null success paths
 - stopped defaulting marketplace delivery options to a fabricated pickup value when the backend omits them
 - wired call session creation to send the actual recipient id
@@ -30,6 +35,7 @@ Updated: 2026-05-02
 
 ### Dashboard
 
+- overview now renders live chart/breakdown/activity sections using shared admin primitives
 - extracted the overview section from `src/components/AdminViews.jsx` into `src/pages/admin/overview/OverviewView.jsx`
 - added a real retry action to the authenticated workspace error state
 - kept the dashboard fully API-driven on `VITE_API_BASE_URL`
@@ -70,7 +76,7 @@ Updated: 2026-05-02
 
 ## Completion Estimate
 
-- Backend: 93%
-- Flutter: 82%
-- Dashboard: 85%
-- Overall: 87%
+- Backend: 94%
+- Flutter: 84%
+- Dashboard: 87%
+- Overall: 88%

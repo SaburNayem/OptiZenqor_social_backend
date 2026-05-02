@@ -4,6 +4,12 @@ Updated: 2026-05-02
 
 ## Fixed In This Pass
 
+- support ticket detail, reply, and patch flows are now production-backed on public routes
+- public notification device CRUD routes now exist on both `/notification-devices` and `/notifications/devices` aliases
+- push-device persistence now stores `appVersion`
+- admin overview now returns chart-ready analytics arrays, operational breakdowns, and recent audit activity
+- Flutter support/help now renders synced ticket summaries instead of a count-only surface
+- dashboard overview now consumes live overview charts/breakdowns with reusable primitives instead of KPI-only output
 - backend Prisma runtime now uses a valid split connection strategy:
   - pooled `DATABASE_URL` for runtime
   - direct `DIRECT_URL` for Prisma migrate/deploy
@@ -22,7 +28,7 @@ Updated: 2026-05-02
 | --- | --- | --- |
 | Runtime settings catalogs | `SettingsDataService` still shapes some settings/config metadata from static code paths. | Continue moving settings/localization/accessibility/legal and catalog reads fully onto persisted tables and operational settings. |
 | Legacy helper traces | Some dev-oriented fallback wording and helper utilities remain in OTP, mail, realtime, and token helper code. | Gate or remove production-inappropriate helper paths while preserving safe local development flows. |
-| Admin depth | Core admin routes exist and validate, but some sections remain list-first in behavior. | Continue richer detail/export/filter/action coverage where dashboard UX still needs more depth. |
+| Admin depth | Core admin routes exist and validate, but some sections remain list-first in behavior. | Continue richer detail/export/filter/action coverage for revenue, wallet, communities, pages, and live moderation flows. |
 
 ## Remaining Flutter Gaps
 
@@ -31,15 +37,15 @@ Updated: 2026-05-02
 | Marketplace payload completeness | Client still derives some seller/category/order/chat labels from partial backend payloads. | Tighten backend marketplace contracts so these display fields arrive fully populated. |
 | Jobs placeholder labels | Some jobs model constructors still supply fallback labels when backend fields are missing. | Finish backend jobs payload completeness, then remove placeholder display strings. |
 | Calls/live lifecycle | The app is backend-calling correctly, but lifecycle UX still infers state from shallow payloads. | Expand persisted call/live snapshot contracts and consume them directly. |
-| Support/help depth | Support overview is backend-driven, but ticket detail/reply/update coverage is still shallow. | Add richer support workflow endpoints and UI states. |
+| Support/help depth | Support overview and ticket summaries are backend-driven, but the mobile UI still lacks full ticket detail and reply screens. | Add dedicated Flutter ticket detail/reply/update screens against the now-available backend routes. |
 
 ## Remaining Dashboard Gaps
 
 | Area | Current issue | Needed next |
 | --- | --- | --- |
-| View modularization | `src/components/AdminViews.jsx` is smaller in responsibility but still too large overall. | Keep extracting sections into dedicated `src/pages/admin/*` modules. |
+| View modularization | `src/components/AdminViews.jsx` is smaller in responsibility but still too large overall. | Keep extracting the remaining list-first modules into dedicated `src/pages/admin/*` slices. |
 | Admin CRUD depth | Many sections are connected but remain list-centric. | Add more create/edit/delete/detail/confirm/export flows where backend already supports them. |
-| Reusable admin primitives | Retry is now wired at workspace level, but role-aware actions, detail drawers, and confirm patterns are not generalized enough yet. | Continue shared admin-console component expansion. |
+| Reusable admin primitives | Overview now uses shared metric/chart primitives, but confirm dialogs, detail drawers, and export actions are not generalized enough yet. | Continue shared admin-console component expansion. |
 
 ## Validation Status
 
@@ -65,7 +71,7 @@ Updated: 2026-05-02
 
 ## Completion Estimate
 
-- Backend: 93%
-- Flutter: 82%
-- Dashboard: 85%
-- Overall: 87%
+- Backend: 94%
+- Flutter: 84%
+- Dashboard: 87%
+- Overall: 88%

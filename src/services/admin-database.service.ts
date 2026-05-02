@@ -891,6 +891,10 @@ export class AdminDatabaseService implements OnModuleInit {
   }
 
   async getDashboardOverview() {
+    const since = new Date();
+    since.setUTCDate(since.getUTCDate() - 6);
+    since.setUTCHours(0, 0, 0, 0);
+
     const [
       userCount,
       activeUserCount,
@@ -903,6 +907,26 @@ export class AdminDatabaseService implements OnModuleInit {
       moderationOpenCount,
       activeSubscriptions,
       revenueAggregate,
+      userRows,
+      postRows,
+      reelRows,
+      storyRows,
+      revenueRows,
+      reportStatuses,
+      supportStatuses,
+      subscriptionStatuses,
+      marketplaceProductCount,
+      marketplaceActiveCount,
+      marketplaceOrderCount,
+      marketplacePendingOrderCount,
+      jobsCount,
+      jobsOpenCount,
+      jobApplicationCount,
+      liveStreamCount,
+      liveStreamLiveCount,
+      callSessionCount,
+      callActiveCount,
+      recentAuditLogs,
     ] = await Promise.all([
       this.prisma.appUser.count(),
       this.prisma.appUser.count({ where: { blocked: false } }),
@@ -917,7 +941,60 @@ export class AdminDatabaseService implements OnModuleInit {
       this.prisma.walletTransaction.aggregate({
         _sum: { amount: true },
       }),
+      this.prisma.appUser.findMany({
+        where: { createdAt: { gte: since } },
+        select: { createdAt: true },
+      }),
+      this.prisma.appPost.findMany({
+        where: { deletedAt: null, createdAt: { gte: since } },
+        select: { createdAt: true },
+      }),
+      this.prisma.reel.findMany({
+        where: { deletedAt: null, createdAt: { gte: since } },
+        select: { createdAt: true },
+      }),
+      this.prisma.story.findMany({
+        where: { deletedAt: null, createdAt: { gte: since } },
+        select: { createdAt: true },
+      }),
+      this.prisma.walletTransaction.findMany({
+        where: { createdAt: { gte: since }, status: 'completed' },
+        select: { createdAt: true, amount: true },
+      }),
+      this.prisma.userReport.groupBy({
+        by: ['status'],
+        _count: { status: true },
+      }),
+      this.prisma.supportTicket.groupBy({
+        by: ['status'],
+        _count: { status: true },
+      }),
+      this.prisma.subscription.groupBy({
+        by: ['status'],
+        _count: { status: true },
+      }),
+      this.prisma.marketplaceProduct.count(),
+      this.prisma.marketplaceProduct.count({ where: { status: 'active' } }),
+      this.prisma.marketplaceOrder.count(),
+      this.prisma.marketplaceOrder.count({ where: { status: 'pending' } }),
+      this.prisma.job.count({ where: { deletedAt: null } }),
+      this.prisma.job.count({ where: { deletedAt: null, status: 'open' } }),
+      this.prisma.jobApplication.count(),
+      this.prisma.liveStreamSession.count(),
+      this.prisma.liveStreamSession.count({ where: { status: 'live' } }),
+      this.prisma.callSession.count(),
+      this.prisma.callSession.count({ where: { status: 'active' } }),
+      this.prisma.adminAuditLog.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 8,
+      }),
     ]);
+
+    const userGrowth = this.buildDailyCountSeries(userRows, since, 'createdAt');
+    const postGrowth = this.buildDailyCountSeries(postRows, since, 'createdAt');
+    const reelGrowth = this.buildDailyCountSeries(reelRows, since, 'createdAt');
+    const storyGrowth = this.buildDailyCountSeries(storyRows, since, 'createdAt');
+    const revenueGrowth = this.buildDailyRevenueSeries(revenueRows, since);
 
     return {
       totals: {
@@ -938,6 +1015,69 @@ export class AdminDatabaseService implements OnModuleInit {
         supportQueue: supportOpenCount,
         reportQueue: openReportCount,
       },
+      charts: {
+        userGrowth,
+        contentGrowth: userGrowth.labels.map((label, index) => ({
+          label,
+          posts: postGrowth.values[index] ?? 0,
+          reels: reelGrowth.values[index] ?? 0,
+          stories: storyGrowth.values[index] ?? 0,
+          total:
+            (postGrowth.values[index] ?? 0) +
+            (reelGrowth.values[index] ?? 0) +
+            (storyGrowth.values[index] ?? 0),
+        })),
+        revenueGrowth,
+      },
+      breakdowns: {
+        reportsByStatus: reportStatuses.map((row) => ({
+          label: row.status,
+          value: row._count.status,
+        })),
+        supportByStatus: supportStatuses.map((row) => ({
+          label: row.status,
+          value: row._count.status,
+        })),
+        subscriptionsByStatus: subscriptionStatuses.map((row) => ({
+          label: row.status,
+          value: row._count.status,
+        })),
+      },
+      summaries: {
+        marketplace: {
+          products: marketplaceProductCount,
+          activeProducts: marketplaceActiveCount,
+          orders: marketplaceOrderCount,
+          pendingOrders: marketplacePendingOrderCount,
+        },
+        jobs: {
+          jobs: jobsCount,
+          openJobs: jobsOpenCount,
+          applications: jobApplicationCount,
+        },
+        subscriptions: {
+          active: activeSubscriptions,
+          total: subscriptionStatuses.reduce((sum, row) => sum + row._count.status, 0),
+        },
+        support: {
+          open: supportOpenCount,
+          total: supportStatuses.reduce((sum, row) => sum + row._count.status, 0),
+        },
+        live: {
+          streams: liveStreamCount,
+          activeStreams: liveStreamLiveCount,
+          calls: callSessionCount,
+          activeCalls: callActiveCount,
+        },
+      },
+      recentActivity: recentAuditLogs.map((item) => ({
+        id: item.id,
+        action: item.action,
+        entityType: item.entityType,
+        entityId: item.entityId,
+        createdAt: item.createdAt.toISOString(),
+        metadata: this.readObject(item.metadata),
+      })),
     };
   }
 
@@ -2936,6 +3076,7 @@ export class AdminDatabaseService implements OnModuleInit {
         userId: item.userId,
         platform: item.platform,
         deviceLabel: item.deviceLabel,
+        appVersion: item.appVersion,
         status: item.isActive ? 'active' : 'inactive',
         token: item.token,
         lastSeenAt: item.lastSeenAt.toISOString(),
@@ -3269,6 +3410,7 @@ export class AdminDatabaseService implements OnModuleInit {
       userId: updated.userId,
       platform: updated.platform,
       deviceLabel: updated.deviceLabel,
+      appVersion: updated.appVersion,
       status: updated.isActive ? 'active' : 'inactive',
       token: updated.token,
       lastSeenAt: updated.lastSeenAt.toISOString(),
@@ -3291,6 +3433,7 @@ export class AdminDatabaseService implements OnModuleInit {
       userId: item.userId,
       platform: item.platform,
       deviceLabel: item.deviceLabel,
+      appVersion: item.appVersion,
       status: item.isActive ? 'active' : 'inactive',
       token: item.token,
       lastSeenAt: item.lastSeenAt.toISOString(),
@@ -3644,7 +3787,7 @@ export class AdminDatabaseService implements OnModuleInit {
 
   async registerPushDevice(
     userId: string,
-    input: { token: string; platform: string; deviceLabel?: string },
+    input: { token: string; platform: string; deviceLabel?: string; appVersion?: string },
   ) {
     await this.coreDatabase.getUser(userId);
     const device = await this.prisma.pushDeviceToken.upsert({
@@ -3655,6 +3798,7 @@ export class AdminDatabaseService implements OnModuleInit {
         token: input.token.trim(),
         platform: input.platform.trim(),
         deviceLabel: input.deviceLabel?.trim() || null,
+        appVersion: input.appVersion?.trim() || null,
         isActive: true,
         lastSeenAt: new Date(),
       },
@@ -3662,6 +3806,7 @@ export class AdminDatabaseService implements OnModuleInit {
         userId,
         platform: input.platform.trim(),
         deviceLabel: input.deviceLabel?.trim() || null,
+        appVersion: input.appVersion?.trim() || null,
         isActive: true,
         lastSeenAt: new Date(),
         updatedAt: new Date(),
@@ -3673,6 +3818,7 @@ export class AdminDatabaseService implements OnModuleInit {
       token: device.token,
       platform: device.platform,
       deviceLabel: device.deviceLabel,
+      appVersion: device.appVersion,
       isActive: device.isActive,
       lastSeenAt: device.lastSeenAt.toISOString(),
     };
@@ -3702,6 +3848,95 @@ export class AdminDatabaseService implements OnModuleInit {
       id: device.id,
       token: device.token,
       isActive: device.isActive,
+    };
+  }
+
+  async listUserPushDevices(
+    userId: string,
+    query?: {
+      status?: string;
+      platform?: string;
+    },
+  ) {
+    const items = await this.prisma.pushDeviceToken.findMany({
+      where: {
+        userId,
+        ...(query?.platform?.trim()
+          ? { platform: query.platform.trim().toLowerCase() }
+          : {}),
+        ...(query?.status?.trim().toLowerCase() === 'active'
+          ? { isActive: true }
+          : query?.status?.trim().toLowerCase() === 'inactive'
+            ? { isActive: false }
+            : {}),
+      },
+      orderBy: [{ isActive: 'desc' }, { updatedAt: 'desc' }],
+    });
+
+    return items.map((item) => this.mapUserPushDevice(item));
+  }
+
+  async getUserPushDevice(userId: string, id: string) {
+    const item = await this.prisma.pushDeviceToken.findFirst({
+      where: { id, userId },
+    });
+    if (!item) {
+      throw new NotFoundException(`Push notification device ${id} not found.`);
+    }
+
+    return this.mapUserPushDevice(item);
+  }
+
+  async updateUserPushDevice(
+    userId: string,
+    id: string,
+    patch: {
+      enabled?: boolean;
+      isActive?: boolean;
+      deviceLabel?: string;
+      appVersion?: string;
+    },
+  ) {
+    const existing = await this.prisma.pushDeviceToken.findFirst({
+      where: { id, userId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Push notification device ${id} not found.`);
+    }
+
+    const nextIsActive = patch.enabled === undefined ? patch.isActive : patch.enabled;
+    const updated = await this.prisma.pushDeviceToken.update({
+      where: { id: existing.id },
+      data: {
+        isActive: nextIsActive ?? undefined,
+        deviceLabel:
+          patch.deviceLabel === undefined ? undefined : patch.deviceLabel.trim() || null,
+        appVersion:
+          patch.appVersion === undefined ? undefined : patch.appVersion.trim() || null,
+        lastSeenAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    return this.mapUserPushDevice(updated);
+  }
+
+  async deleteUserPushDevice(userId: string, id: string) {
+    const existing = await this.prisma.pushDeviceToken.findFirst({
+      where: { id, userId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Push notification device ${id} not found.`);
+    }
+
+    await this.prisma.pushDeviceToken.delete({
+      where: { id: existing.id },
+    });
+
+    return {
+      id: existing.id,
+      deleted: true,
+      token: existing.token,
     };
   }
 
@@ -4317,6 +4552,53 @@ export class AdminDatabaseService implements OnModuleInit {
     };
   }
 
+  private buildDailyCountSeries(
+    rows: Array<{ createdAt: Date }>,
+    since: Date,
+    key: 'createdAt',
+  ) {
+    const labels = this.buildDayLabels(since);
+    const counts = new Map(labels.map((label) => [label, 0]));
+    for (const row of rows) {
+      const label = this.formatDayLabel(row[key]);
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+
+    return {
+      labels,
+      values: labels.map((label) => counts.get(label) ?? 0),
+    };
+  }
+
+  private buildDailyRevenueSeries(
+    rows: Array<{ createdAt: Date; amount: Prisma.Decimal }>,
+    since: Date,
+  ) {
+    const labels = this.buildDayLabels(since);
+    const totals = new Map(labels.map((label) => [label, 0]));
+    for (const row of rows) {
+      const label = this.formatDayLabel(row.createdAt);
+      totals.set(label, (totals.get(label) ?? 0) + Number(row.amount ?? 0));
+    }
+
+    return labels.map((label) => ({
+      label,
+      value: Number((totals.get(label) ?? 0).toFixed(2)),
+    }));
+  }
+
+  private buildDayLabels(since: Date) {
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(since);
+      date.setUTCDate(since.getUTCDate() + index);
+      return this.formatDayLabel(date);
+    });
+  }
+
+  private formatDayLabel(value: Date) {
+    return value.toISOString().slice(5, 10);
+  }
+
   private async resolveModerationTargetType(id: string) {
     const [post, reel, story] = await Promise.all([
       this.prisma.appPost.findUnique({ where: { id }, select: { id: true } }),
@@ -4335,5 +4617,31 @@ export class AdminDatabaseService implements OnModuleInit {
     }
 
     throw new NotFoundException(`Content ${id} not found.`);
+  }
+
+  private mapUserPushDevice(item: {
+    id: string;
+    token: string;
+    platform: string;
+    deviceLabel: string | null;
+    appVersion: string | null;
+    isActive: boolean;
+    lastSeenAt: Date;
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
+    return {
+      id: item.id,
+      token: item.token,
+      platform: item.platform,
+      deviceLabel: item.deviceLabel,
+      appVersion: item.appVersion,
+      enabled: item.isActive,
+      isActive: item.isActive,
+      status: item.isActive ? 'active' : 'inactive',
+      lastSeenAt: item.lastSeenAt.toISOString(),
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString(),
+    };
   }
 }

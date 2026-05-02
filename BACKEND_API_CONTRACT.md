@@ -9,6 +9,37 @@ Current local implementation uses a hybrid database access style:
 
 It is intentionally concise and focused on the mobile-facing routes that are already preferred for real integration.
 
+## 2026-05-02 contract update
+
+The following production-backed routes were added or expanded in the latest coordinated backend/mobile/dashboard pass:
+
+- Support ticket workflow
+  - `GET /support/tickets/:id`
+  - `POST /support/tickets/:id/messages`
+  - `PATCH /support/tickets/:id`
+- Notification device workflow
+  - `GET /notifications/devices`
+  - `PATCH /notifications/devices/:id`
+  - `DELETE /notifications/devices/id/:id`
+  - `POST /notification-devices`
+  - `GET /notification-devices`
+  - `GET /notification-devices/:id`
+  - `PATCH /notification-devices/:id`
+  - `DELETE /notification-devices/:id`
+- Admin analytics and operations
+  - `GET /admin/dashboard/overview` now returns chart-ready `charts`, `breakdowns`, `summaries`, and `recentActivity`
+  - admin notification device payloads now include `appVersion`
+
+The `PushDeviceToken` Prisma model now persists:
+
+- `token`
+- `platform`
+- `deviceLabel`
+- `appVersion`
+- `isActive`
+- `lastSeenAt`
+- `userId`
+
 ## Global response shape
 
 Most routes should return:

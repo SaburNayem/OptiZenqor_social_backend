@@ -1283,6 +1283,7 @@ model PushDeviceToken {
   token       String   @unique @map("token")
   platform    String   @map("platform")
   deviceLabel String?  @map("device_label")
+  appVersion  String?  @map("app_version")
   isActive    Boolean  @default(true) @map("is_active")
   lastSeenAt  DateTime @default(now()) @db.Timestamptz(6) @map("last_seen_at")
   createdAt   DateTime @default(now()) @db.Timestamptz(6) @map("created_at")

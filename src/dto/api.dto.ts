@@ -1626,6 +1626,62 @@ export class CreateSupportMessageDto {
   attachments?: string[];
 }
 
+export class UpdateSupportTicketDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  subject?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional({ enum: ['open', 'reviewing', 'resolved', 'closed'] })
+  @IsOptional()
+  @IsIn(['open', 'reviewing', 'resolved', 'closed'])
+  status?: 'open' | 'reviewing' | 'resolved' | 'closed';
+
+  @ApiPropertyOptional({ enum: ['low', 'normal', 'high', 'urgent'] })
+  @IsOptional()
+  @IsIn(['low', 'normal', 'high', 'urgent'])
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
+}
+
+export class NotificationDevicesQueryDto {
+  @ApiPropertyOptional({ enum: ['active', 'inactive'] })
+  @IsOptional()
+  @IsIn(['active', 'inactive'])
+  status?: 'active' | 'inactive';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  platform?: string;
+}
+
+export class UpdateNotificationDeviceDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  deviceLabel?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  appVersion?: string;
+}
+
 export class CreateNotificationCampaignDto {
   @ApiProperty()
   @IsString()

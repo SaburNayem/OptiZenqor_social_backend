@@ -8,6 +8,32 @@ The intent is:
 - backend returns durable PostgreSQL-backed data
 - response shapes stay compatible with older mobile screens where possible
 
+## 2026-05-02 mobile contract update
+
+Flutter should now prefer the following production-backed support and device routes instead of count-only or local assumptions:
+
+- Support
+  - `GET /support-help`
+  - `GET /support/tickets`
+  - `GET /support/tickets/:id`
+  - `POST /support/tickets`
+  - `POST /support/tickets/:id/messages`
+  - `PATCH /support/tickets/:id`
+- Notification devices
+  - `POST /notification-devices`
+  - `GET /notification-devices`
+  - `GET /notification-devices/:id`
+  - `PATCH /notification-devices/:id`
+  - `DELETE /notification-devices/:id`
+  - compatibility aliases remain under `/notifications/devices`
+
+Backend payloads in the touched slices now provide richer display fields so Flutter does not need to fabricate labels for:
+
+- marketplace seller/order display
+- jobs recruiter/company/salary display
+- support ticket summaries
+- notification device metadata including `appVersion`
+
 ## Auth
 
 ### `POST /auth/login`

@@ -944,6 +944,11 @@ export class RegisterPushDeviceDto {
   @IsOptional()
   @IsString()
   deviceLabel?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  appVersion?: string;
 }
 
 export class AdminUpdateLiveStreamDto {

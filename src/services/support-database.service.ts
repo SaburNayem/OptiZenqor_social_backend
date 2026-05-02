@@ -160,18 +160,7 @@ export class SupportDatabaseService {
     });
 
     return tickets.map((ticket) => ({
-      id: ticket.id,
-      userId: ticket.userId,
-      subject: ticket.subject,
-      category: ticket.category,
-      status: ticket.status,
-      priority: ticket.priority,
-      createdAt: ticket.createdAt.toISOString(),
-      updatedAt: ticket.updatedAt.toISOString(),
-      conversationId: ticket.conversation?.id ?? null,
-      latestMessage:
-        ticket.conversation?.messages[0]?.body?.trim() || this.readMetadataString(ticket.metadata, 'latestMessage'),
-      metadata: this.readMetadataObject(ticket.metadata),
+      ...this.mapTicketSummary(ticket),
     }));
   }
 
@@ -235,6 +224,187 @@ export class SupportDatabaseService {
     return ticket;
   }
 
+  async getTicketDetail(id: string, userId?: string | null) {
+    const ticket = await this.prisma.supportTicket.findFirst({
+      where: {
+        id,
+        ...(userId?.trim() ? { userId: userId.trim() } : {}),
+      },
+      include: {
+        user: true,
+        conversation: {
+          include: {
+            messages: {
+              orderBy: { createdAt: 'asc' },
+              include: { senderUser: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!ticket) {
+      throw new NotFoundException(`Support ticket ${id} not found.`);
+    }
+
+    const metadata = this.readMetadataObject(ticket.metadata);
+    const messages =
+      ticket.conversation?.messages.map((message) => ({
+        id: message.id,
+        senderType: message.senderType,
+        senderUserId: message.senderUserId,
+        senderLabel:
+          message.senderType === 'agent'
+            ? 'Support'
+            : message.senderUser?.name?.trim() || 'You',
+        text: message.body,
+        body: message.body,
+        attachments: this.readStringArray(message.attachments),
+        createdAt: message.createdAt.toISOString(),
+      })) ?? [];
+
+    return {
+      ...this.mapTicketSummary(ticket),
+      conversationId: ticket.conversation?.id ?? null,
+      conversationStatus: ticket.conversation?.status ?? null,
+      channel: ticket.conversation?.channel ?? 'in_app',
+      userLabel:
+        ticket.user?.name?.trim() ||
+        ticket.user?.username?.trim() ||
+        ticket.user?.email?.trim() ||
+        null,
+      adminNotes: this.readStringArray(metadata.adminNotes),
+      assignedAdminId:
+        typeof metadata.assignedAdminId === 'string' ? metadata.assignedAdminId : null,
+      slaHours: typeof metadata.slaHours === 'number' ? metadata.slaHours : null,
+      slaDueAt: this.readMetadataString(ticket.metadata, 'slaDueAt') ?? null,
+      messages,
+    };
+  }
+
+  async createTicketMessage(input: {
+    ticketId: string;
+    userId: string;
+    message: string;
+    attachments?: string[];
+  }) {
+    const userId = input.userId.trim();
+    const ticket = await this.prisma.supportTicket.findFirst({
+      where: {
+        id: input.ticketId.trim(),
+        userId,
+      },
+      include: {
+        conversation: true,
+      },
+    });
+    if (!ticket) {
+      throw new NotFoundException(`Support ticket ${input.ticketId} not found.`);
+    }
+
+    const conversation =
+      ticket.conversation ??
+      (await this.prisma.supportConversation.create({
+        data: {
+          id: makeId('support_conversation'),
+          ticketId: ticket.id,
+          userId,
+          status: 'open',
+          channel: 'in_app',
+        },
+      }));
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.supportMessage.create({
+        data: {
+          id: makeId('support_message'),
+          conversationId: conversation.id,
+          senderType: 'user',
+          senderUserId: userId,
+          body: input.message.trim(),
+          attachments: input.attachments?.filter((item) => item.trim().length > 0) ?? [],
+        },
+      });
+      await tx.supportTicket.update({
+        where: { id: ticket.id },
+        data: {
+          status: ticket.status === 'closed' ? 'open' : ticket.status,
+          updatedAt: new Date(),
+          metadata: {
+            ...this.readMetadataObject(ticket.metadata),
+            latestMessage: input.message.trim(),
+          } as Prisma.InputJsonValue,
+        },
+      });
+      await tx.supportConversation.update({
+        where: { id: conversation.id },
+        data: {
+          status: 'open',
+          updatedAt: new Date(),
+        },
+      });
+    });
+
+    return this.getTicketDetail(ticket.id, userId);
+  }
+
+  async updateTicket(
+    id: string,
+    userId: string,
+    patch: {
+      subject?: string;
+      category?: string;
+      status?: string;
+      priority?: string;
+    },
+  ) {
+    const ticket = await this.prisma.supportTicket.findFirst({
+      where: {
+        id,
+        userId: userId.trim(),
+      },
+      include: {
+        conversation: true,
+      },
+    });
+    if (!ticket) {
+      throw new NotFoundException(`Support ticket ${id} not found.`);
+    }
+
+    const nextStatus = patch.status?.trim().toLowerCase();
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updatedTicket = await tx.supportTicket.update({
+        where: { id: ticket.id },
+        data: {
+          subject: patch.subject?.trim() || undefined,
+          category: patch.category?.trim() || undefined,
+          priority: patch.priority?.trim().toLowerCase() || undefined,
+          status: nextStatus || undefined,
+          updatedAt: new Date(),
+        },
+      });
+
+      if (ticket.conversation?.id && nextStatus) {
+        await tx.supportConversation.update({
+          where: { id: ticket.conversation.id },
+          data: {
+            status:
+              nextStatus === 'resolved' || nextStatus === 'closed'
+                ? 'closed'
+                : nextStatus === 'reviewing'
+                  ? 'reviewing'
+                  : 'open',
+            updatedAt: new Date(),
+          },
+        });
+      }
+
+      return updatedTicket;
+    });
+
+    return this.getTicketDetail(updated.id, userId);
+  }
+
   private async ensureConversationForUser(userId: string) {
     let conversation = await this.prisma.supportConversation.findFirst({
       where: { userId },
@@ -281,7 +451,7 @@ export class SupportDatabaseService {
     };
   }
 
-  private readStringArray(value: Prisma.JsonValue) {
+  private readStringArray(value: unknown) {
     return Array.isArray(value)
       ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
       : [];
@@ -301,5 +471,41 @@ export class SupportDatabaseService {
 
   private readString(value: unknown) {
     return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+  }
+
+  private mapTicketSummary(ticket: {
+    id: string;
+    userId: string | null;
+    subject: string;
+    category: string;
+    status: string;
+    priority: string;
+    createdAt: Date;
+    updatedAt: Date;
+    metadata: Prisma.JsonValue;
+    conversation?: {
+      id: string;
+      status: string;
+      channel: string;
+      messages?: Array<{ body: string }>;
+    } | null;
+  }) {
+    return {
+      id: ticket.id,
+      userId: ticket.userId,
+      subject: ticket.subject,
+      category: ticket.category,
+      status: ticket.status,
+      priority: ticket.priority,
+      createdAt: ticket.createdAt.toISOString(),
+      updatedAt: ticket.updatedAt.toISOString(),
+      conversationId: ticket.conversation?.id ?? null,
+      conversationStatus: ticket.conversation?.status ?? null,
+      channel: ticket.conversation?.channel ?? 'in_app',
+      latestMessage:
+        ticket.conversation?.messages?.[0]?.body?.trim() ||
+        this.readMetadataString(ticket.metadata, 'latestMessage'),
+      metadata: this.readMetadataObject(ticket.metadata),
+    };
   }
 }

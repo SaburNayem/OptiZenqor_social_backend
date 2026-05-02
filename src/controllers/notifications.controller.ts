@@ -5,6 +5,8 @@ import { SessionAuthGuard } from '../auth/session-auth.guard';
 import {
   CreateNotificationCampaignDto,
   MarkNotificationReadDto,
+  NotificationDevicesQueryDto,
+  UpdateNotificationDeviceDto,
 } from '../dto/api.dto';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { AdminDatabaseService } from '../services/admin-database.service';
@@ -109,6 +111,35 @@ export class NotificationsController {
   }
 
   @UseGuards(SessionAuthGuard)
+  @Get('devices')
+  async getDevices(
+    @Query() query: NotificationDevicesQueryDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return {
+      success: true,
+      message: 'Push devices fetched successfully.',
+      data: await this.adminDatabase.listUserPushDevices(user.id, query),
+    };
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Patch('devices/:id')
+  async updateDevice(
+    @Param('id') id: string,
+    @Body() body: UpdateNotificationDeviceDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return {
+      success: true,
+      message: 'Push device updated successfully.',
+      data: await this.adminDatabase.updateUserPushDevice(user.id, id, body),
+    };
+  }
+
+  @UseGuards(SessionAuthGuard)
   @Delete('devices/:token')
   async unregisterDevice(
     @Param('token') token: string,
@@ -119,6 +150,20 @@ export class NotificationsController {
       success: true,
       message: 'Push device unregistered successfully.',
       data: await this.adminDatabase.unregisterPushDevice(user.id, token),
+    };
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Delete('devices/id/:id')
+  async deleteDeviceById(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return {
+      success: true,
+      message: 'Push device deleted successfully.',
+      data: await this.adminDatabase.deleteUserPushDevice(user.id, id),
     };
   }
 

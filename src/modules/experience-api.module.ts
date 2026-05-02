@@ -19,6 +19,7 @@ import { MaintenanceModeController } from '../controllers/maintenance-mode.contr
 import { MarketplaceController } from '../controllers/marketplace.controller';
 import { MonetizationController } from '../controllers/monetization.controller';
 import { NotificationsController } from '../controllers/notifications.controller';
+import { NotificationDevicesController } from '../controllers/notification-devices.controller';
 import { OfflineSyncController } from '../controllers/offline-sync.controller';
 import { PersonalizationOnboardingController } from '../controllers/personalization-onboarding.controller';
 import { PollsSurveysController } from '../controllers/polls-surveys.controller';
@@ -64,6 +65,7 @@ import { AppUpdateFlowController } from '../controllers/app-update-flow.controll
     MarketplaceController,
     MonetizationController,
     NotificationsController,
+    NotificationDevicesController,
     InviteFriendsController,
     WalletController,
     PremiumPlansController,

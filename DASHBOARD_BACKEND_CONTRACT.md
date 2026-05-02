@@ -35,9 +35,13 @@ Runtime requirement:
 - Response keys currently consumed:
   - `data.totals`
   - `data.health`
+  - `data.charts`
+  - `data.breakdowns`
+  - `data.summaries`
+  - `data.recentActivity`
 - Dashboard files:
   - `src/config/navigation.js`
-  - `src/components/AdminViews.jsx`
+  - `src/pages/admin/overview/OverviewView.jsx`
 
 ## Core moderation
 
@@ -78,6 +82,23 @@ Runtime requirement:
   - `priority`
 - Dashboard files:
   - `src/config/navigation.js`
+  - `src/pages/admin/support/SupportOperationsView.jsx`
+
+### `GET /admin/marketplace`
+### `GET /admin/marketplace/:id`
+### `GET /admin/jobs`
+### `GET /admin/jobs/:id`
+### `GET /admin/events`
+### `GET /admin/events/:id`
+### `GET /admin/notification-devices`
+### `GET /admin/notification-devices/:id`
+### `PATCH /admin/notification-devices/:id`
+
+- Auth: admin bearer token
+- Dashboard files:
+  - `src/pages/admin/marketplace/MarketplaceOperationsView.jsx`
+  - `src/pages/admin/jobs/JobsOperationsView.jsx`
+  - `src/components/AdminViews.jsx`
   - `src/hooks/useAdminDashboard.js`
   - `src/components/AdminViews.jsx`
 

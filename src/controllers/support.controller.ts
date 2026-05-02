@@ -1,7 +1,11 @@
-import { Body, Controller, Get, Headers, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
-import { CreateSupportMessageDto, CreateTicketDto } from '../dto/api.dto';
+import {
+  CreateSupportMessageDto,
+  CreateTicketDto,
+  UpdateSupportTicketDto,
+} from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { SupportDatabaseService } from '../services/support-database.service';
 import { successResponse } from '../utils/api-response.util';
@@ -28,6 +32,19 @@ export class SupportController {
     return successResponse(
       'Support tickets fetched successfully.',
       await this.supportDatabase.getTickets(user.id),
+    );
+  }
+
+  @Get('support/tickets/:id')
+  @UseGuards(SessionAuthGuard)
+  async getTicketDetail(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Support ticket fetched successfully.',
+      await this.supportDatabase.getTicketDetail(id, user.id),
     );
   }
 
@@ -100,6 +117,39 @@ export class SupportController {
         priority: body.priority,
         userId: user?.id ?? null,
       }),
+    );
+  }
+
+  @Post('support/tickets/:id/messages')
+  @UseGuards(SessionAuthGuard)
+  async createTicketMessage(
+    @Param('id') id: string,
+    @Body() body: CreateSupportMessageDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Support ticket message sent successfully.',
+      await this.supportDatabase.createTicketMessage({
+        ticketId: id,
+        userId: user.id,
+        message: body.message,
+        attachments: body.attachments,
+      }),
+    );
+  }
+
+  @Patch('support/tickets/:id')
+  @UseGuards(SessionAuthGuard)
+  async updateTicket(
+    @Param('id') id: string,
+    @Body() body: UpdateSupportTicketDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Support ticket updated successfully.',
+      await this.supportDatabase.updateTicket(id, user.id, body),
     );
   }
 }
