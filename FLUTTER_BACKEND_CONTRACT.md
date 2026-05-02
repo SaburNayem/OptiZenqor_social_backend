@@ -104,6 +104,24 @@ The intent is:
 - Purpose: read persisted notification and settings state
 - Auth: required
 
+### `GET /push-notification-preferences`
+### `PATCH /push-notification-preferences`
+- Purpose: read and update persisted push notification category preferences
+- Auth: required
+- `PATCH` body:
+
+```json
+{
+  "categories": [
+    { "title": "Likes", "enabled": true },
+    { "title": "Comments", "enabled": false }
+  ]
+}
+```
+
+- Flutter file using it:
+  - `lib/feature/push_notification_preferences/controller/push_notification_preferences_controller.dart`
+
 ## Profile
 
 ### `GET /profile/:id`

@@ -169,6 +169,42 @@ Marks a notification as read for the requesting or specified user scope.
 
 Returns persisted user settings state for notification-related flags.
 
+### `GET /push-notification-preferences`
+
+Auth: bearer token required.
+
+Returns:
+
+```json
+{
+  "success": true,
+  "message": "Push notification preferences fetched successfully.",
+  "data": {
+    "categories": [
+      { "title": "Likes", "enabled": true }
+    ]
+  }
+}
+```
+
+### `PATCH /push-notification-preferences`
+
+Auth: bearer token required.
+
+Accepts:
+
+```json
+{
+  "categories": [
+    { "title": "Likes", "enabled": true },
+    { "title": "Comments", "enabled": false }
+  ]
+}
+```
+
+Persists notification category state into user settings and returns the same
+category payload inside the standard success wrapper.
+
 ## Profile and saved state contract
 
 ### `GET /profile/:id`

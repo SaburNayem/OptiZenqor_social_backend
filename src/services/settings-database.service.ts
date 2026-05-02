@@ -169,6 +169,29 @@ export class SettingsDatabaseService {
     return this.resolvePushPreferences(context.settingsState);
   }
 
+  async updatePushNotificationPreferences(
+    userId: string,
+    categories: Array<{ title: string; enabled: boolean }>,
+  ) {
+    const normalized = categories
+      .map((item) => ({
+        title: item.title.trim(),
+        enabled: Boolean(item.enabled),
+      }))
+      .filter((item) => item.title.length > 0);
+
+    if (normalized.length === 0) {
+      return this.getPushNotificationPreferences(userId);
+    }
+
+    await this.accountStateDatabase.updateSettingsState(userId, {
+      'preferences.push_categories': normalized,
+      'notifications.push_enabled': normalized.some((item) => item.enabled),
+    });
+
+    return this.getPushNotificationPreferences(userId);
+  }
+
   async getLegalCompliance(userId: string) {
     const state = (await this.buildContext(userId)).settingsState;
     return {

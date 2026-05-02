@@ -1,7 +1,10 @@
 import { Body, Controller, Get, Headers, Param, Patch, Query, UseGuards } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
-import { MutedAccountActionDto } from '../dto/api.dto';
+import {
+  MutedAccountActionDto,
+  UpdatePushNotificationPreferencesDto,
+} from '../dto/api.dto';
 import { AccountStateDatabaseService } from '../services/account-state-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { SettingsDatabaseService } from '../services/settings-database.service';
@@ -63,6 +66,22 @@ export class PreferencesController {
     return successResponse(
       'Push notification preferences fetched successfully.',
       await this.settingsDatabase.getPushNotificationPreferences(user.id),
+    );
+  }
+
+  @Patch('push-notification-preferences')
+  @UseGuards(SessionAuthGuard)
+  async updatePushNotificationPreferences(
+    @Body() body: UpdatePushNotificationPreferencesDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return successResponse(
+      'Push notification preferences updated successfully.',
+      await this.settingsDatabase.updatePushNotificationPreferences(
+        user.id,
+        body.categories,
+      ),
     );
   }
 

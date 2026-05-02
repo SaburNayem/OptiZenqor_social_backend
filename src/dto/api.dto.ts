@@ -1684,6 +1684,23 @@ export class SetLocaleDto {
   localeCode!: string;
 }
 
+export class PushPreferenceItemDto {
+  @ApiProperty()
+  @IsString()
+  title!: string;
+
+  @ApiProperty()
+  @IsBoolean()
+  enabled!: boolean;
+}
+
+export class UpdatePushNotificationPreferencesDto {
+  @ApiProperty({ type: [PushPreferenceItemDto] })
+  @IsArray()
+  @IsObject({ each: true })
+  categories!: PushPreferenceItemDto[];
+}
+
 export class VotePollDto {
   @ApiProperty()
   @IsNumber()
