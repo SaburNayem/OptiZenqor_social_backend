@@ -5,6 +5,7 @@ import {
   Headers,
   Param,
   Patch,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -21,6 +22,8 @@ import {
   AdminContentQueryDto,
   AdminEntityListQueryDto,
   AdminModerateContentDto,
+  AdminPremiumPlanCreateDto,
+  AdminPremiumPlanUpdateDto,
   AdminReportsQueryDto,
   AdminSettingsPatchDto,
   AdminUpdateReportDto,
@@ -273,6 +276,46 @@ export class AdminController {
       'Admin notification devices fetched successfully.',
       payload,
       payload.pagination,
+    );
+  }
+
+  @Get('premium-plans')
+  @ApiOperation({ summary: 'List premium plans for admin review' })
+  async getPremiumPlans(@Query() query: AdminEntityListQueryDto) {
+    const payload = await this.adminDatabase.queryAdminPremiumPlans(query);
+    return successResponse(
+      'Admin premium plans fetched successfully.',
+      payload,
+      payload.pagination,
+    );
+  }
+
+  @Post('premium-plans')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Create a premium plan' })
+  async createPremiumPlan(
+    @Body() body: AdminPremiumPlanCreateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin premium plan created successfully.',
+      await this.adminDatabase.createAdminPremiumPlan(body, admin.adminId),
+    );
+  }
+
+  @Patch('premium-plans/:id')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Update a premium plan' })
+  async updatePremiumPlan(
+    @Param('id') id: string,
+    @Body() body: AdminPremiumPlanUpdateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin premium plan updated successfully.',
+      await this.adminDatabase.updateAdminPremiumPlan(id, body, admin.adminId),
     );
   }
 }

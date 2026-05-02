@@ -1608,6 +1608,186 @@ export class AdminDatabaseService implements OnModuleInit {
     );
   }
 
+  async queryAdminPremiumPlans(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const activeFilter =
+      query.status?.trim().toLowerCase() === 'active'
+        ? true
+        : query.status?.trim().toLowerCase() === 'inactive'
+          ? false
+          : undefined;
+    const where: Prisma.PremiumPlanWhereInput = {
+      ...(activeFilter === undefined ? {} : { isActive: activeFilter }),
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { code: { contains: query.search.trim(), mode: 'insensitive' } },
+              { name: { contains: query.search.trim(), mode: 'insensitive' } },
+              { description: { contains: query.search.trim(), mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+    const [total, items] = await Promise.all([
+      this.prisma.premiumPlan.count({ where }),
+      this.prisma.premiumPlan.findMany({
+        where,
+        include: { subscriptions: true },
+        orderBy: [{ price: 'asc' }, { createdAt: 'desc' }],
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return this.wrapPaginated(
+      items.map((item) => ({
+        id: item.id,
+        code: item.code,
+        name: item.name,
+        description: item.description,
+        price: Number(item.price),
+        currency: item.currency,
+        billingInterval: item.billingInterval,
+        features: this.readStringArray(item.features),
+        isActive: item.isActive,
+        status: item.isActive ? 'active' : 'inactive',
+        subscriptions: item.subscriptions.length,
+        createdAt: item.createdAt.toISOString(),
+        updatedAt: item.updatedAt.toISOString(),
+      })),
+      page,
+      limit,
+      total,
+    );
+  }
+
+  async createAdminPremiumPlan(
+    input: {
+      code: string;
+      name: string;
+      description?: string;
+      price: number;
+      currency?: string;
+      billingInterval?: string;
+      features?: string[];
+      isActive?: boolean;
+    },
+    actorAdminId?: string,
+  ) {
+    const item = await this.prisma.premiumPlan.create({
+      data: {
+        id: makeId('plan'),
+        code: input.code.trim(),
+        name: input.name.trim(),
+        description: input.description?.trim() || null,
+        price: new Prisma.Decimal(input.price),
+        currency: input.currency?.trim() || 'BDT',
+        billingInterval: input.billingInterval?.trim() || 'monthly',
+        features: (input.features ?? []).map((entry) => entry.trim()),
+        isActive: input.isActive ?? true,
+      },
+      include: { subscriptions: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'premium_plan.create',
+      entityType: 'premium_plan',
+      entityId: item.id,
+      metadata: input,
+    });
+
+    return {
+      id: item.id,
+      code: item.code,
+      name: item.name,
+      description: item.description,
+      price: Number(item.price),
+      currency: item.currency,
+      billingInterval: item.billingInterval,
+      features: this.readStringArray(item.features),
+      isActive: item.isActive,
+      status: item.isActive ? 'active' : 'inactive',
+      subscriptions: item.subscriptions.length,
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString(),
+    };
+  }
+
+  async updateAdminPremiumPlan(
+    id: string,
+    patch: {
+      code?: string;
+      name?: string;
+      description?: string;
+      price?: number;
+      currency?: string;
+      billingInterval?: string;
+      features?: string[];
+      isActive?: boolean;
+    },
+    actorAdminId?: string,
+  ) {
+    const existing = await this.prisma.premiumPlan.findUnique({
+      where: { id },
+      include: { subscriptions: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Premium plan ${id} not found.`);
+    }
+
+    const updated = await this.prisma.premiumPlan.update({
+      where: { id },
+      data: {
+        code: patch.code?.trim() || undefined,
+        name: patch.name?.trim() || undefined,
+        description:
+          patch.description === undefined ? undefined : patch.description.trim() || null,
+        price: patch.price === undefined ? undefined : new Prisma.Decimal(patch.price),
+        currency: patch.currency?.trim() || undefined,
+        billingInterval: patch.billingInterval?.trim() || undefined,
+        features:
+          patch.features === undefined
+            ? undefined
+            : patch.features.map((entry) => entry.trim()),
+        isActive: patch.isActive,
+        updatedAt: new Date(),
+      },
+      include: { subscriptions: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'premium_plan.update',
+      entityType: 'premium_plan',
+      entityId: updated.id,
+      metadata: patch,
+    });
+
+    return {
+      id: updated.id,
+      code: updated.code,
+      name: updated.name,
+      description: updated.description,
+      price: Number(updated.price),
+      currency: updated.currency,
+      billingInterval: updated.billingInterval,
+      features: this.readStringArray(updated.features),
+      isActive: updated.isActive,
+      status: updated.isActive ? 'active' : 'inactive',
+      subscriptions: updated.subscriptions.length,
+      createdAt: updated.createdAt.toISOString(),
+      updatedAt: updated.updatedAt.toISOString(),
+    };
+  }
+
   async getAdminUsers() {
     return this.prisma.appUser.findMany({
       orderBy: { createdAt: 'desc' },
