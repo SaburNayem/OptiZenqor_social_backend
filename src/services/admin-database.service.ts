@@ -3135,21 +3135,7 @@ export class AdminDatabaseService implements OnModuleInit {
       throw new NotFoundException(`Notification campaign ${id} not found.`);
     }
 
-    const relatedLogs = await this.prisma.adminAuditLog.findMany({
-      where: {
-        entityType: 'notification_campaign',
-        entityId: id,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 25,
-    });
-
-    const lifecycleEvents = relatedLogs.map((log) => ({
-      id: log.id,
-      action: log.action,
-      metadata: this.readObject(log.metadata),
-      createdAt: log.createdAt.toISOString(),
-    }));
+    const lifecycleEvents = await this.readNotificationCampaignHistory(id);
 
     return {
       ...this.mapAdminNotificationCampaignRow(item),
@@ -3188,8 +3174,13 @@ export class AdminDatabaseService implements OnModuleInit {
       entityId: item.id,
       metadata: input,
     });
+    await this.createNotificationCampaignHistory(item.id, 'create', actorAdminId, {
+      audience: item.audience,
+      schedule: item.schedule,
+      status: item.status,
+    });
 
-    return this.mapAdminNotificationCampaignRow(item);
+    return this.getAdminNotificationCampaign(item.id);
   }
 
   async updateAdminNotificationCampaign(
@@ -3227,8 +3218,9 @@ export class AdminDatabaseService implements OnModuleInit {
       entityId: updated.id,
       metadata: patch,
     });
+    await this.createNotificationCampaignHistory(updated.id, 'update', actorAdminId, patch);
 
-    return this.mapAdminNotificationCampaignRow(updated);
+    return this.getAdminNotificationCampaign(updated.id);
   }
 
   async runAdminNotificationCampaignAction(
@@ -3276,6 +3268,11 @@ export class AdminDatabaseService implements OnModuleInit {
         schedule: input.schedule?.trim() || null,
       },
     });
+    await this.createNotificationCampaignHistory(updated.id, action, actorAdminId, {
+      status: updated.status,
+      schedule: updated.schedule,
+      note: input.note?.trim() || null,
+    });
 
     return this.getAdminNotificationCampaign(updated.id);
   }
@@ -3288,10 +3285,11 @@ export class AdminDatabaseService implements OnModuleInit {
       throw new NotFoundException(`Notification campaign ${id} not found.`);
     }
 
-    await this.prisma.notificationCampaign.delete({
-      where: { id },
+    await this.createNotificationCampaignHistory(id, 'delete', actorAdminId, {
+      name: existing.name,
+      audience: existing.audience,
+      note: note?.trim() || null,
     });
-
     await this.createAuditLog({
       actorAdminId,
       action: 'notification_campaign.delete',
@@ -3302,6 +3300,9 @@ export class AdminDatabaseService implements OnModuleInit {
         audience: existing.audience,
         note: note?.trim() || null,
       },
+    });
+    await this.prisma.notificationCampaign.delete({
+      where: { id },
     });
 
     return {
@@ -4246,6 +4247,90 @@ export class AdminDatabaseService implements OnModuleInit {
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),
     };
+  }
+
+  private mapNotificationCampaignHistory(item: {
+    id: string;
+    action: string;
+    note: string | null;
+    payload: Prisma.JsonValue;
+    createdAt: Date;
+    actorAdmin?: { id: string; name: string | null; email: string } | null;
+  }) {
+    return {
+      id: item.id,
+      action: item.action,
+      note: item.note,
+      payload: this.readObject(item.payload),
+      actorAdminId: item.actorAdmin?.id ?? null,
+      actorName: item.actorAdmin?.name ?? item.actorAdmin?.email ?? null,
+      createdAt: item.createdAt.toISOString(),
+    };
+  }
+
+  private async createNotificationCampaignHistory(
+    campaignId: string,
+    action: string,
+    actorAdminId: string | undefined,
+    payload: Record<string, unknown>,
+  ) {
+    await this.prisma.$executeRaw`
+      insert into app_notification_campaign_action_history (
+        id, campaign_id, actor_admin_id, action, note, payload, created_at
+      ) values (
+        ${makeId('campaign_action')},
+        ${campaignId},
+        ${actorAdminId ?? null},
+        ${action},
+        ${this.readString(payload.note) ?? null},
+        ${payload as Prisma.InputJsonValue},
+        ${new Date()}
+      )
+    `;
+  }
+
+  private async readNotificationCampaignHistory(campaignId: string) {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        action: string;
+        note: string | null;
+        payload: Prisma.JsonValue;
+        created_at: Date;
+        actor_admin_id: string | null;
+        actor_name: string | null;
+        actor_email: string | null;
+      }>
+    >`select history.id,
+             history.action,
+             history.note,
+             history.payload,
+             history.created_at,
+             admin.id as actor_admin_id,
+             admin.name as actor_name,
+             admin.email as actor_email
+        from app_notification_campaign_action_history history
+        left join admin_users admin on admin.id = history.actor_admin_id
+       where history.campaign_id = ${campaignId}
+       order by history.created_at desc`;
+
+    return rows.map((item) =>
+      this.mapNotificationCampaignHistory({
+        id: item.id,
+        action: item.action,
+        note: item.note,
+        payload: item.payload,
+        createdAt: item.created_at,
+        actorAdmin:
+          item.actor_admin_id || item.actor_name || item.actor_email
+            ? {
+                id: item.actor_admin_id ?? '',
+                name: item.actor_name,
+                email: item.actor_email ?? '',
+              }
+            : null,
+      }),
+    );
   }
 
   private mapModerationCase(item: {

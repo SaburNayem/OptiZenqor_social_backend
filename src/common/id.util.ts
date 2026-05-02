@@ -51,6 +51,7 @@ export type IdPrefix =
   | 'admin'
   | 'push_device'
   | 'audit'
+  | 'campaign_action'
   | 'presence'
   | 'call_lifecycle'
   | 'live_lifecycle';

@@ -1014,16 +1014,33 @@ model PremiumPlan {
 }
 
 model NotificationCampaign {
-  id          String   @id @map("id")
-  name        String   @map("name")
-  audience    String   @map("audience")
-  schedule    String   @map("schedule")
-  status      String   @default("scheduled") @map("status")
-  createdAt   DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
-  updatedAt   DateTime @default(now()) @db.Timestamptz(6) @map("updated_at")
+  id          String                            @id @map("id")
+  name        String                            @map("name")
+  audience    String                            @map("audience")
+  schedule    String                            @map("schedule")
+  status      String                            @default("scheduled") @map("status")
+  createdAt   DateTime                          @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt   DateTime                          @default(now()) @db.Timestamptz(6) @map("updated_at")
+  actionHistory NotificationCampaignActionHistory[]
 
   @@index([createdAt(sort: Desc)])
   @@map("app_notification_campaigns")
+}
+
+model NotificationCampaignActionHistory {
+  id          String                @id @map("id")
+  campaignId  String                @map("campaign_id")
+  actorAdminId String?              @map("actor_admin_id")
+  action      String                @map("action")
+  note        String?               @map("note")
+  payload     Json                  @default("{}") @map("payload")
+  createdAt   DateTime              @default(now()) @db.Timestamptz(6) @map("created_at")
+  campaign    NotificationCampaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  actorAdmin  AdminUser?            @relation(fields: [actorAdminId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId, createdAt(sort: Desc)])
+  @@index([actorAdminId, createdAt(sort: Desc)])
+  @@map("app_notification_campaign_action_history")
 }
 
 model SupportFaq {
@@ -1307,6 +1324,7 @@ model AdminUser {
   sessions     AdminSession[]
   auditLogs    AdminAuditLog[]         @relation("AdminAuditActor")
   assignedCases ModerationCase[]       @relation("ModerationAssignedAdmin")
+  notificationCampaignActions NotificationCampaignActionHistory[]
 
   @@map("admin_users")
 }
