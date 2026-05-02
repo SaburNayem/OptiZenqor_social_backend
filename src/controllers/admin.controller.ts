@@ -22,6 +22,7 @@ import {
   AdminContentQueryDto,
   AdminEntityListQueryDto,
   AdminModerateContentDto,
+  AdminNotificationDeviceUpdateDto,
   AdminPremiumPlanCreateDto,
   AdminPremiumPlanUpdateDto,
   AdminReportsQueryDto,
@@ -352,6 +353,32 @@ export class AdminController {
   @ApiOperation({ summary: 'Backward-compatible admin notifications devices route' })
   async getNotificationDevicesAlias(@Query() query: AdminEntityListQueryDto) {
     return this.getNotificationDevices(query);
+  }
+
+  @Patch('notification-devices/:id')
+  @Roles('Super Admin', 'Operations Admin', 'Support Admin')
+  @ApiOperation({ summary: 'Activate or deactivate a push notification device' })
+  async updateNotificationDevice(
+    @Param('id') id: string,
+    @Body() body: AdminNotificationDeviceUpdateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin notification device updated successfully.',
+      await this.adminDatabase.updateAdminNotificationDevice(id, body, admin.adminId),
+    );
+  }
+
+  @Patch('notifications/devices/:id')
+  @Roles('Super Admin', 'Operations Admin', 'Support Admin')
+  @ApiOperation({ summary: 'Backward-compatible admin notifications devices mutation route' })
+  async updateNotificationDeviceAlias(
+    @Param('id') id: string,
+    @Body() body: AdminNotificationDeviceUpdateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.updateNotificationDevice(id, body, authorization);
   }
 
   @Get('premium-plans')

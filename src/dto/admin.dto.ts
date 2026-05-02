@@ -384,6 +384,12 @@ export class AdminSupportTicketUpdateDto {
   adminNote?: string;
 }
 
+export class AdminNotificationDeviceUpdateDto {
+  @ApiProperty()
+  @IsBoolean()
+  isActive!: boolean;
+}
+
 export class RegisterPushDeviceDto {
   @ApiProperty()
   @IsString()

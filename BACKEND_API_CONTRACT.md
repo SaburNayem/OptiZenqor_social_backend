@@ -399,6 +399,34 @@ Trending and hashtag datasets are now persisted in PostgreSQL through:
   - `filters`
   - `pagination`
 
+## Admin notification devices contract
+
+### `GET /admin/notification-devices`
+### `GET /admin/notifications/devices`
+### `PATCH /admin/notification-devices/:id`
+### `PATCH /admin/notifications/devices/:id`
+
+- Purpose: list and activate/deactivate registered push device tokens for admin operations
+- Auth: admin bearer token required
+- `GET` query params:
+  - `page`
+  - `limit`
+  - `search`
+  - `status`
+- `PATCH` body:
+
+```json
+{
+  "isActive": false
+}
+```
+
+- Response data keys:
+  - `items`
+  - `results`
+  - `filters`
+  - `pagination`
+
 ### Communities and pages
 
 - `GET /communities`

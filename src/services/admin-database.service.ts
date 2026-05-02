@@ -1820,7 +1820,7 @@ export class AdminDatabaseService implements OnModuleInit {
       }),
     ]);
 
-    return this.wrapPaginated(
+    const payload = this.wrapPaginated(
       items.map((item) => ({
         id: item.id,
         userName: item.user.name,
@@ -1836,6 +1836,13 @@ export class AdminDatabaseService implements OnModuleInit {
       limit,
       total,
     );
+    return {
+      ...payload,
+      filters: {
+        search: query.search?.trim() || '',
+        status: query.status?.trim().toLowerCase() || '',
+      },
+    };
   }
 
   async queryAdminSubscriptions(query: {
@@ -1946,6 +1953,55 @@ export class AdminDatabaseService implements OnModuleInit {
       limit,
       total,
     );
+  }
+
+  async updateAdminNotificationDevice(
+    id: string,
+    patch: { isActive: boolean },
+    actorAdminId?: string,
+  ) {
+    const existing = await this.prisma.pushDeviceToken.findUnique({
+      where: { id },
+      include: { user: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Push notification device ${id} not found.`);
+    }
+
+    const updated = await this.prisma.pushDeviceToken.update({
+      where: { id },
+      data: {
+        isActive: patch.isActive,
+        updatedAt: new Date(),
+        lastSeenAt: new Date(),
+      },
+      include: { user: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: patch.isActive ? 'notification_device.activate' : 'notification_device.deactivate',
+      entityType: 'notification_device',
+      entityId: updated.id,
+      metadata: {
+        userId: updated.userId,
+        token: updated.token,
+        platform: updated.platform,
+        isActive: updated.isActive,
+      },
+    });
+
+    return {
+      id: updated.id,
+      userName: updated.user.name,
+      userId: updated.userId,
+      platform: updated.platform,
+      deviceLabel: updated.deviceLabel,
+      status: updated.isActive ? 'active' : 'inactive',
+      token: updated.token,
+      lastSeenAt: updated.lastSeenAt.toISOString(),
+      createdAt: updated.createdAt.toISOString(),
+    };
   }
 
   async queryAdminPremiumPlans(query: {

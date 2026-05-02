@@ -176,10 +176,20 @@ Runtime requirement:
   - no update/cancel/send-now/delete UI or backend endpoints yet
 
 ### `GET /admin/notifications/devices`
+- `PATCH /admin/notification-devices/:id`
+- `PATCH /admin/notifications/devices/:id`
 - Auth: admin bearer token
+- Query params supported by backend list:
+  - `page`
+  - `limit`
+  - `search`
+  - `status`
 - Dashboard files:
+  - `src/App.jsx`
   - `src/config/navigation.js`
   - `src/components/AdminViews.jsx`
+- Remaining gap:
+  - detail history, bulk actions, and token retry diagnostics are still missing
 
 ### `GET /admin/settings`
 ### `PATCH /admin/settings`
@@ -194,5 +204,5 @@ Runtime requirement:
 - The dashboard is authenticated and API-backed for all listed pages.
 - The main remaining admin gap is feature depth, not connectivity:
   - filters/search/pagination controls are still missing on many pages outside support
-  - many operational pages are still read-only
+  - many operational pages are still read-only, though support and notification devices now have real mutation controls
   - several admin mutation endpoints still need to be added in the backend

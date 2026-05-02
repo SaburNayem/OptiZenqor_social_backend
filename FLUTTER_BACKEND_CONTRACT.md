@@ -245,6 +245,7 @@ The intent is:
 - Purpose: database-backed pages and follows
 - `GET /pages` returns `data.pages`, `data.items`, `data.results`, and pagination metadata
 - Query support: `page`, `limit`, `search`, `category`, `ownerId`, `sort`, `order`
+- The Flutter pages repository should resolve the current user from `GET /auth/me` and let the backend resolve follow/create ownership from the bearer session instead of local auth storage.
 
 ## Settings and monetization
 
