@@ -19,6 +19,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import {
   AdminAuditLogsQueryDto,
   AdminContentQueryDto,
+  AdminEntityListQueryDto,
   AdminModerateContentDto,
   AdminReportsQueryDto,
   AdminSettingsPatchDto,
@@ -191,5 +192,87 @@ export class AdminController {
   async getAuditLogs(@Query() query: AdminAuditLogsQueryDto) {
     const payload = await this.adminDatabase.queryAuditLogs(query);
     return successResponse('Admin audit logs fetched successfully.', payload, payload.pagination);
+  }
+
+  @Get('marketplace')
+  @ApiOperation({ summary: 'List marketplace items for admin review' })
+  async getMarketplace(@Query() query: AdminEntityListQueryDto) {
+    const payload = await this.adminDatabase.queryAdminMarketplace(query);
+    return successResponse(
+      'Admin marketplace data fetched successfully.',
+      payload,
+      payload.pagination,
+    );
+  }
+
+  @Get('jobs')
+  @ApiOperation({ summary: 'List jobs for admin review' })
+  async getJobs(@Query() query: AdminEntityListQueryDto) {
+    const payload = await this.adminDatabase.queryAdminJobs(query);
+    return successResponse('Admin jobs fetched successfully.', payload, payload.pagination);
+  }
+
+  @Get('events')
+  @ApiOperation({ summary: 'List events for admin review' })
+  async getEvents(@Query() query: AdminEntityListQueryDto) {
+    const payload = await this.adminDatabase.queryAdminEvents(query);
+    return successResponse('Admin events fetched successfully.', payload, payload.pagination);
+  }
+
+  @Get('communities')
+  @ApiOperation({ summary: 'List communities for admin review' })
+  async getCommunities(@Query() query: AdminEntityListQueryDto) {
+    const payload = await this.adminDatabase.queryAdminCommunities(query);
+    return successResponse(
+      'Admin communities fetched successfully.',
+      payload,
+      payload.pagination,
+    );
+  }
+
+  @Get('pages')
+  @ApiOperation({ summary: 'List pages for admin review' })
+  async getPages(@Query() query: AdminEntityListQueryDto) {
+    const payload = await this.adminDatabase.queryAdminPages(query);
+    return successResponse('Admin pages fetched successfully.', payload, payload.pagination);
+  }
+
+  @Get('live-streams')
+  @ApiOperation({ summary: 'List live streams for admin review' })
+  async getLiveStreams(@Query() query: AdminEntityListQueryDto) {
+    const payload = await this.adminDatabase.queryAdminLiveStreams(query);
+    return successResponse(
+      'Admin live streams fetched successfully.',
+      payload,
+      payload.pagination,
+    );
+  }
+
+  @Get('monetization')
+  @ApiOperation({ summary: 'List wallet and subscription activity for admin review' })
+  async getMonetization(@Query() query: AdminEntityListQueryDto) {
+    const payload = await this.adminDatabase.queryAdminMonetization(query);
+    return successResponse(
+      'Admin monetization data fetched successfully.',
+      payload,
+      payload.pagination,
+    );
+  }
+
+  @Get('wallet-subscriptions')
+  @ApiOperation({ summary: 'Backward-compatible wallet and subscription admin route' })
+  async getWalletSubscriptions(@Query() query: AdminEntityListQueryDto) {
+    return this.getMonetization(query);
+  }
+
+  @Get('notification-devices')
+  @ApiOperation({ summary: 'List push notification devices for admin review' })
+  async getNotificationDevices(@Query() query: AdminEntityListQueryDto) {
+    const payload = await this.adminDatabase.queryAdminNotificationDevices(query);
+    return successResponse(
+      'Admin notification devices fetched successfully.',
+      payload,
+      payload.pagination,
+    );
   }
 }

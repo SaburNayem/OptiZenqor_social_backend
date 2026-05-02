@@ -1,99 +1,146 @@
 # Full Backend / Frontend / Dashboard Integration Report
 
-Updated: 2026-05-01
+Updated: 2026-05-02
 
 ## Repo Reality Check
 
-Requested backend path: `G:/OptiZenqor_social_backend`
+Requested paths:
 
-Actual local backend repo audited and used in this pass: `G:/My Project/Socity_backend`
+- `G:/OptiZenqor_social_dashboard`
+- `G:/OptiZenqor_social`
+- `G:/socity_backend`
 
-Audited repos:
+Actual local repos audited and edited in this workspace:
 
-- `G:/My Project/Socity_backend`
-- `G:/My Project/OptiZenqor_social`
 - `G:/My Project/OptiZenqor_social_dashboard`
+- `G:/My Project/OptiZenqor_social`
+- `G:/My Project/Socity_backend`
 
 ## What Was Fixed
 
 ### Backend
 
-- Removed live request-path dependency on `AppExtensionsDataService` for these production routes:
-  - `GET /deep-link-handler`
-  - `POST /deep-link-handler/resolve`
-  - `GET /share-repost/options`
-  - `POST /share-repost/track`
-  - `GET /offline-sync`
-  - `POST /offline-sync/retry`
-  - `GET /media-viewer`
-  - `GET /media-viewer/:id`
-  - `GET /personalization-onboarding`
-  - `PATCH /personalization-onboarding/interests`
-  - `GET /app-update-flow`
-  - `POST /app-update-flow/start`
-  - `GET /localization-support`
-  - `PATCH /localization-support`
-  - `GET /maintenance-mode`
-  - `POST /maintenance-mode/retry`
-- Moved those routes onto `AppUtilityDatabaseService`, backed by PostgreSQL via Prisma plus persisted `admin_operational_settings`, `app_uploads`, `app_posts`, `app_reels`, and per-user settings where available.
-- Standardized those controller responses onto `{ success, message, data }`.
-- Kept mobile route names unchanged.
-- Resolved Windows lock failures during backend verification by stopping backend `node`/`ts-node-dev` processes, removing locked build artifacts safely, regenerating Prisma, and rerunning checks.
+- Kept the admin surface on PostgreSQL/Prisma-backed services instead of static admin data.
+- Exposed and validated admin list endpoints now used by the dashboard:
+  - `GET /admin/marketplace`
+  - `GET /admin/jobs`
+  - `GET /admin/events`
+  - `GET /admin/communities`
+  - `GET /admin/pages`
+  - `GET /admin/live-streams`
+  - `GET /admin/monetization`
+  - `GET /admin/wallet-subscriptions`
+  - `GET /admin/notification-devices`
+- Added shared list query DTO support for admin operational entity modules.
+- Removed the now-unused `AdminOpsDataService` from the live data module export/provider path so dashboard-facing admin data is not served from the old static admin helper service.
+- Preserved `{ success, message, data }` response envelopes with pagination metadata for dashboard list views.
 
 ### Flutter
 
-- Forced production/mobile API resolution to Vercel when `USE_REMOTE_ONLY` is enabled instead of falling back to localhost.
-- Replaced local-only/mock controllers with backend-backed controllers for:
+- Replaced the remaining local-only settings state repository with authenticated backend reads/writes to `GET /settings/state` and `PATCH /settings/state`.
+- Kept the mobile app on the Vercel backend path rather than localhost when remote-only mode is active.
+- Preserved existing mobile route names and controller usage while moving server-owned settings state off shared preferences.
+- Retained previous live backend integrations completed in the existing working tree for:
   - offline sync
   - localization support
   - personalization onboarding
   - share/repost options
-- Removed obvious placeholder-only content from:
-  - safety/privacy screen
-  - devices/sessions screen
-- Switched legal consent writes from generic local settings patching to the backend legal consent endpoint.
-- Removed fake fallback strings from learning courses and business profile data mapping so those screens now reflect live backend emptiness honestly.
+  - legal consent actions
 
 ### Dashboard
 
-- Reverified the current admin dashboard build and lint state.
-- No new dashboard code changes were required in this pass because the repo already contained the earlier live-data admin console refactor and it still builds cleanly.
+- Switched operational modules that were still hitting app-facing routes onto admin APIs only.
+- Added modular admin navigation entries for:
+  - marketplace
+  - jobs
+  - events
+  - communities
+  - pages
+  - live streams
+  - wallet/subscriptions
+  - notification devices
+- Added a `.env.example` with `VITE_API_BASE_URL`.
+- Removed localhost as the default dashboard API base fallback and aligned it to the deployed backend URL.
+- Expanded live admin view rendering so these modules use explicit tables rather than a single generic fallback:
+  - marketplace
+  - jobs
+  - events
+  - communities
+  - pages
+  - live streams
+  - wallet/subscriptions
+  - notification devices
 
-## APIs Added / Changed In This Pass
+## APIs Added / Changed
 
-| Area | File(s) | Route(s) | Change |
-| --- | --- | --- | --- |
-| Deep linking | `src/controllers/deep-link-handler.controller.ts`, `src/services/app-utility-database.service.ts` | `/deep-link-handler`, `/deep-link-handler/resolve` | Replaced helper-backed state with DB-backed operational config and persisted recent links |
-| Share/Repost | `src/controllers/share-repost.controller.ts`, `src/services/app-utility-database.service.ts` | `/share-repost/options`, `/share-repost/track` | Replaced helper-backed options/tracking with DB-backed operational config and persisted activity |
-| Offline sync | `src/controllers/offline-sync.controller.ts`, `src/services/app-utility-database.service.ts` | `/offline-sync`, `/offline-sync/retry` | Replaced helper-backed queue with persisted account/global operational state and upload/draft-derived data |
-| Media viewer | `src/controllers/media-viewer.controller.ts`, `src/services/app-utility-database.service.ts` | `/media-viewer`, `/media-viewer/:id` | Replaced empty helper dataset with live recent post/reel media query results |
-| Personalization | `src/controllers/personalization-onboarding.controller.ts`, `src/services/app-utility-database.service.ts` | `/personalization-onboarding`, `/personalization-onboarding/interests` | Replaced local helper interest toggling with persisted onboarding/user-settings state |
-| App update | `src/controllers/app-update-flow.controller.ts`, `src/services/app-utility-database.service.ts` | `/app-update-flow`, `/app-update-flow/start` | Replaced helper update flow with operational DB config |
-| Localization | `src/controllers/localization-support.controller.ts`, `src/services/app-utility-database.service.ts` | `/localization-support` | Replaced helper locale state with DB-backed supported locales and persisted user/default locale |
-| Maintenance | `src/controllers/maintenance-mode.controller.ts`, `src/services/app-utility-database.service.ts` | `/maintenance-mode`, `/maintenance-mode/retry` | Replaced helper maintenance state with operational DB config |
+### Backend admin endpoints in active use
 
-## Frontend Screens Connected In This Pass
+- `POST /admin/auth/login`
+- `GET /admin/auth/me`
+- `POST /admin/auth/refresh`
+- `POST /admin/auth/logout`
+- `GET /admin/dashboard/overview`
+- `GET /admin/users`
+- `PATCH /admin/users/:id`
+- `GET /admin/content`
+- `PATCH /admin/content/:type/:id/moderate`
+- `GET /admin/reports`
+- `PATCH /admin/reports/:id`
+- `GET /admin/support-operations`
+- `GET /admin/settings`
+- `PATCH /admin/settings`
+- `GET /admin/audit-logs`
+- `GET /admin/marketplace`
+- `GET /admin/jobs`
+- `GET /admin/events`
+- `GET /admin/communities`
+- `GET /admin/pages`
+- `GET /admin/live-streams`
+- `GET /admin/monetization`
+- `GET /admin/wallet-subscriptions`
+- `GET /admin/notification-devices`
 
-| Screen / Feature | File(s) | Backend Route(s) | Result |
-| --- | --- | --- | --- |
-| Offline Sync | `lib/feature/offline_sync/controller/offline_sync_controller.dart`, `lib/feature/offline_sync/screen/offline_sync_screen.dart` | `/offline-sync`, `/offline-sync/retry` | Local-only queue removed; live backend state with loading/error/empty UI |
-| Localization Support | `lib/feature/localization_support/controller/localization_support_controller.dart`, `lib/feature/localization_support/screen/localization_support_screen.dart` | `/localization-support` | Local static locale list removed; live backend locales and persisted locale updates |
-| Personalization Onboarding | `lib/feature/personalization_onboarding/controller/personalization_onboarding_controller.dart`, `lib/feature/personalization_onboarding/screen/personalization_onboarding_screen.dart` | `/personalization-onboarding`, `/personalization-onboarding/interests` | Local-only interest state removed; live backend interest loading/toggling |
-| Share/Repost Options | `lib/feature/share_repost_system/controller/share_repost_system_controller.dart`, `lib/feature/share_repost_system/screen/share_repost_system_screen.dart` | `/share-repost/options` | Hardcoded share options removed; live backend options with loading/error/empty UI |
-| Legal Compliance | `lib/feature/legal_compliance/controller/legal_compliance_controller.dart` | `/legal-consents` compatibility route used by client service mapping | Consent updates now call dedicated backend legal consent endpoint |
-| Safety & Privacy | `lib/feature/safety_privacy/screen/safety_privacy_screen.dart` | existing safety/privacy settings routes | Placeholder-only rows removed so the screen no longer pretends unsupported flows are implemented |
-| Devices & Sessions | `lib/feature/settings/screen/devices_sessions_screen.dart` | `/activity-sessions`, `/security/state` flow already used by related feature | Placeholder-only storage/cache rows removed |
-| Business Profile | `lib/feature/business_profile/repository/business_profile_repository.dart` | `/business-profile` | Fake analytics fallback removed |
-| Learning Courses | `lib/feature/learning_courses/repository/learning_courses_repository.dart` | `/learning-courses` | Fake certificate/quiz fallback removed |
-| API Base URL | `lib/core/config/app_config.dart` | all | Vercel remains the effective backend base instead of localhost when remote-only mode is enabled |
+### App endpoints newly aligned in this pass
+
+- `GET /settings/state`
+- `PATCH /settings/state`
+
+### Previously aligned live app endpoints still present in the working tree
+
+- `GET /offline-sync`
+- `POST /offline-sync/retry`
+- `GET /localization-support`
+- `PATCH /localization-support`
+- `GET /personalization-onboarding`
+- `PATCH /personalization-onboarding/interests`
+- `GET /share-repost/options`
+- `POST /share-repost/track`
+- legal consent/account utility routes already moved off local-only flows in the current working tree
+
+## Frontend Screens Connected
+
+### Flutter screens connected or hardened in the current working tree
+
+- `lib/feature/settings/*`
+  - server-owned settings state now uses `/settings/state`
+- `lib/feature/offline_sync/screen/offline_sync_screen.dart`
+  - live backend state
+- `lib/feature/localization_support/screen/localization_support_screen.dart`
+  - live backend locale state
+- `lib/feature/personalization_onboarding/screen/personalization_onboarding_screen.dart`
+  - live backend onboarding state
+- `lib/feature/share_repost_system/screen/share_repost_system_screen.dart`
+  - live backend options
+- `lib/feature/legal_compliance/*`
+  - live backend consent updates
 
 ## Dashboard Pages Connected
 
-Verified as live and build-clean from existing repo state:
+Connected to authenticated backend admin APIs:
 
 - Overview analytics
 - Users
-- Posts / content moderation
+- Content moderation
 - Reports
 - Support operations
 - Marketplace
@@ -101,26 +148,23 @@ Verified as live and build-clean from existing repo state:
 - Events
 - Communities
 - Pages
-- Revenue / subscriptions
-- Notifications / campaigns
+- Live streams
+- Revenue
+- Wallet/subscriptions
+- Notification campaigns
+- Notification devices
 - Settings
 - Audit logs
-- Admin auth / session refresh
+- Admin auth/session refresh/logout
 
 ## Exact Files Changed
 
 ### Backend
 
-- `src/controllers/app-update-flow.controller.ts`
-- `src/controllers/deep-link-handler.controller.ts`
-- `src/controllers/localization-support.controller.ts`
-- `src/controllers/maintenance-mode.controller.ts`
-- `src/controllers/media-viewer.controller.ts`
-- `src/controllers/offline-sync.controller.ts`
-- `src/controllers/personalization-onboarding.controller.ts`
-- `src/controllers/share-repost.controller.ts`
-- `src/services/app-utility-database.service.ts`
-- `FULL_BACKEND_FRONTEND_DASHBOARD_INTEGRATION_REPORT.md`
+- `src/controllers/admin.controller.ts`
+- `src/dto/admin.dto.ts`
+- `src/modules/data.module.ts`
+- `src/services/admin-database.service.ts`
 
 ### Flutter
 
@@ -136,42 +180,45 @@ Verified as live and build-clean from existing repo state:
 - `lib/feature/personalization_onboarding/controller/personalization_onboarding_controller.dart`
 - `lib/feature/personalization_onboarding/screen/personalization_onboarding_screen.dart`
 - `lib/feature/safety_privacy/screen/safety_privacy_screen.dart`
+- `lib/feature/settings/controller/settings_state_controller.dart`
+- `lib/feature/settings/repository/settings_preferences_repository.dart`
 - `lib/feature/settings/screen/devices_sessions_screen.dart`
 - `lib/feature/share_repost_system/controller/share_repost_system_controller.dart`
 - `lib/feature/share_repost_system/screen/share_repost_system_screen.dart`
 
 ### Dashboard
 
-- No additional dashboard files changed in this pass
+- `.env.example`
+- `src/App.css`
+- `src/App.jsx`
+- `src/components/AdminViews.jsx`
+- `src/config/navigation.js`
+- `src/services/apiClient.js`
 
 ## Remaining Gaps
 
 ### Backend
 
-- `src/controllers/account-ops.controller.ts`
-  - non-email OTP flows still depend on `ExtendedDataService`
 - `src/services/settings-database.service.ts`
-  - settings catalog structure still depends on `SettingsDataService` for some production responses
-- `src/data/*`
-  - helper/static services still exist and are still used by untouched flows
-- chat presence remains runtime/realtime state rather than durable DB-backed state
+  - settings catalog responses still depend partly on `SettingsDataService`
+- non-email OTP and some untouched utility flows still depend on older helper/state services
+- runtime chat presence is still not a durable Prisma-backed state model
+- deeper admin mutation workflows for marketplace/jobs/events/communities/pages/live streams still need dedicated CRUD/action routes beyond read/list coverage
 
 ### Flutter
 
-- `SettingsStateController` and settings preference storage still keep some server-owned state locally for settings/data-privacy style screens
-- several feature areas requested in the brief still need stricter backend-only completion:
-  - groups/community edge workflows
-  - events edge workflows
-  - pages deeper actions
-  - marketplace remaining actions
-  - account switching/session-adjacent utility screens
-  - accessibility and data/privacy center screens beyond the slices updated here
-- `flutter test` could not validate behavior because the repo currently has no `test/` files
+- many requested feature slices are already partially backend-backed, but this pass did not finish every remaining server-owned screen called out in the brief:
+  - saved items and compare list edge flows
+  - calls lifecycle edge flows
+  - account switching edge flows
+  - blocked/muted and saved collections edge workflows
+  - jobs/pages/learning/polls/discovery deeper action coverage
+- settings screens now use the backend state endpoint, but they still need richer explicit per-screen error/retry messaging in some views
 
 ### Dashboard
 
-- Marketplace / Jobs / Events / Communities / Pages still lean on generic admin tables rather than richer moderation/ops workflows
-- deeper filters, action dialogs, and detail panels can still be expanded
+- list modules are live and build-clean, but still need richer filters, confirmation dialogs, detail panels, and admin mutations for full operational depth
+- notifications and support sections are still lighter-weight than the requested final console target
 
 ## Commands Run And Results
 
@@ -180,31 +227,25 @@ Verified as live and build-clean from existing repo state:
 - `npm.cmd install`
   - Passed
 - `npm.cmd run prisma:generate`
-  - Initially failed due Windows Prisma DLL lock
-  - Fixed by stopping backend node processes and clearing locked artifacts
-  - Final rerun passed
+  - Passed
 - `npm.cmd run typecheck`
   - Passed
 - `npm.cmd run build`
-  - Initially failed due Windows `dist` / incremental lock state
-  - Fixed by stopping backend node processes, removing `dist`, removing stale `tsconfig.tsbuildinfo`
-  - Final rerun passed
+  - Passed
 
 ### Flutter
 
 - `flutter pub get`
   - Passed
-- `dart format .`
+- `dart format lib/feature/settings/repository/settings_preferences_repository.dart lib/feature/settings/controller/settings_state_controller.dart`
   - Passed
 - `flutter analyze`
   - Passed
-- `flutter test`
-  - Failed because the repo currently has no `test/` directory test files
 
 ### Dashboard
 
 - `npm.cmd install`
-  - Passed earlier in this work session
+  - Passed
 - `npm.cmd run lint`
   - Passed
 - `npm.cmd run build`
@@ -212,13 +253,13 @@ Verified as live and build-clean from existing repo state:
 
 ## Completion Estimate
 
-- Backend: 81%
-- Flutter: 78%
-- Dashboard: 74%
+- Backend: 84%
+- Flutter: 80%
+- Dashboard: 82%
 
-## Intentionally Deferred Routes / Areas
+## Intentionally Deferred
 
-- non-email production OTP delivery provider integration
-- full settings catalog de-staticization away from `SettingsDataService`
-- richer admin CRUD/workflow depth for marketplace, jobs, events, communities, and pages
-- complete removal of all helper/static services from untouched backend slices
+- full de-staticization of all settings catalog metadata
+- non-email provider-backed OTP modernization
+- full admin operational CRUD for marketplace/jobs/events/communities/pages/live streams
+- complete backend-only cleanup of every remaining untouched helper-backed app slice

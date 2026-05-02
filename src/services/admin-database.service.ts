@@ -1174,6 +1174,440 @@ export class AdminDatabaseService implements OnModuleInit {
     );
   }
 
+  async queryAdminMarketplace(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const where: Prisma.MarketplaceProductWhereInput = {
+      ...(query.status?.trim() ? { status: query.status.trim() } : {}),
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { title: { contains: query.search.trim(), mode: 'insensitive' } },
+              { description: { contains: query.search.trim(), mode: 'insensitive' } },
+              { category: { contains: query.search.trim(), mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+    const [total, items] = await Promise.all([
+      this.prisma.marketplaceProduct.count({ where }),
+      this.prisma.marketplaceProduct.findMany({
+        where,
+        include: { seller: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return this.wrapPaginated(
+      items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        category: item.category,
+        price: Number(item.price),
+        currency: item.currency,
+        status: item.status,
+        stock: item.stock,
+        sellerName: item.seller.name,
+        sellerId: item.sellerId,
+        views: item.views,
+        watchers: item.watchers,
+        createdAt: item.createdAt.toISOString(),
+      })),
+      page,
+      limit,
+      total,
+    );
+  }
+
+  async queryAdminJobs(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const where: Prisma.JobWhereInput = {
+      ...(query.status?.trim() ? { status: query.status.trim() } : {}),
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { title: { contains: query.search.trim(), mode: 'insensitive' } },
+              { company: { contains: query.search.trim(), mode: 'insensitive' } },
+              { description: { contains: query.search.trim(), mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+    const [total, items] = await Promise.all([
+      this.prisma.job.count({ where }),
+      this.prisma.job.findMany({
+        where,
+        include: { recruiter: true, applications: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return this.wrapPaginated(
+      items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        company: item.company,
+        status: item.status,
+        type: item.type,
+        recruiterName: item.recruiter.name,
+        recruiterId: item.recruiterId,
+        applications: item.applications.length,
+        createdAt: item.createdAt.toISOString(),
+      })),
+      page,
+      limit,
+      total,
+    );
+  }
+
+  async queryAdminEvents(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const where: Prisma.EventWhereInput = {
+      ...(query.status?.trim() ? { status: query.status.trim() } : {}),
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { title: { contains: query.search.trim(), mode: 'insensitive' } },
+              { organizerName: { contains: query.search.trim(), mode: 'insensitive' } },
+              { location: { contains: query.search.trim(), mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+    const [total, items] = await Promise.all([
+      this.prisma.event.count({ where }),
+      this.prisma.event.findMany({
+        where,
+        include: { organizer: true, rsvps: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return this.wrapPaginated(
+      items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        organizerName: item.organizer.name,
+        organizerId: item.organizerId,
+        status: item.status,
+        location: item.location,
+        participants: item.rsvps.length,
+        price: Number(item.price),
+        createdAt: item.createdAt.toISOString(),
+      })),
+      page,
+      limit,
+      total,
+    );
+  }
+
+  async queryAdminCommunities(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const where: Prisma.CommunityWhereInput = {
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { name: { contains: query.search.trim(), mode: 'insensitive' } },
+              { description: { contains: query.search.trim(), mode: 'insensitive' } },
+              { category: { contains: query.search.trim(), mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+    const [total, items] = await Promise.all([
+      this.prisma.community.count({ where }),
+      this.prisma.community.findMany({
+        where,
+        include: { owner: true, members: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return this.wrapPaginated(
+      items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        ownerName: item.owner.name,
+        ownerId: item.ownerId,
+        privacy: item.privacy,
+        category: item.category,
+        status: item.deletedAt ? 'deleted' : 'active',
+        memberCount: item.members.length,
+        createdAt: item.createdAt.toISOString(),
+      })),
+      page,
+      limit,
+      total,
+    );
+  }
+
+  async queryAdminPages(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const where: Prisma.PageWhereInput = {
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { name: { contains: query.search.trim(), mode: 'insensitive' } },
+              { about: { contains: query.search.trim(), mode: 'insensitive' } },
+              { category: { contains: query.search.trim(), mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+    const [total, items] = await Promise.all([
+      this.prisma.page.count({ where }),
+      this.prisma.page.findMany({
+        where,
+        include: { owner: true, followers: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return this.wrapPaginated(
+      items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        ownerName: item.owner.name,
+        ownerId: item.ownerId,
+        category: item.category,
+        location: item.location,
+        status: 'active',
+        followerCount: item.followers.length,
+        createdAt: item.createdAt.toISOString(),
+      })),
+      page,
+      limit,
+      total,
+    );
+  }
+
+  async queryAdminLiveStreams(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const where: Prisma.LiveStreamSessionWhereInput = {
+      ...(query.status?.trim() ? { status: query.status.trim() } : {}),
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { title: { contains: query.search.trim(), mode: 'insensitive' } },
+              { description: { contains: query.search.trim(), mode: 'insensitive' } },
+              { category: { contains: query.search.trim(), mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+    const [total, items] = await Promise.all([
+      this.prisma.liveStreamSession.count({ where }),
+      this.prisma.liveStreamSession.findMany({
+        where,
+        include: { host: true, comments: true, reactions: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return this.wrapPaginated(
+      items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        hostName: item.host.name,
+        hostId: item.hostId,
+        category: item.category,
+        status: item.status,
+        viewerCount: item.viewerCount,
+        comments: item.comments.length,
+        reactions: item.reactions.length,
+        createdAt: item.createdAt.toISOString(),
+      })),
+      page,
+      limit,
+      total,
+    );
+  }
+
+  async queryAdminMonetization(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const txWhere: Prisma.WalletTransactionWhereInput = {
+      ...(query.status?.trim() ? { status: query.status.trim() } : {}),
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { description: { contains: query.search.trim(), mode: 'insensitive' } },
+              { type: { contains: query.search.trim(), mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+    const [transactionsTotal, subscriptionTotal, transactions, subscriptions] =
+      await Promise.all([
+        this.prisma.walletTransaction.count({ where: txWhere }),
+        this.prisma.subscription.count({
+          where: query.status?.trim() ? { status: query.status.trim() } : undefined,
+        }),
+        this.prisma.walletTransaction.findMany({
+          where: txWhere,
+          include: { user: true },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+        }),
+        this.prisma.subscription.findMany({
+          where: query.status?.trim() ? { status: query.status.trim() } : undefined,
+          include: { user: true, plan: true },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+        }),
+      ]);
+
+    const items = [
+      ...transactions.map((item) => ({
+        id: item.id,
+        kind: 'transaction',
+        userName: item.user.name,
+        userId: item.userId,
+        status: item.status,
+        amount: Number(item.amount),
+        type: item.type,
+        label: item.description ?? item.type,
+        createdAt: item.createdAt.toISOString(),
+      })),
+      ...subscriptions.map((item) => ({
+        id: item.id,
+        kind: 'subscription',
+        userName: item.user.name,
+        userId: item.userId,
+        status: item.status,
+        amount: item.plan ? Number(item.plan.price) : null,
+        type: item.planCode,
+        label: item.plan?.name ?? item.planCode,
+        createdAt: item.createdAt.toISOString(),
+      })),
+    ].slice(0, limit);
+
+    return {
+      ...this.wrapPaginated(items, page, limit, transactionsTotal + subscriptionTotal),
+      summary: {
+        transactions: transactionsTotal,
+        subscriptions: subscriptionTotal,
+      },
+    };
+  }
+
+  async queryAdminNotificationDevices(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const activeFilter =
+      query.status?.trim().toLowerCase() === 'active'
+        ? true
+        : query.status?.trim().toLowerCase() === 'inactive'
+          ? false
+          : undefined;
+    const where: Prisma.PushDeviceTokenWhereInput = {
+      ...(activeFilter === undefined ? {} : { isActive: activeFilter }),
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { token: { contains: query.search.trim(), mode: 'insensitive' } },
+              { platform: { contains: query.search.trim(), mode: 'insensitive' } },
+              { deviceLabel: { contains: query.search.trim(), mode: 'insensitive' } },
+              { user: { name: { contains: query.search.trim(), mode: 'insensitive' } } },
+            ],
+          }
+        : {}),
+    };
+    const [total, items] = await Promise.all([
+      this.prisma.pushDeviceToken.count({ where }),
+      this.prisma.pushDeviceToken.findMany({
+        where,
+        include: { user: true },
+        orderBy: { updatedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return this.wrapPaginated(
+      items.map((item) => ({
+        id: item.id,
+        userName: item.user.name,
+        userId: item.userId,
+        platform: item.platform,
+        deviceLabel: item.deviceLabel,
+        status: item.isActive ? 'active' : 'inactive',
+        token: item.token,
+        lastSeenAt: item.lastSeenAt.toISOString(),
+        createdAt: item.createdAt.toISOString(),
+      })),
+      page,
+      limit,
+      total,
+    );
+  }
+
   async getAdminUsers() {
     return this.prisma.appUser.findMany({
       orderBy: { createdAt: 'desc' },

@@ -1,5 +1,4 @@
 import { Global, Module } from '@nestjs/common';
-import { AdminOpsDataService } from '../data/admin-ops-data.service';
 import { AppExtensionsDataService } from '../data/app-extensions-data.service';
 import { EcosystemDataService } from '../data/ecosystem-data.service';
 import { ExtendedDataService } from '../data/extended-data.service';
@@ -37,7 +36,6 @@ import { AppUtilityDatabaseService } from '../services/app-utility-database.serv
     PlatformDataService,
     EcosystemDataService,
     ExtendedDataService,
-    AdminOpsDataService,
     AppExtensionsDataService,
     SettingsDataService,
     AdminSessionGuard,
@@ -70,7 +68,6 @@ import { AppUtilityDatabaseService } from '../services/app-utility-database.serv
     PlatformDataService,
     EcosystemDataService,
     ExtendedDataService,
-    AdminOpsDataService,
     AppExtensionsDataService,
     SettingsDataService,
     AdminSessionGuard,
