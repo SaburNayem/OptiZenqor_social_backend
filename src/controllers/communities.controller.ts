@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
@@ -11,7 +12,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { CommunityRecord } from '../data/ecosystem-data.service';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { CommunitiesQueryDto, CreatePageDto, PagesQueryDto } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
@@ -110,15 +110,14 @@ export class CommunitiesController {
     );
     const result = await this.experienceDatabase.joinCommunity(id, actor.id);
     return {
-      success: true,
-      joined: result.joined,
-      memberCount: result.memberCount,
-      community: result.community,
-      data: {
+      ...successResponse('Community membership updated successfully.', {
         joined: result.joined,
         memberCount: result.memberCount,
         community: result.community,
-      },
+      }),
+      joined: result.joined,
+      memberCount: result.memberCount,
+      community: result.community,
     };
   }
 
@@ -135,15 +134,14 @@ export class CommunitiesController {
     );
     const result = await this.experienceDatabase.leaveCommunity(id, actor.id);
     return {
-      success: true,
-      joined: result.joined,
-      memberCount: result.memberCount,
-      community: result.community,
-      data: {
+      ...successResponse('Community membership updated successfully.', {
         joined: result.joined,
         memberCount: result.memberCount,
         community: result.community,
-      },
+      }),
+      joined: result.joined,
+      memberCount: result.memberCount,
+      community: result.community,
     };
   }
 
@@ -162,10 +160,8 @@ export class CommunitiesController {
       ownerId: owner.id,
     });
     return {
-      success: true,
-      message: 'Community created successfully.',
+      ...successResponse('Community created successfully.', community),
       community,
-      data: community,
     };
   }
 
@@ -189,10 +185,8 @@ export class CommunitiesController {
       this.normalizeCommunityPatch(body),
     );
     return {
-      success: true,
-      message: 'Community updated successfully.',
+      ...successResponse('Community updated successfully.', community),
       community,
-      data: community,
     };
   }
 
@@ -211,18 +205,16 @@ export class CommunitiesController {
   async getCreatePageOptions() {
     const payload = await this.experienceDatabase.getPageCreateOptions();
     return {
-      success: true,
-      message: 'Page creation options fetched successfully.',
-      requiredProfileType: payload.requiredProfileType,
-      categories: payload.categories,
-      ownerSuggestions: payload.ownerSuggestions,
-      locations: payload.locations,
-      data: {
+      ...successResponse('Page creation options fetched successfully.', {
         requiredProfileType: payload.requiredProfileType,
         categories: payload.categories,
         ownerSuggestions: payload.ownerSuggestions,
         locations: payload.locations,
-      },
+      }),
+      requiredProfileType: payload.requiredProfileType,
+      categories: payload.categories,
+      ownerSuggestions: payload.ownerSuggestions,
+      locations: payload.locations,
     };
   }
 
@@ -343,11 +335,16 @@ export class CommunitiesController {
 
   private normalizeCommunityCreateInput(body: Record<string, unknown>) {
     const patch = this.normalizeCommunityPatch(body);
+    if (!patch.name) {
+      throw new BadRequestException('Community name is required.');
+    }
+    if (!patch.description) {
+      throw new BadRequestException('Community description is required.');
+    }
     return {
       ...patch,
-      name: patch.name ?? 'New Community',
-      description:
-        patch.description ?? 'Community created from the updated mobile flow.',
+      name: patch.name,
+      description: patch.description,
     };
   }
 
@@ -377,13 +374,13 @@ export class CommunitiesController {
 
   private readPrivacy(value: unknown) {
     return value === 'public' || value === 'private' || value === 'hidden'
-      ? (value as CommunityRecord['privacy'])
+      ? (value as 'public' | 'private' | 'hidden')
       : undefined;
   }
 
   private readNotificationLevel(value: unknown) {
     return value === 'all' || value === 'highlights' || value === 'off'
-      ? (value as CommunityRecord['notificationLevel'])
+      ? (value as 'all' | 'highlights' | 'off')
       : undefined;
   }
 }
