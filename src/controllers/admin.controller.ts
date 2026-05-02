@@ -26,8 +26,10 @@ import {
   AdminPremiumPlanUpdateDto,
   AdminReportsQueryDto,
   AdminSettingsPatchDto,
+  AdminUpdateLiveStreamDto,
   AdminUpdateReportDto,
   AdminUpdateUserDto,
+  AdminUpdateUserStatusDto,
   AdminUsersQueryDto,
 } from '../dto/admin.dto';
 import { AdminDatabaseService } from '../services/admin-database.service';
@@ -122,6 +124,21 @@ export class AdminController {
     );
   }
 
+  @Patch('users/:id/status')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Update a user status through a backward-compatible admin route' })
+  async updateAdminUserStatus(
+    @Param('id') id: string,
+    @Body() body: AdminUpdateUserStatusDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin user status updated successfully.',
+      await this.adminDatabase.updateAdminUser(id, body, admin.adminId),
+    );
+  }
+
   @Get('content')
   @ApiOperation({ summary: 'List moderatable content for admin management' })
   async getContent(@Query() query: AdminContentQueryDto) {
@@ -142,6 +159,21 @@ export class AdminController {
     return successResponse(
       'Admin content moderation applied successfully.',
       await this.adminDatabase.moderateContent(type, id, body, admin.adminId),
+    );
+  }
+
+  @Patch('content/:id/moderation')
+  @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
+  @ApiOperation({ summary: 'Moderate content through the dashboard compatibility route' })
+  async moderateContentAlias(
+    @Param('id') id: string,
+    @Body() body: AdminModerateContentDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin content moderation applied successfully.',
+      await this.adminDatabase.moderateContentById(id, body, admin.adminId),
     );
   }
 
@@ -251,6 +283,21 @@ export class AdminController {
     );
   }
 
+  @Patch('live-streams/:id')
+  @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
+  @ApiOperation({ summary: 'Update live stream moderation and lifecycle state' })
+  async updateLiveStream(
+    @Param('id') id: string,
+    @Body() body: AdminUpdateLiveStreamDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin live stream updated successfully.',
+      await this.adminDatabase.updateAdminLiveStream(id, body, admin.adminId),
+    );
+  }
+
   @Get('monetization')
   @ApiOperation({ summary: 'List wallet and subscription activity for admin review' })
   async getMonetization(@Query() query: AdminEntityListQueryDto) {
@@ -268,6 +315,28 @@ export class AdminController {
     return this.getMonetization(query);
   }
 
+  @Get('wallet')
+  @ApiOperation({ summary: 'List wallet transactions for admin review' })
+  async getWallet(@Query() query: AdminEntityListQueryDto) {
+    const payload = await this.adminDatabase.queryAdminWallet(query);
+    return successResponse(
+      'Admin wallet data fetched successfully.',
+      payload,
+      payload.pagination,
+    );
+  }
+
+  @Get('subscriptions')
+  @ApiOperation({ summary: 'List subscriptions for admin review' })
+  async getSubscriptions(@Query() query: AdminEntityListQueryDto) {
+    const payload = await this.adminDatabase.queryAdminSubscriptions(query);
+    return successResponse(
+      'Admin subscriptions fetched successfully.',
+      payload,
+      payload.pagination,
+    );
+  }
+
   @Get('notification-devices')
   @ApiOperation({ summary: 'List push notification devices for admin review' })
   async getNotificationDevices(@Query() query: AdminEntityListQueryDto) {
@@ -277,6 +346,12 @@ export class AdminController {
       payload,
       payload.pagination,
     );
+  }
+
+  @Get('notifications/devices')
+  @ApiOperation({ summary: 'Backward-compatible admin notifications devices route' })
+  async getNotificationDevicesAlias(@Query() query: AdminEntityListQueryDto) {
+    return this.getNotificationDevices(query);
   }
 
   @Get('premium-plans')

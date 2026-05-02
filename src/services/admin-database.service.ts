@@ -1042,6 +1042,20 @@ export class AdminDatabaseService implements OnModuleInit {
     });
   }
 
+  async moderateContentById(
+    id: string,
+    patch: {
+      targetType?: 'post' | 'reel' | 'story';
+      status?: string;
+      remove?: boolean;
+      note?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    const targetType = patch.targetType ?? (await this.resolveModerationTargetType(id));
+    return this.moderateContent(targetType, id, patch, actorAdminId);
+  }
+
   async queryReports(query: {
     page?: number;
     limit?: number;
@@ -1476,6 +1490,85 @@ export class AdminDatabaseService implements OnModuleInit {
     );
   }
 
+  async updateAdminLiveStream(
+    id: string,
+    patch: {
+      status?: string;
+      title?: string;
+      description?: string;
+      category?: string;
+      audience?: string;
+      commentsEnabled?: boolean;
+      slowModeSeconds?: number;
+      note?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    const existing = await this.prisma.liveStreamSession.findUnique({
+      where: { id },
+      include: { host: true, comments: true, reactions: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Live stream ${id} not found.`);
+    }
+
+    const metadata = this.readObject(existing.metadata);
+    const moderation = this.readObject(metadata.moderation);
+    const updated = await this.prisma.liveStreamSession.update({
+      where: { id },
+      data: {
+        status: patch.status?.trim() || undefined,
+        title: patch.title?.trim() || undefined,
+        description: patch.description?.trim() || undefined,
+        category: patch.category?.trim() || undefined,
+        audience: patch.audience?.trim() || undefined,
+        metadata: {
+          ...metadata,
+          moderation: {
+            ...moderation,
+            ...(patch.commentsEnabled === undefined
+              ? {}
+              : { commentsEnabled: patch.commentsEnabled }),
+            ...(patch.slowModeSeconds === undefined
+              ? {}
+              : { slowModeSeconds: patch.slowModeSeconds }),
+            ...(patch.note?.trim() ? { note: patch.note.trim() } : {}),
+          },
+        } as Prisma.InputJsonValue,
+        ...(patch.status?.trim().toLowerCase() === 'ended'
+          ? { endedAt: new Date() }
+          : patch.status?.trim().toLowerCase() === 'live'
+            ? { startedAt: existing.startedAt ?? new Date() }
+            : {}),
+        updatedAt: new Date(),
+      },
+      include: { host: true, comments: true, reactions: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'live_stream.update',
+      entityType: 'live_stream',
+      entityId: updated.id,
+      metadata: patch,
+    });
+
+    return {
+      id: updated.id,
+      title: updated.title,
+      hostName: updated.host.name,
+      hostId: updated.hostId,
+      category: updated.category,
+      status: updated.status,
+      audience: updated.audience,
+      viewerCount: updated.viewerCount,
+      comments: updated.comments.length,
+      reactions: updated.reactions.length,
+      createdAt: updated.createdAt.toISOString(),
+      updatedAt: updated.updatedAt.toISOString(),
+    };
+  }
+
   async queryAdminMonetization(query: {
     page?: number;
     limit?: number;
@@ -1549,6 +1642,109 @@ export class AdminDatabaseService implements OnModuleInit {
         subscriptions: subscriptionTotal,
       },
     };
+  }
+
+  async queryAdminWallet(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const where: Prisma.WalletTransactionWhereInput = {
+      ...(query.status?.trim() ? { status: query.status.trim() } : {}),
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { description: { contains: query.search.trim(), mode: 'insensitive' } },
+              { type: { contains: query.search.trim(), mode: 'insensitive' } },
+              { user: { name: { contains: query.search.trim(), mode: 'insensitive' } } },
+            ],
+          }
+        : {}),
+    };
+    const [total, items] = await Promise.all([
+      this.prisma.walletTransaction.count({ where }),
+      this.prisma.walletTransaction.findMany({
+        where,
+        include: { user: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return this.wrapPaginated(
+      items.map((item) => ({
+        id: item.id,
+        userName: item.user.name,
+        userId: item.userId,
+        type: item.type,
+        amount: Number(item.amount),
+        currency: item.currency,
+        status: item.status,
+        description: item.description,
+        createdAt: item.createdAt.toISOString(),
+      })),
+      page,
+      limit,
+      total,
+    );
+  }
+
+  async queryAdminSubscriptions(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const where: Prisma.SubscriptionWhereInput = {
+      ...(query.status?.trim() ? { status: query.status.trim() } : {}),
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { planCode: { contains: query.search.trim(), mode: 'insensitive' } },
+              { provider: { contains: query.search.trim(), mode: 'insensitive' } },
+              { user: { name: { contains: query.search.trim(), mode: 'insensitive' } } },
+              { plan: { name: { contains: query.search.trim(), mode: 'insensitive' } } },
+            ],
+          }
+        : {}),
+    };
+    const [total, items] = await Promise.all([
+      this.prisma.subscription.count({ where }),
+      this.prisma.subscription.findMany({
+        where,
+        include: { user: true, plan: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return this.wrapPaginated(
+      items.map((item) => ({
+        id: item.id,
+        userName: item.user.name,
+        userId: item.userId,
+        planId: item.planId,
+        planCode: item.planCode,
+        planName: item.plan?.name ?? item.planCode,
+        provider: item.provider,
+        status: item.status,
+        autoRenew: item.autoRenew,
+        currentPeriodEnd: item.currentPeriodEnd?.toISOString() ?? null,
+        createdAt: item.createdAt.toISOString(),
+      })),
+      page,
+      limit,
+      total,
+    );
   }
 
   async queryAdminNotificationDevices(query: {
@@ -2285,5 +2481,25 @@ export class AdminDatabaseService implements OnModuleInit {
       targetType: 'story',
       ...this.wrapPaginated(items, page, limit, total),
     };
+  }
+
+  private async resolveModerationTargetType(id: string) {
+    const [post, reel, story] = await Promise.all([
+      this.prisma.appPost.findUnique({ where: { id }, select: { id: true } }),
+      this.prisma.reel.findUnique({ where: { id }, select: { id: true } }),
+      this.prisma.story.findUnique({ where: { id }, select: { id: true } }),
+    ]);
+
+    if (post) {
+      return 'post' as const;
+    }
+    if (reel) {
+      return 'reel' as const;
+    }
+    if (story) {
+      return 'story' as const;
+    }
+
+    throw new NotFoundException(`Content ${id} not found.`);
   }
 }

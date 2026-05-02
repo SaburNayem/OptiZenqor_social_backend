@@ -284,6 +284,11 @@ export class AdminUpdateUserDto {
 }
 
 export class AdminModerateContentDto {
+  @ApiPropertyOptional({ enum: ['post', 'reel', 'story'] })
+  @IsOptional()
+  @IsIn(['post', 'reel', 'story'])
+  targetType?: 'post' | 'reel' | 'story';
+
   @ApiPropertyOptional({ enum: ['Visible', 'Featured', 'Under review', 'Muted reach', 'Removed'] })
   @IsOptional()
   @IsString()
@@ -312,6 +317,18 @@ export class AdminUpdateReportDto {
   note?: string;
 }
 
+export class AdminUpdateUserStatusDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  blocked?: boolean;
+}
+
 export class AdminSettingsPatchDto {
   @ApiProperty({ type: 'object', additionalProperties: true })
   @IsObject()
@@ -332,6 +349,50 @@ export class RegisterPushDeviceDto {
   @IsOptional()
   @IsString()
   deviceLabel?: string;
+}
+
+export class AdminUpdateLiveStreamDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  audience?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  commentsEnabled?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  slowModeSeconds?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  note?: string;
 }
 
 export class UpdateLiveStreamStudioDto {
