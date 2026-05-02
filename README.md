@@ -93,6 +93,8 @@ Optional but recommended:
 - CORS origins
 - frontend URLs
 - rate-limit configuration
+- `ADMIN_BOOTSTRAP_EMAIL`, `ADMIN_BOOTSTRAP_PASSWORD`, `ADMIN_BOOTSTRAP_NAME`, and `ADMIN_BOOTSTRAP_ROLE` for a permanent admin panel account
+- `ADMIN_BOOTSTRAP_FORCE_SYNC=true` only when you want startup to reset that admin's password/name/role from `.env`
 - `AUTH_EXPOSE_TEST_ACCOUNTS=true` only for controlled local QA if `/auth/demo-accounts` is explicitly needed
 - support contact configuration for `/support-help/mail`
 

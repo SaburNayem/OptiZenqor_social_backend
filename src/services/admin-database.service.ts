@@ -3306,11 +3306,6 @@ export class AdminDatabaseService implements OnModuleInit {
   }
 
   private async ensureDefaultAdmin() {
-    const count = await this.prisma.adminUser.count();
-    if (count > 0) {
-      return;
-    }
-
     const email = process.env.ADMIN_BOOTSTRAP_EMAIL?.trim().toLowerCase();
     const password = process.env.ADMIN_BOOTSTRAP_PASSWORD?.trim();
     if (!email || !password) {
@@ -3318,15 +3313,37 @@ export class AdminDatabaseService implements OnModuleInit {
     }
     const name = process.env.ADMIN_BOOTSTRAP_NAME?.trim() || 'Admin';
     const role = process.env.ADMIN_BOOTSTRAP_ROLE?.trim() || 'Super Admin';
+    const forceSync =
+      process.env.ADMIN_BOOTSTRAP_FORCE_SYNC?.trim().toLowerCase() === 'true';
+    const existing = await this.prisma.adminUser.findUnique({
+      where: { email },
+    });
 
-    await this.prisma.adminUser.create({
+    if (!existing) {
+      await this.prisma.adminUser.create({
+        data: {
+          id: makeId('admin'),
+          name,
+          email,
+          role,
+          passwordHash: await argon2.hash(password),
+          mfaEnabled: false,
+          isActive: true,
+        },
+      });
+      return;
+    }
+
+    if (!forceSync) {
+      return;
+    }
+
+    await this.prisma.adminUser.update({
+      where: { email },
       data: {
-        id: makeId('admin'),
         name,
-        email,
         role,
         passwordHash: await argon2.hash(password),
-        mfaEnabled: false,
         isActive: true,
       },
     });
