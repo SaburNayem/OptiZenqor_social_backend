@@ -25,6 +25,11 @@ export class SupportDatabaseService {
   }
 
   async getSupportMail() {
+    const normalized = await this.readNormalizedSupportMail();
+    if (normalized) {
+      return normalized;
+    }
+
     const row = await this.prisma.adminOperationalSetting.findUnique({
       where: { key: 'support.contact' },
     });
@@ -36,6 +41,42 @@ export class SupportDatabaseService {
       contactEmail: this.readString(config.contactEmail),
       escalationEmail: this.readString(config.escalationEmail),
       responseTime: this.readString(config.responseTime),
+    };
+  }
+
+  private async readNormalizedSupportMail() {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        key: string;
+        value: Prisma.JsonValue;
+        is_public: boolean;
+      }>
+    >`select key, value, is_public from app_support_config_entries where is_public = true`;
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const readEntry = (key: string) => {
+      const row = rows.find((item) => item.key === key);
+      if (!row) {
+        return null;
+      }
+      const value = row.value;
+      if (typeof value === 'string' && value.trim().length > 0) {
+        return value.trim();
+      }
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        const nested = (value as Record<string, unknown>).value;
+        return typeof nested === 'string' && nested.trim().length > 0 ? nested.trim() : null;
+      }
+      return null;
+    };
+
+    return {
+      contactEmail: readEntry('support.contact_email'),
+      escalationEmail: readEntry('support.escalation_email'),
+      responseTime: readEntry('support.response_time'),
     };
   }
 

@@ -50,7 +50,10 @@ export type IdPrefix =
   | 'offer'
   | 'admin'
   | 'push_device'
-  | 'audit';
+  | 'audit'
+  | 'presence'
+  | 'call_lifecycle'
+  | 'live_lifecycle';
 
 export function makeId<T extends IdPrefix>(prefix: T): `${T}_${string}` {
   return `${prefix}_${randomUUID().replace(/-/g, '')}` as `${T}_${string}`;

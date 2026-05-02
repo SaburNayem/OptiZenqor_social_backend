@@ -6,6 +6,10 @@ Generated: 2026-05-02
 
 Fixed in this implementation cycle:
 
+- backend now includes safe Prisma schema + migration coverage for localization, accessibility, legal document versioning, support config, onboarding/personalization catalogs, analytics snapshots, chat presence snapshots, call lifecycle snapshots, and live lifecycle snapshots
+- backend localization, accessibility, legal, onboarding/personalization, and support mail reads now prefer normalized tables when populated
+- backend realtime/live flows now persist durable presence/call/live lifecycle snapshots
+- backend admin coverage now includes detail/export routes for communities, pages, live streams, wallet transactions, subscriptions, revenue, wallet export, and subscription export
 - backend admin update DTO validation is now stricter for marketplace, jobs, and events
 - backend support operations now cover ticket detail, assignment, reply, and SLA metadata with audit logs
 - backend notification campaigns now cover detail plus send/cancel/delete lifecycle actions
@@ -17,7 +21,7 @@ Fixed in this implementation cycle:
 
 Still remaining after this implementation cycle:
 
-- no new Prisma migration/model set was landed for the broader catalog normalization requested in the brief
+- Prisma client regeneration is still blocked by the Windows file-lock issue, so the new schema cannot yet be claimed fully generated locally
 - several backend feature areas still infer or aggregate records instead of exposing stricter first-class contracts
 - the dashboard still needs broad module-level create/edit/moderation UX beyond the notification slice
 - Flutter marketplace, calls/live lifecycle, support/help depth, and additional server-owned utility flows still need the same strict cleanup
@@ -27,9 +31,9 @@ Still remaining after this implementation cycle:
 | File path | Current problem | Required backend endpoint/model | Required frontend/dashboard fix |
 | --- | --- | --- | --- |
 | `src/services/experience-database.service.ts` | Jobs/learning/polls/personalization areas still derive some records from JSON blobs and inferred labels when first-class rows are absent. | Normalize learning courses, polls, job alerts/profile slices, and personalization catalogs where these are true platform features. | Flutter learning, jobs networking, and personalization screens should consume dedicated contracts instead of inferred shapes. |
-| `src/services/realtime-state.service.ts` | Presence is still in-process runtime state and not durable across restarts. | Add Prisma-backed chat presence/call lifecycle snapshot models if presence must be production durable. | Flutter chat/calls/live screens should use backend lifecycle snapshots instead of in-memory state. |
-| `prisma/schema.prisma` | Existing operational settings can store config, but the requested normalized models for localization/accessibility/legal/support/presence/analytics catalogs are still missing. | Add safe Prisma models and non-destructive migrations for the missing catalogs and lifecycle tables. | Flutter and dashboard clients can then move to stricter first-class contracts. |
-| `src/services/admin-database.service.ts` and `src/controllers/admin*.ts` | Admin coverage improved, but CRUD/moderation/export coverage is still incomplete for several modules including communities, pages, live streams, wallet/subscriptions/revenue export flows, and some moderation actions. | Complete the remaining protected admin routes and ensure each mutation writes `AdminAuditLog`. | Dashboard pages still need those mutation routes before they can become fully operational. |
+| `src/services/realtime-state.service.ts` | Presence and call snapshots are now durable, but clients are not yet consuming the persisted snapshot contract directly. | Expose or document first-class snapshot consumption routes if Flutter/dashboard need them live. | Flutter chat/calls/live screens should stop inferring lifecycle state once snapshot-backed contracts are wired end-to-end. |
+| `prisma/schema.prisma` | Normalized catalog/snapshot models now exist, but the tables still need seeded/admin-managed content and successful local Prisma client regeneration. | Finish migration application/generation and add admin management flows or seed content for the new catalogs. | Flutter and dashboard clients can then move off compatibility parsing onto stricter first-class contracts. |
+| `src/services/admin-database.service.ts` and `src/controllers/admin*.ts` | Admin detail/export coverage is stronger, but some create/delete/moderation workflows and richer export delivery are still incomplete. | Finish remaining protected admin routes and keep every mutation audited. | Dashboard pages still need real forms, confirmations, and action UX wired to the expanded API surface. |
 
 ## Flutter App
 

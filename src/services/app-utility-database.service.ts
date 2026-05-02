@@ -85,11 +85,13 @@ export class AppUtilityDatabaseService {
   }
 
   async getOnboardingSlides() {
-    const configured = this.readArrayObjects(
-      await this.readOperationalSetting('app.onboarding.slides'),
-    )
-      .map((item, index) => this.normalizeOnboardingSlide(item, index))
-      .filter((item) => item.title.trim().length > 0);
+    const normalizedSlides = await this.readOnboardingCatalogItems('slide');
+    const configured =
+      normalizedSlides.length > 0
+        ? normalizedSlides.map((item, index) => this.normalizeOnboardingSlide(item, index))
+        : this.readArrayObjects(await this.readOperationalSetting('app.onboarding.slides'))
+            .map((item, index) => this.normalizeOnboardingSlide(item, index))
+            .filter((item) => item.title.trim().length > 0);
     const slides = configured;
     return {
       slides,
@@ -123,9 +125,17 @@ export class AppUtilityDatabaseService {
   }
 
   async getOnboardingInterests() {
-    const configured = this.readStringArray(
-      await this.readOperationalSetting('app.onboarding.interests'),
-    );
+    const normalizedPersonalization = await this.readPersonalizationCatalog();
+    if (normalizedPersonalization.length > 0) {
+      return normalizedPersonalization;
+    }
+
+    const normalizedOnboarding = await this.readOnboardingInterestCatalog();
+    if (normalizedOnboarding.length > 0) {
+      return normalizedOnboarding;
+    }
+
+    const configured = this.readStringArray(await this.readOperationalSetting('app.onboarding.interests'));
     if (configured.length > 0) {
       return configured;
     }
@@ -779,15 +789,82 @@ export class AppUtilityDatabaseService {
   }
 
   private async resolveSupportedLocales() {
-    const configured = this.readArrayObjects(
-      await this.readOperationalSetting('app.localization.locales'),
-    )
+    const normalized = await this.readLocalizationCatalog();
+    if (normalized.length > 0) {
+      return normalized;
+    }
+
+    return this.readArrayObjects(await this.readOperationalSetting('app.localization.locales'))
       .map((item) => ({
         localeCode: this.readString(item.localeCode) ?? '',
         label: this.readString(item.label) ?? '',
       }))
       .filter((item) => item.localeCode.length > 0 && item.label.length > 0);
-    return configured;
+  }
+
+  private async readOnboardingCatalogItems(catalogType: string) {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        code: string;
+        title: string;
+        subtitle: string | null;
+        icon: string | null;
+      }>
+    >`select code, title, subtitle, icon
+       from app_onboarding_catalog_items
+       where catalog_type = ${catalogType} and is_active = true
+       order by sort_order asc, code asc`;
+
+    return rows.map((item) => ({
+      id: item.code,
+      title: item.title,
+      subtitle: item.subtitle,
+      icon: item.icon,
+    }));
+  }
+
+  private async readOnboardingInterestCatalog() {
+    const rows = await this.prisma.$queryRaw<Array<{ title: string }>>`
+      select title
+      from app_onboarding_catalog_items
+      where catalog_type = 'interest' and is_active = true
+      order by sort_order asc, code asc
+    `;
+    return rows
+      .map((item) => item.title?.trim() || '')
+      .filter((item) => item.length > 0);
+  }
+
+  private async readPersonalizationCatalog() {
+    const rows = await this.prisma.$queryRaw<Array<{ title: string }>>`
+      select title
+      from app_personalization_catalog_items
+      where is_active = true
+      order by sort_order asc, code asc
+    `;
+    return rows
+      .map((item) => item.title?.trim() || '')
+      .filter((item) => item.length > 0);
+  }
+
+  private async readLocalizationCatalog() {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        locale_code: string;
+        label: string;
+        native_label: string | null;
+      }>
+    >`select locale_code, label, native_label
+       from app_localization_locale_catalog
+       where is_active = true
+       order by is_default desc, sort_order asc, locale_code asc`;
+
+    return rows
+      .map((item) => ({
+        localeCode: item.locale_code?.trim() || '',
+        label: item.native_label?.trim() || item.label?.trim() || '',
+      }))
+      .filter((item) => item.localeCode.length > 0 && item.label.length > 0);
   }
 
   private inferMediaType(url: string, fallbackType?: string | null) {

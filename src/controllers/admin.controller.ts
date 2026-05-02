@@ -408,6 +408,15 @@ export class AdminController {
     );
   }
 
+  @Get('communities/:id')
+  @ApiOperation({ summary: 'Get community detail for admin review' })
+  async getCommunityDetail(@Param('id') id: string) {
+    return successResponse(
+      'Admin community fetched successfully.',
+      await this.adminDatabase.getAdminCommunity(id),
+    );
+  }
+
   @Patch('communities/:id')
   @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
   @ApiOperation({ summary: 'Update a community from the admin surface' })
@@ -428,6 +437,15 @@ export class AdminController {
   async getPages(@Query() query: AdminEntityListQueryDto) {
     const payload = await this.adminDatabase.queryAdminPages(query);
     return successResponse('Admin pages fetched successfully.', payload, payload.pagination);
+  }
+
+  @Get('pages/:id')
+  @ApiOperation({ summary: 'Get page detail for admin review' })
+  async getPageDetail(@Param('id') id: string) {
+    return successResponse(
+      'Admin page fetched successfully.',
+      await this.adminDatabase.getAdminPage(id),
+    );
   }
 
   @Patch('pages/:id')
@@ -453,6 +471,15 @@ export class AdminController {
       'Admin live streams fetched successfully.',
       payload,
       payload.pagination,
+    );
+  }
+
+  @Get('live-streams/:id')
+  @ApiOperation({ summary: 'Get live stream detail for admin review' })
+  async getLiveStreamDetail(@Param('id') id: string) {
+    return successResponse(
+      'Admin live stream fetched successfully.',
+      await this.adminDatabase.getAdminLiveStream(id),
     );
   }
 
@@ -514,6 +541,43 @@ export class AdminController {
     );
   }
 
+  @Get('revenue/export')
+  @Roles('Super Admin', 'Operations Admin', 'Finance Admin')
+  @ApiOperation({ summary: 'Export revenue, wallet, and subscription admin data' })
+  async exportRevenue(
+    @Query() query: AdminEntityListQueryDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin revenue export prepared successfully.',
+      await this.adminDatabase.exportAdminRevenue(query, admin.adminId),
+    );
+  }
+
+  @Get('wallet/export')
+  @Roles('Super Admin', 'Operations Admin', 'Finance Admin')
+  @ApiOperation({ summary: 'Export wallet transaction admin data' })
+  async exportWallet(
+    @Query() query: AdminEntityListQueryDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin wallet export prepared successfully.',
+      await this.adminDatabase.exportAdminWallet(query, admin.adminId),
+    );
+  }
+
+  @Get('wallet/:id')
+  @ApiOperation({ summary: 'Get wallet transaction detail for admin review' })
+  async getWalletDetail(@Param('id') id: string) {
+    return successResponse(
+      'Admin wallet transaction fetched successfully.',
+      await this.adminDatabase.getAdminWalletTransaction(id),
+    );
+  }
+
   @Get('subscriptions')
   @ApiOperation({ summary: 'List subscriptions for admin review' })
   async getSubscriptions(@Query() query: AdminEntityListQueryDto) {
@@ -522,6 +586,29 @@ export class AdminController {
       'Admin subscriptions fetched successfully.',
       payload,
       payload.pagination,
+    );
+  }
+
+  @Get('subscriptions/export')
+  @Roles('Super Admin', 'Operations Admin', 'Finance Admin')
+  @ApiOperation({ summary: 'Export subscription admin data' })
+  async exportSubscriptions(
+    @Query() query: AdminEntityListQueryDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin subscriptions export prepared successfully.',
+      await this.adminDatabase.exportAdminSubscriptions(query, admin.adminId),
+    );
+  }
+
+  @Get('subscriptions/:id')
+  @ApiOperation({ summary: 'Get subscription detail for admin review' })
+  async getSubscriptionDetail(@Param('id') id: string) {
+    return successResponse(
+      'Admin subscription fetched successfully.',
+      await this.adminDatabase.getAdminSubscription(id),
     );
   }
 

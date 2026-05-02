@@ -592,6 +592,10 @@ export class SocialStateDatabaseService {
         },
       },
     });
+    await this.recordLiveLifecycleSnapshot(stream.id, userId, 'scheduled', {
+      category: stream.category,
+      audience: stream.audience,
+    });
     return this.mapLiveStream(stream);
   }
 
@@ -615,6 +619,7 @@ export class SocialStateDatabaseService {
         updatedAt: new Date(),
       },
     });
+    await this.recordLiveLifecycleSnapshot(streamId, userId, 'live', {});
     return this.getLiveStream(streamId);
   }
 
@@ -637,6 +642,7 @@ export class SocialStateDatabaseService {
         updatedAt: new Date(),
       },
     });
+    await this.recordLiveLifecycleSnapshot(streamId, userId, 'ended', {}, 'host_ended');
     return this.getLiveStream(streamId);
   }
 
@@ -675,6 +681,7 @@ export class SocialStateDatabaseService {
         updatedAt: new Date(),
       },
     });
+    await this.recordLiveLifecycleSnapshot(streamId, userId, 'moderation_updated', patch);
 
     return this.getLiveStream(streamId);
   }
@@ -1097,5 +1104,27 @@ export class SocialStateDatabaseService {
       { id: 'qa', label: 'Q&A', selected: false },
       { id: 'products', label: 'Products', selected: false },
     ];
+  }
+
+  private async recordLiveLifecycleSnapshot(
+    streamId: string,
+    actorUserId: string | null,
+    status: string,
+    payload: Record<string, unknown>,
+    reason?: string,
+  ) {
+    await this.prisma.$executeRaw`
+      insert into app_live_lifecycle_snapshots (
+        id, stream_id, actor_user_id, status, reason, payload, captured_at
+      ) values (
+        ${makeId('live_lifecycle')},
+        ${streamId},
+        ${actorUserId},
+        ${status},
+        ${reason ?? null},
+        ${payload as Prisma.InputJsonValue},
+        ${new Date()}
+      )
+    `;
   }
 }

@@ -99,14 +99,17 @@ export class SettingsDatabaseService {
   async getAccessibilitySupport(userId: string) {
     const context = await this.buildContext(userId);
     const state = context.settingsState;
-    const catalog = await this.readArraySetting('app.accessibility.options');
-    const options = catalog
-      .map((item) => ({
-        title: this.readString(item['title']) ?? '',
-        key: this.readString(item['key']) ?? '',
-        enabledByDefault: this.readBoolean(item['enabledByDefault'], false),
-      }))
-      .filter((item) => item.title.length > 0 && item.key.length > 0);
+    const normalizedOptions = await this.readAccessibilityCatalog();
+    const options =
+      normalizedOptions.length > 0
+        ? normalizedOptions
+        : (await this.readArraySetting('app.accessibility.options'))
+            .map((item) => ({
+              title: this.readString(item['title']) ?? '',
+              key: this.readString(item['key']) ?? '',
+              enabledByDefault: this.readBoolean(item['enabledByDefault'], false),
+            }))
+            .filter((item) => item.title.length > 0 && item.key.length > 0);
 
     return {
       options: options.map((item) => ({
@@ -191,13 +194,17 @@ export class SettingsDatabaseService {
 
   async getLegalCompliance(userId: string) {
     const state = (await this.buildContext(userId)).settingsState;
-    const documents = (await this.readArraySetting('legal.documents'))
-      .map((item) => ({
-        key: this.readString(item['key']) ?? '',
-        title: this.readString(item['title']) ?? '',
-        version: this.readString(item['version']) ?? '',
-      }))
-      .filter((item) => item.key.length > 0 && item.title.length > 0);
+    const normalizedDocuments = await this.readLegalDocumentCatalog();
+    const documents =
+      normalizedDocuments.length > 0
+        ? normalizedDocuments
+        : (await this.readArraySetting('legal.documents'))
+            .map((item) => ({
+              key: this.readString(item['key']) ?? '',
+              title: this.readString(item['title']) ?? '',
+              version: this.readString(item['version']) ?? '',
+            }))
+            .filter((item) => item.key.length > 0 && item.title.length > 0);
     return {
       termsAccepted: this.readBoolean(state['legal.terms_accepted'], false),
       privacyAccepted: this.readBoolean(state['legal.privacy_accepted'], false),
@@ -333,6 +340,54 @@ export class SettingsDatabaseService {
       sessions,
       creatorAnalytics,
     };
+  }
+
+  private async readAccessibilityCatalog() {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        option_key: string;
+        title: string;
+        setting_key: string | null;
+        default_value: Prisma.JsonValue;
+      }>
+    >`select option_key, title, setting_key, default_value
+       from app_accessibility_option_catalog
+       where is_active = true
+       order by sort_order asc, option_key asc`;
+
+    return rows
+      .map((item) => ({
+        title: item.title?.trim() || '',
+        key: item.setting_key?.trim() || item.option_key?.trim() || '',
+        enabledByDefault:
+          typeof item.default_value === 'boolean'
+            ? item.default_value
+            : typeof item.default_value === 'string'
+              ? item.default_value.trim().toLowerCase() === 'true'
+              : false,
+      }))
+      .filter((item) => item.title.length > 0 && item.key.length > 0);
+  }
+
+  private async readLegalDocumentCatalog() {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        document_key: string;
+        title: string;
+        version: string;
+      }>
+    >`select document_key, title, version
+       from app_legal_document_versions
+       where is_active = true
+       order by is_required desc, document_key asc, published_at desc nulls last`;
+
+    return rows
+      .map((item) => ({
+        key: item.document_key?.trim() || '',
+        title: item.title?.trim() || '',
+        version: item.version?.trim() || '',
+      }))
+      .filter((item) => item.key.length > 0 && item.title.length > 0);
   }
 
   private hydrateSection(

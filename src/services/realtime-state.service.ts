@@ -119,6 +119,7 @@ export class RealtimeStateService implements OnModuleInit {
     userSocketSet.add(socketId);
     this.userSockets.set(userId, userSocketSet);
     this.lastSeen.set(userId, new Date().toISOString());
+    void this.persistPresenceSnapshots();
     return this.getPresenceSnapshot();
   }
 
@@ -145,6 +146,7 @@ export class RealtimeStateService implements OnModuleInit {
       typing.delete(userId);
     }
 
+    void this.persistPresenceSnapshots();
     return this.getPresenceSnapshot();
   }
 
@@ -170,6 +172,7 @@ export class RealtimeStateService implements OnModuleInit {
     const members = this.threadMembers.get(threadId) ?? new Set<string>();
     members.add(userId);
     this.threadMembers.set(threadId, members);
+    void this.persistPresenceSnapshots();
     return this.getThreadState(threadId);
   }
 
@@ -178,6 +181,7 @@ export class RealtimeStateService implements OnModuleInit {
     members?.delete(userId);
     const typing = this.threadTyping.get(threadId);
     typing?.delete(userId);
+    void this.persistPresenceSnapshots();
     return this.getThreadState(threadId);
   }
 
@@ -190,6 +194,7 @@ export class RealtimeStateService implements OnModuleInit {
       typing.delete(userId);
     }
     this.threadTyping.set(threadId, typing);
+    void this.persistPresenceSnapshots();
     return this.getThreadState(threadId);
   }
 
@@ -302,6 +307,11 @@ export class RealtimeStateService implements OnModuleInit {
     }
 
     await this.saveCallSession(session);
+    await this.saveCallLifecycleSnapshot(session.id, input.initiatorId, 'ringing', {
+      mode: input.mode,
+      recipientIds: recipients,
+      threadId: input.threadId ?? null,
+    });
     return session;
   }
 
@@ -337,6 +347,9 @@ export class RealtimeStateService implements OnModuleInit {
     }
     session.status = 'ongoing';
     await this.saveCallSession(session);
+    await this.saveCallLifecycleSnapshot(session.id, userId, 'ongoing', {
+      participantState: 'joined',
+    });
     return session;
   }
 
@@ -348,6 +361,9 @@ export class RealtimeStateService implements OnModuleInit {
       participant.leftAt = new Date().toISOString();
     }
     await this.saveCallSession(session);
+    await this.saveCallLifecycleSnapshot(session.id, userId, session.status, {
+      participantState: 'left',
+    });
     return session;
   }
 
@@ -383,6 +399,7 @@ export class RealtimeStateService implements OnModuleInit {
     session.endedBy = endedBy;
     session.reason = reason ?? 'completed';
     void this.saveCallSession(session);
+    void this.saveCallLifecycleSnapshot(session.id, endedBy, 'ended', {}, session.reason);
     return session;
   }
 
@@ -460,6 +477,30 @@ export class RealtimeStateService implements OnModuleInit {
         type text not null,
         payload jsonb not null default '{}'::jsonb,
         created_at timestamptz not null
+      );
+    `);
+    await this.database.query(`
+      create table if not exists app_chat_presence_snapshots (
+        id text primary key,
+        user_id text not null references app_users(id) on delete cascade,
+        thread_id text null references chat_threads(id) on delete set null,
+        online boolean not null default false,
+        socket_count integer not null default 0,
+        typing_thread_ids jsonb not null default '[]'::jsonb,
+        last_seen_at timestamptz not null,
+        captured_at timestamptz not null,
+        metadata jsonb not null default '{}'::jsonb
+      );
+    `);
+    await this.database.query(`
+      create table if not exists app_call_lifecycle_snapshots (
+        id text primary key,
+        call_session_id text not null references app_call_sessions(id) on delete cascade,
+        actor_user_id text null references app_users(id) on delete set null,
+        status text not null,
+        reason text null,
+        payload jsonb not null default '{}'::jsonb,
+        captured_at timestamptz not null
       );
     `);
   }
@@ -610,6 +651,69 @@ export class RealtimeStateService implements OnModuleInit {
         signal.type,
         JSON.stringify(signal.payload),
         signal.createdAt,
+      ],
+    );
+  }
+
+  private async persistPresenceSnapshots() {
+    if (!this.useDatabase) {
+      return;
+    }
+
+    const typingThreadIdsByUser = new Map<string, string[]>();
+    for (const [threadId, users] of this.threadTyping.entries()) {
+      for (const userId of users) {
+        const list = typingThreadIdsByUser.get(userId) ?? [];
+        if (!list.includes(threadId)) {
+          list.push(threadId);
+        }
+        typingThreadIdsByUser.set(userId, list);
+      }
+    }
+
+    for (const [userId, lastSeen] of this.lastSeen.entries()) {
+      await this.database.query(
+        `insert into app_chat_presence_snapshots (
+          id, user_id, thread_id, online, socket_count, typing_thread_ids, last_seen_at, captured_at, metadata
+        ) values ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9::jsonb)`,
+        [
+          makeId('presence'),
+          userId,
+          null,
+          this.userSockets.has(userId),
+          this.userSockets.get(userId)?.size ?? 0,
+          JSON.stringify(typingThreadIdsByUser.get(userId) ?? []),
+          this.userSockets.has(userId) ? new Date().toISOString() : lastSeen,
+          new Date().toISOString(),
+          JSON.stringify({ source: 'realtime.gateway' }),
+        ],
+      );
+    }
+  }
+
+  private async saveCallLifecycleSnapshot(
+    callSessionId: string,
+    actorUserId: string | null,
+    status: string,
+    payload: Record<string, unknown> = {},
+    reason?: string | null,
+  ) {
+    if (!this.useDatabase) {
+      return;
+    }
+
+    await this.database.query(
+      `insert into app_call_lifecycle_snapshots (
+        id, call_session_id, actor_user_id, status, reason, payload, captured_at
+      ) values ($1,$2,$3,$4,$5,$6::jsonb,$7)`,
+      [
+        makeId('call_lifecycle'),
+        callSessionId,
+        actorUserId,
+        status,
+        reason ?? null,
+        JSON.stringify(payload),
+        new Date().toISOString(),
       ],
     );
   }

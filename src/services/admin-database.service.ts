@@ -2082,6 +2082,17 @@ export class AdminDatabaseService implements OnModuleInit {
     return this.mapAdminCommunityRow(updated);
   }
 
+  async getAdminCommunity(id: string) {
+    const item = await this.prisma.community.findUnique({
+      where: { id },
+      include: { owner: true, members: true },
+    });
+    if (!item) {
+      throw new NotFoundException(`Community ${id} not found.`);
+    }
+    return this.mapAdminCommunityRow(item);
+  }
+
   async queryAdminPages(query: {
     page?: number;
     limit?: number;
@@ -2173,6 +2184,17 @@ export class AdminDatabaseService implements OnModuleInit {
     });
 
     return this.mapAdminPageRow(updated);
+  }
+
+  async getAdminPage(id: string) {
+    const item = await this.prisma.page.findUnique({
+      where: { id },
+      include: { owner: true, followers: true },
+    });
+    if (!item) {
+      throw new NotFoundException(`Page ${id} not found.`);
+    }
+    return this.mapAdminPageRow(item);
   }
 
   async queryAdminLiveStreams(query: {
@@ -2302,6 +2324,37 @@ export class AdminDatabaseService implements OnModuleInit {
       reactions: updated.reactions.length,
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),
+    };
+  }
+
+  async getAdminLiveStream(id: string) {
+    const item = await this.prisma.liveStreamSession.findUnique({
+      where: { id },
+      include: { host: true, comments: true, reactions: true },
+    });
+    if (!item) {
+      throw new NotFoundException(`Live stream ${id} not found.`);
+    }
+
+    return {
+      id: item.id,
+      title: item.title,
+      description: item.description,
+      hostName: item.host.name,
+      hostId: item.hostId,
+      category: item.category,
+      status: item.status,
+      audience: item.audience,
+      location: item.location,
+      viewerCount: item.viewerCount,
+      comments: item.comments.length,
+      reactions: item.reactions.length,
+      quickOptions: this.readArrayObjects(item.quickOptions),
+      metadata: this.readObject(item.metadata),
+      startedAt: item.startedAt?.toISOString() ?? null,
+      endedAt: item.endedAt?.toISOString() ?? null,
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString(),
     };
   }
 
@@ -2437,6 +2490,31 @@ export class AdminDatabaseService implements OnModuleInit {
     };
   }
 
+  async getAdminWalletTransaction(id: string) {
+    const item = await this.prisma.walletTransaction.findUnique({
+      where: { id },
+      include: { user: true, walletAccount: true },
+    });
+    if (!item) {
+      throw new NotFoundException(`Wallet transaction ${id} not found.`);
+    }
+
+    return {
+      id: item.id,
+      walletAccountId: item.walletAccountId,
+      userName: item.user.name,
+      userId: item.userId,
+      type: item.type,
+      amount: Number(item.amount),
+      currency: item.currency,
+      status: item.status,
+      description: item.description,
+      metadata: this.readObject(item.metadata),
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.createdAt.toISOString(),
+    };
+  }
+
   async queryAdminSubscriptions(query: {
     page?: number;
     limit?: number;
@@ -2488,6 +2566,188 @@ export class AdminDatabaseService implements OnModuleInit {
       limit,
       total,
     );
+  }
+
+  async getAdminSubscription(id: string) {
+    const item = await this.prisma.subscription.findUnique({
+      where: { id },
+      include: { user: true, plan: true },
+    });
+    if (!item) {
+      throw new NotFoundException(`Subscription ${id} not found.`);
+    }
+
+    return {
+      id: item.id,
+      userName: item.user.name,
+      userId: item.userId,
+      planId: item.planId,
+      planCode: item.planCode,
+      planName: item.plan?.name ?? item.planCode,
+      provider: item.provider,
+      status: item.status,
+      autoRenew: item.autoRenew,
+      currentPeriodEnd: item.currentPeriodEnd?.toISOString() ?? null,
+      metadata: this.readObject(item.metadata),
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString(),
+    };
+  }
+
+  async exportAdminRevenue(
+    query: {
+      search?: string;
+      status?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    const walletWhere: Prisma.WalletTransactionWhereInput = {
+      ...(query.status?.trim() ? { status: query.status.trim() } : {}),
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { description: { contains: query.search.trim(), mode: 'insensitive' } },
+              { type: { contains: query.search.trim(), mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+    const subscriptionWhere: Prisma.SubscriptionWhereInput = {
+      ...(query.status?.trim() ? { status: query.status.trim() } : {}),
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { planCode: { contains: query.search.trim(), mode: 'insensitive' } },
+              { provider: { contains: query.search.trim(), mode: 'insensitive' } },
+              { user: { name: { contains: query.search.trim(), mode: 'insensitive' } } },
+            ],
+          }
+        : {}),
+    };
+
+    const [walletRows, subscriptions, aggregate] = await Promise.all([
+      this.prisma.walletTransaction.findMany({
+        where: walletWhere,
+        include: { user: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.subscription.findMany({
+        where: subscriptionWhere,
+        include: { user: true, plan: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.walletTransaction.aggregate({
+        where: walletWhere,
+        _sum: { amount: true },
+        _count: { id: true },
+      }),
+    ]);
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'revenue.export',
+      entityType: 'admin_export',
+      metadata: {
+        scope: 'revenue',
+        search: query.search?.trim() || null,
+        status: query.status?.trim() || null,
+      },
+    });
+
+    return {
+      generatedAt: new Date().toISOString(),
+      summary: {
+        totalRevenue: Number(aggregate._sum.amount ?? 0),
+        transactionCount: aggregate._count.id,
+        subscriptionCount: subscriptions.length,
+      },
+      walletTransactions: walletRows.map((item) => ({
+        id: item.id,
+        userName: item.user.name,
+        userId: item.userId,
+        type: item.type,
+        amount: Number(item.amount),
+        currency: item.currency,
+        status: item.status,
+        createdAt: item.createdAt.toISOString(),
+      })),
+      subscriptions: subscriptions.map((item) => ({
+        id: item.id,
+        userName: item.user.name,
+        userId: item.userId,
+        planCode: item.planCode,
+        planName: item.plan?.name ?? item.planCode,
+        provider: item.provider,
+        status: item.status,
+        autoRenew: item.autoRenew,
+        createdAt: item.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  async exportAdminWallet(
+    query: {
+      search?: string;
+      status?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    const payload = await this.queryAdminWallet({
+      page: 1,
+      limit: 5000,
+      search: query.search,
+      status: query.status,
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'wallet.export',
+      entityType: 'admin_export',
+      metadata: {
+        scope: 'wallet',
+        search: query.search?.trim() || null,
+        status: query.status?.trim() || null,
+      },
+    });
+
+    return {
+      generatedAt: new Date().toISOString(),
+      total: payload.total,
+      filters: payload.filters,
+      items: payload.items,
+    };
+  }
+
+  async exportAdminSubscriptions(
+    query: {
+      search?: string;
+      status?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    const payload = await this.queryAdminSubscriptions({
+      page: 1,
+      limit: 5000,
+      search: query.search,
+      status: query.status,
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'subscription.export',
+      entityType: 'admin_export',
+      metadata: {
+        scope: 'subscriptions',
+        search: query.search?.trim() || null,
+        status: query.status?.trim() || null,
+      },
+    });
+
+    return {
+      generatedAt: new Date().toISOString(),
+      total: payload.total,
+      items: payload.items,
+    };
   }
 
   async queryAdminNotificationDevices(query: {
@@ -3681,6 +3941,15 @@ export class AdminDatabaseService implements OnModuleInit {
   private readStringArray(value: unknown) {
     return Array.isArray(value)
       ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      : [];
+  }
+
+  private readArrayObjects(value: unknown) {
+    return Array.isArray(value)
+      ? value.filter(
+          (item): item is Record<string, unknown> =>
+            Boolean(item) && typeof item === 'object' && !Array.isArray(item),
+        )
       : [];
   }
 

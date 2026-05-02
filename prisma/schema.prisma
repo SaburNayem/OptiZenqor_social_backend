@@ -109,6 +109,9 @@ model AppUser {
   sentCallSignals     CallSessionSignal[]     @relation("CallSignalFromUser")
   receivedCallSignals CallSessionSignal[]     @relation("CallSignalToUser")
   pushDeviceTokens    PushDeviceToken[]
+  chatPresenceSnapshots ChatPresenceSnapshot[]
+  callLifecycleSnapshots CallLifecycleSnapshot[] @relation("CallLifecycleActor")
+  liveLifecycleSnapshots LiveLifecycleSnapshot[] @relation("LiveLifecycleActor")
 
   @@map("app_users")
 }
@@ -1182,6 +1185,7 @@ model LiveStreamSession {
   thread        ChatThread?          @relation(fields: [threadId], references: [id], onDelete: SetNull)
   comments      LiveStreamComment[]
   reactions     LiveStreamReaction[]
+  lifecycleSnapshots LiveLifecycleSnapshot[]
 
   @@index([hostId, createdAt(sort: Desc)])
   @@index([status, createdAt(sort: Desc)])
@@ -1234,6 +1238,7 @@ model CallSession {
   endedByUser  AppUser?                 @relation("CallSessionEndedBy", fields: [endedBy], references: [id], onDelete: SetNull)
   participants CallSessionParticipant[]
   signals      CallSessionSignal[]
+  lifecycleSnapshots CallLifecycleSnapshot[]
 
   @@index([initiatorId, startedAt(sort: Desc)])
   @@index([status, startedAt(sort: Desc)])
@@ -1368,4 +1373,173 @@ model AdminOperationalSetting {
   updatedAt DateTime @default(now()) @db.Timestamptz(6) @map("updated_at")
 
   @@map("admin_operational_settings")
+}
+
+model LocalizationLocaleCatalog {
+  localeCode         String   @id @map("locale_code")
+  label              String   @map("label")
+  nativeLabel        String?  @map("native_label")
+  regionCode         String?  @map("region_code")
+  fallbackLocaleCode String?  @map("fallback_locale_code")
+  isDefault          Boolean  @default(false) @map("is_default")
+  isActive           Boolean  @default(true) @map("is_active")
+  sortOrder          Int      @default(0) @map("sort_order")
+  metadata           Json     @default("{}") @map("metadata")
+  createdAt          DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt          DateTime @default(now()) @db.Timestamptz(6) @map("updated_at")
+
+  @@index([isActive, sortOrder, localeCode])
+  @@map("app_localization_locale_catalog")
+}
+
+model AccessibilityOptionCatalog {
+  id           String   @id @map("id")
+  optionKey    String   @unique @map("option_key")
+  title        String   @map("title")
+  description  String?  @map("description")
+  settingKey   String?  @map("setting_key")
+  valueType    String   @default("boolean") @map("value_type")
+  defaultValue Json     @default("false") @map("default_value")
+  options      Json     @default("[]") @map("options")
+  isActive     Boolean  @default(true) @map("is_active")
+  sortOrder    Int      @default(0) @map("sort_order")
+  metadata     Json     @default("{}") @map("metadata")
+  createdAt    DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt    DateTime @default(now()) @db.Timestamptz(6) @map("updated_at")
+
+  @@index([isActive, sortOrder, optionKey])
+  @@map("app_accessibility_option_catalog")
+}
+
+model LegalDocumentVersion {
+  id          String   @id @map("id")
+  documentKey String   @map("document_key")
+  title       String   @map("title")
+  version     String   @map("version")
+  localeCode  String   @default("en") @map("locale_code")
+  summary     String?  @map("summary")
+  body        Json     @default("{}") @map("body")
+  isActive    Boolean  @default(true) @map("is_active")
+  isRequired  Boolean  @default(false) @map("is_required")
+  publishedAt DateTime? @db.Timestamptz(6) @map("published_at")
+  metadata    Json     @default("{}") @map("metadata")
+  createdAt   DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt   DateTime @default(now()) @db.Timestamptz(6) @map("updated_at")
+
+  @@unique([documentKey, version, localeCode])
+  @@index([isActive, documentKey, publishedAt(sort: Desc)])
+  @@map("app_legal_document_versions")
+}
+
+model SupportConfigEntry {
+  key         String   @id @map("key")
+  title       String?  @map("title")
+  value       Json     @default("{}") @map("value")
+  description String?  @map("description")
+  isPublic    Boolean  @default(true) @map("is_public")
+  updatedAt   DateTime @default(now()) @db.Timestamptz(6) @map("updated_at")
+
+  @@index([isPublic, key])
+  @@map("app_support_config_entries")
+}
+
+model OnboardingCatalogItem {
+  id          String   @id @map("id")
+  catalogType String   @map("catalog_type")
+  code        String   @map("code")
+  title       String   @map("title")
+  subtitle    String?  @map("subtitle")
+  description String?  @map("description")
+  icon        String?  @map("icon")
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  metadata    Json     @default("{}") @map("metadata")
+  createdAt   DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt   DateTime @default(now()) @db.Timestamptz(6) @map("updated_at")
+
+  @@unique([catalogType, code])
+  @@index([catalogType, isActive, sortOrder])
+  @@map("app_onboarding_catalog_items")
+}
+
+model PersonalizationCatalogItem {
+  id          String   @id @map("id")
+  code        String   @unique @map("code")
+  title       String   @map("title")
+  description String?  @map("description")
+  groupKey    String?  @map("group_key")
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  metadata    Json     @default("{}") @map("metadata")
+  createdAt   DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt   DateTime @default(now()) @db.Timestamptz(6) @map("updated_at")
+
+  @@index([isActive, sortOrder, code])
+  @@map("app_personalization_catalog_items")
+}
+
+model AnalyticsSnapshot {
+  id          String    @id @map("id")
+  domain      String    @map("domain")
+  metricKey   String    @map("metric_key")
+  scopeType   String?   @map("scope_type")
+  scopeId     String?   @map("scope_id")
+  snapshotAt  DateTime  @db.Timestamptz(6) @map("snapshot_at")
+  numericValue Decimal? @db.Decimal(18, 2) @map("numeric_value")
+  stringValue String?   @map("string_value")
+  payload     Json      @default("{}") @map("payload")
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6) @map("created_at")
+
+  @@index([domain, snapshotAt(sort: Desc)])
+  @@index([scopeType, scopeId, snapshotAt(sort: Desc)])
+  @@map("app_analytics_snapshots")
+}
+
+model ChatPresenceSnapshot {
+  id             String   @id @map("id")
+  userId         String   @map("user_id")
+  threadId       String?  @map("thread_id")
+  online         Boolean  @default(false) @map("online")
+  socketCount    Int      @default(0) @map("socket_count")
+  typingThreadIds Json    @default("[]") @map("typing_thread_ids")
+  lastSeenAt     DateTime @db.Timestamptz(6) @map("last_seen_at")
+  capturedAt     DateTime @default(now()) @db.Timestamptz(6) @map("captured_at")
+  metadata       Json     @default("{}") @map("metadata")
+  user           AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, capturedAt(sort: Desc)])
+  @@index([threadId, capturedAt(sort: Desc)])
+  @@map("app_chat_presence_snapshots")
+}
+
+model CallLifecycleSnapshot {
+  id            String      @id @map("id")
+  callSessionId String      @map("call_session_id")
+  actorUserId   String?     @map("actor_user_id")
+  status        String      @map("status")
+  reason        String?     @map("reason")
+  payload       Json        @default("{}") @map("payload")
+  capturedAt    DateTime    @default(now()) @db.Timestamptz(6) @map("captured_at")
+  callSession   CallSession @relation(fields: [callSessionId], references: [id], onDelete: Cascade)
+  actorUser     AppUser?    @relation("CallLifecycleActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([callSessionId, capturedAt(sort: Desc)])
+  @@index([actorUserId, capturedAt(sort: Desc)])
+  @@map("app_call_lifecycle_snapshots")
+}
+
+model LiveLifecycleSnapshot {
+  id          String            @id @map("id")
+  streamId    String            @map("stream_id")
+  actorUserId String?           @map("actor_user_id")
+  status      String            @map("status")
+  reason      String?           @map("reason")
+  payload     Json              @default("{}") @map("payload")
+  capturedAt  DateTime          @default(now()) @db.Timestamptz(6) @map("captured_at")
+  stream      LiveStreamSession @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  actorUser   AppUser?          @relation("LiveLifecycleActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([streamId, capturedAt(sort: Desc)])
+  @@index([actorUserId, capturedAt(sort: Desc)])
+  @@map("app_live_lifecycle_snapshots")
 }

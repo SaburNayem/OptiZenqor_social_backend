@@ -134,8 +134,11 @@ Runtime requirement:
 ### `GET /admin/jobs`
 ### `GET /admin/events`
 ### `GET /admin/communities`
+### `GET /admin/communities/:id`
 ### `GET /admin/pages`
+### `GET /admin/pages/:id`
 ### `GET /admin/live-streams`
+### `GET /admin/live-streams/:id`
 ### `PATCH /admin/live-streams/:id`
 - Auth: admin bearer token
 - Query params supported by backend lists:
@@ -152,8 +155,13 @@ Runtime requirement:
 ## Revenue and subscriptions
 
 ### `GET /admin/dashboard/revenue`
+### `GET /admin/revenue/export`
 ### `GET /admin/wallet`
+### `GET /admin/wallet/export`
+### `GET /admin/wallet/:id`
 ### `GET /admin/subscriptions`
+### `GET /admin/subscriptions/export`
+### `GET /admin/subscriptions/:id`
 ### `GET /admin/wallet-subscriptions`
 ### `GET /admin/premium-plans`
 ### `POST /admin/premium-plans`
@@ -205,4 +213,4 @@ Runtime requirement:
 - The main remaining admin gap is feature depth, not connectivity:
   - filters/search/pagination controls are still missing on many pages outside support
   - many operational pages are still read-only, though support and notification devices now have real mutation controls
-  - several admin mutation endpoints still need to be added in the backend
+  - the remaining gaps are now primarily dashboard UX architecture and form/action coverage rather than missing backend list/detail routes

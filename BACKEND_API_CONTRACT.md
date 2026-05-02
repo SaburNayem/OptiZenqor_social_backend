@@ -34,6 +34,23 @@ Compatibility aliases may also appear, including:
 - `stories`
 - `reels`
 
+## Normalized persistence added in this pass
+
+The backend schema now includes first-class Prisma models and migration files for:
+
+- localization locale catalog
+- accessibility option catalog
+- legal document versioning
+- support config entries
+- onboarding catalog items
+- personalization catalog items
+- analytics snapshots
+- chat presence snapshots
+- call lifecycle snapshots
+- live lifecycle snapshots
+
+These tables are intended to replace broader operational-setting blobs over time.
+
 ## Auth contract
 
 ### `POST /auth/login`
@@ -448,6 +465,14 @@ List responses return compatibility aliases in `data.communities` or `data.pages
 ### `GET /wallet`
 
 Returns the authenticated user wallet account plus transaction list.
+
+### `GET /legal-compliance`
+### `GET /localization-support`
+### `GET /accessibility-support`
+
+These routes now prefer normalized catalog tables when populated and fall back to
+persisted operational/user settings only when those catalogs have not been
+seeded yet.
 
 ### `GET /monetization/overview`
 
