@@ -1,20 +1,30 @@
-import { Body, Controller, Get, Patch } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Patch } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { AppExtensionsDataService } from '../data/app-extensions-data.service';
 import { SetLocaleDto } from '../dto/api.dto';
+import { AppUtilityDatabaseService } from '../services/app-utility-database.service';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('localization-support')
 @Controller('localization-support')
 export class LocalizationSupportController {
-  constructor(private readonly appExtensionsData: AppExtensionsDataService) {}
+  constructor(private readonly appUtilityDatabase: AppUtilityDatabaseService) {}
 
   @Get()
-  getLocalizationSupport() {
-    return this.appExtensionsData.getLocalizationSupport();
+  async getLocalizationSupport(@Headers('authorization') authorization?: string) {
+    return successResponse(
+      'Localization support fetched successfully.',
+      await this.appUtilityDatabase.getLocalizationSupport(authorization),
+    );
   }
 
   @Patch()
-  setLocale(@Body() body: SetLocaleDto) {
-    return this.appExtensionsData.setLocale(body.localeCode);
+  async setLocale(
+    @Body() body: SetLocaleDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return successResponse(
+      'Locale updated successfully.',
+      await this.appUtilityDatabase.setLocale(body.localeCode, authorization),
+    );
   }
 }

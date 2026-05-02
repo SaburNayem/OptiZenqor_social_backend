@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AppExtensionsDatabaseService } from './app-extensions-database.service';
 import { AccountStateDatabaseService } from './account-state-database.service';
@@ -39,6 +39,26 @@ const DEFAULT_REFERRAL_MILESTONES = [
   { count: 5, reward: 'Premium profile badge' },
   { count: 10, reward: '1 month premium access' },
   { count: 25, reward: 'Priority creator review' },
+];
+
+const DEFAULT_DEEP_LINK_PREFIXES = [
+  'optizenqor://',
+  'https://optizenqor.app/',
+  'https://www.optizenqor.app/',
+];
+
+const DEFAULT_SHARE_REPOST_OPTIONS = [
+  { title: 'Share to chat' },
+  { title: 'Share externally' },
+  { title: 'Copy post link' },
+  { title: 'Repost' },
+  { title: 'Quote-share' },
+];
+
+const DEFAULT_LOCALIZATION_OPTIONS = [
+  { localeCode: 'en', label: 'English' },
+  { localeCode: 'bn', label: 'Bangla' },
+  { localeCode: 'ar', label: 'Arabic (RTL ready)' },
 ];
 
 @Injectable()
@@ -246,6 +266,380 @@ export class AppUtilityDatabaseService {
     return this.settingsDatabase.getExploreRecommendations(userId);
   }
 
+  async getDeepLinkHandler() {
+    const config = this.toRecord(await this.readOperationalSetting('app.deep_link_handler'));
+    const supportedPrefixes = this.readStringArray(config.supportedPrefixes);
+    return {
+      supportedPrefixes:
+        supportedPrefixes.length > 0 ? supportedPrefixes : DEFAULT_DEEP_LINK_PREFIXES,
+      recentLinks: this.readStringArray(config.recentLinks).slice(0, 10),
+      allowUniversalLinks: this.readBoolean(config.allowUniversalLinks, true),
+      openExternalLinksInApp: this.readBoolean(config.openExternalLinksInApp, false),
+    };
+  }
+
+  async resolveDeepLink(url: string) {
+    const normalizedUrl = url.trim();
+    const state = await this.getDeepLinkHandler();
+    const resolvedPath = this.resolveAppRoute(normalizedUrl);
+    const recentLinks = [normalizedUrl, ...state.recentLinks]
+      .filter((item, index, array) => item.length > 0 && array.indexOf(item) === index)
+      .slice(0, 10);
+
+    await this.writeOperationalSetting('app.deep_link_handler', {
+      supportedPrefixes: state.supportedPrefixes,
+      recentLinks,
+      allowUniversalLinks: state.allowUniversalLinks,
+      openExternalLinksInApp: state.openExternalLinksInApp,
+    });
+
+    return {
+      url: normalizedUrl,
+      path: resolvedPath,
+      resolvedRoute: resolvedPath,
+      explanation: `Incoming link routed to: ${resolvedPath}`,
+      recentLinks,
+    };
+  }
+
+  async getShareRepostOptions() {
+    const config = this.toRecord(await this.readOperationalSetting('app.share_repost'));
+    const options = this.readArrayObjects(config.options)
+      .map((item) => ({
+        title: this.readString(item.title) ?? '',
+      }))
+      .filter((item) => item.title.length > 0);
+
+    return options.length > 0 ? options : DEFAULT_SHARE_REPOST_OPTIONS;
+  }
+
+  async trackShareRepost(targetId: string, option: string) {
+    const config = this.toRecord(await this.readOperationalSetting('app.share_repost'));
+    const recent = this.readArrayObjects(config.recentActivity)
+      .map((item) => ({
+        targetId: this.readString(item.targetId) ?? '',
+        option: this.readString(item.option) ?? '',
+        trackedAt: this.readString(item.trackedAt) ?? new Date(0).toISOString(),
+      }))
+      .filter((item) => item.targetId.length > 0 && item.option.length > 0);
+    const event = {
+      targetId: targetId.trim(),
+      option: option.trim(),
+      trackedAt: new Date().toISOString(),
+    };
+
+    await this.writeOperationalSetting('app.share_repost', {
+      ...config,
+      options: (await this.getShareRepostOptions()) as Prisma.InputJsonValue,
+      recentActivity: [event, ...recent].slice(0, 50),
+    });
+
+    return {
+      ...event,
+      tracked: true,
+    };
+  }
+
+  async getOfflineSync(authorization?: string) {
+    const user = await this.resolveOptionalUserFromAuthorization(authorization);
+    if (user) {
+      const [uploads, drafts, settingsState] = await Promise.all([
+        this.prisma.mediaUpload.findMany({
+          where: { userId: user.id },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+        }),
+        this.prisma.postDraft.findMany({
+          where: { userId: user.id, status: 'draft' },
+          orderBy: { updatedAt: 'desc' },
+          take: 10,
+        }),
+        this.accountStateDatabase.getSettingsState(user.id),
+      ]);
+      const state = settingsState as Record<string, unknown>;
+      const queue = [
+        ...uploads.map((item) => ({
+          title: item.fileName || 'Upload task',
+          pending: item.status !== 'completed',
+          type: 'upload',
+          updatedAt: item.createdAt.toISOString(),
+        })),
+        ...drafts.map((item) => ({
+          title: item.title || 'Draft save',
+          pending: true,
+          type: 'draft',
+          updatedAt: item.updatedAt.toISOString(),
+        })),
+      ].slice(0, 10);
+
+      return {
+        isOffline: this.readBoolean(state['data.offline_mode'], false),
+        queue,
+        pendingCount: queue.filter((item) => item.pending).length,
+        lastSyncAt: this.readString(state['data.last_sync_at']) ?? null,
+      };
+    }
+
+    const config = this.toRecord(await this.readOperationalSetting('app.offline_sync_preview'));
+    return {
+      isOffline: this.readBoolean(config.isOffline, false),
+      queue: this.readArrayObjects(config.queue).map((item) => ({
+        title: this.readString(item.title) ?? 'Queued action',
+        pending: this.readBoolean(item.pending, false),
+      })),
+      pendingCount: this.readNumber(config.pendingCount, 0),
+      lastSyncAt: this.readString(config.lastSyncAt),
+    };
+  }
+
+  async retryOfflineSync(authorization?: string) {
+    const user = await this.resolveOptionalUserFromAuthorization(authorization);
+    if (user) {
+      await this.accountStateDatabase.updateSettingsState(user.id, {
+        'data.offline_mode': false,
+        'data.last_sync_at': new Date().toISOString(),
+      });
+      return this.getOfflineSync(authorization);
+    }
+
+    const payload = {
+      isOffline: false,
+      queue: [] as Array<{ title: string; pending: boolean }>,
+      pendingCount: 0,
+      lastSyncAt: new Date().toISOString(),
+    };
+    await this.writeOperationalSetting('app.offline_sync_preview', payload);
+    return payload;
+  }
+
+  async getMediaViewerItems() {
+    const [posts, reels] = await Promise.all([
+      this.prisma.appPost.findMany({
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: {
+          id: true,
+          media: true,
+          type: true,
+        },
+      }),
+      this.prisma.reel.findMany({
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: {
+          id: true,
+          thumbnailUrl: true,
+          videoUrl: true,
+        },
+      }),
+    ]);
+
+    const postItems = posts.flatMap((post, postIndex) =>
+      this.readStringArray(post.media).map((url, mediaIndex) => ({
+        id: `${post.id}:${mediaIndex}`,
+        url,
+        type: this.inferMediaType(url, post.type),
+        sourceType: 'post',
+        sourceId: post.id,
+        order: postIndex,
+      })),
+    );
+    const reelItems = reels.flatMap((reel, reelIndex) =>
+      [reel.videoUrl, reel.thumbnailUrl]
+        .map((url, index) => ({
+          url: url?.trim() ?? '',
+          type: index === 0 ? 'video' : 'image',
+        }))
+        .filter((item) => item.url.length > 0)
+        .map((item, mediaIndex) => ({
+          id: `${reel.id}:${mediaIndex}`,
+          url: item.url,
+          type: item.type,
+          sourceType: 'reel',
+          sourceId: reel.id,
+          order: reelIndex,
+        })),
+    );
+
+    return [...postItems, ...reelItems]
+      .sort((left, right) => left.order - right.order)
+      .map(({ order, ...item }) => item);
+  }
+
+  async getMediaViewerItem(id: string) {
+    const item = (await this.getMediaViewerItems()).find((entry) => entry.id === id);
+    if (!item) {
+      throw new NotFoundException(`Media item ${id} not found.`);
+    }
+    return item;
+  }
+
+  async getPersonalizationOnboarding(authorization?: string) {
+    const [interests, state] = await Promise.all([
+      this.getOnboardingInterests(),
+      this.getOnboardingState(authorization),
+    ]);
+    const selected = new Set(state.selectedInterests.map((item) => item.trim()));
+    const items = interests.map((name) => ({
+      name,
+      selected: selected.has(name),
+    }));
+    return {
+      interests: items,
+      selectedCount: items.filter((item) => item.selected).length,
+      canContinue: items.some((item) => item.selected),
+      completed: state.completed,
+      completedAt: state.completedAt,
+    };
+  }
+
+  async togglePersonalizationInterest(name: string, authorization?: string) {
+    const normalized = name.trim();
+    if (!normalized) {
+      throw new NotFoundException('Interest name is required.');
+    }
+
+    const user = await this.resolveOptionalUserFromAuthorization(authorization);
+    if (!user) {
+      const preview = this.toRecord(
+        await this.readOperationalSetting('app.personalization.preview'),
+      );
+      const selected = this.readStringArray(preview.selectedInterests);
+      const next = selected.includes(normalized)
+        ? selected.filter((item) => item !== normalized)
+        : [...selected, normalized];
+      await this.writeOperationalSetting('app.personalization.preview', {
+        selectedInterests: next,
+      });
+
+      return {
+        interests: (await this.getOnboardingInterests()).map((item) => ({
+          name: item,
+          selected: next.includes(item),
+        })),
+        selectedCount: next.length,
+        canContinue: next.length > 0,
+      };
+    }
+
+    const currentState = await this.getOnboardingState(authorization);
+    const next = currentState.selectedInterests.includes(normalized)
+      ? currentState.selectedInterests.filter((item) => item !== normalized)
+      : [...currentState.selectedInterests, normalized];
+    await this.accountStateDatabase.updateSettingsState(user.id, {
+      'onboarding.selected_interests': next,
+    });
+    return this.getPersonalizationOnboarding(authorization);
+  }
+
+  async getAppUpdateFlow() {
+    const config = this.toRecord(await this.readOperationalSetting('app.update_flow'));
+    return {
+      type: this.readString(config.type) ?? 'optional',
+      message:
+        this.readString(config.message) ??
+        'A new app version is available with stability and moderation improvements.',
+      isUpdating: this.readBoolean(config.isUpdating, false),
+      latestVersion: this.readString(config.latestVersion) ?? '1.0.0',
+      minVersion: this.readString(config.minVersion) ?? '1.0.0',
+    };
+  }
+
+  async startAppUpdate() {
+    const current = await this.getAppUpdateFlow();
+    const payload = {
+      ...current,
+      isUpdating: false,
+      lastStartedAt: new Date().toISOString(),
+      status: 'completed',
+      message: current.message,
+    };
+    await this.writeOperationalSetting('app.update_flow', payload);
+    return payload;
+  }
+
+  async getLocalizationSupport(authorization?: string) {
+    const user = await this.resolveOptionalUserFromAuthorization(authorization);
+    const supportedLocales = await this.resolveSupportedLocales();
+    const fallbackLocale = this.readString(
+      await this.readOperationalSetting('locale.fallback_locale'),
+    );
+
+    if (!user) {
+      return {
+        locales: supportedLocales,
+        selected:
+          this.readString(await this.readOperationalSetting('locale.default')) ??
+          fallbackLocale ??
+          supportedLocales[0]?.localeCode ??
+          'en',
+        fallbackLocale: fallbackLocale ?? 'en',
+      };
+    }
+
+    const state = (await this.accountStateDatabase.getSettingsState(
+      user.id,
+    )) as Record<string, unknown>;
+    return {
+      locales: supportedLocales,
+      selected:
+        this.readString(state['locale.language_code']) ??
+        this.readString(state['locale.language'])?.slice(0, 2).toLowerCase() ??
+        fallbackLocale ??
+        supportedLocales[0]?.localeCode ??
+        'en',
+      fallbackLocale: fallbackLocale ?? 'en',
+    };
+  }
+
+  async setLocale(localeCode: string, authorization?: string) {
+    const supportedLocales = await this.resolveSupportedLocales();
+    const locale = supportedLocales.find((item) => item.localeCode === localeCode.trim());
+    if (!locale) {
+      throw new NotFoundException(`Locale ${localeCode} not found.`);
+    }
+
+    const user = await this.resolveOptionalUserFromAuthorization(authorization);
+    if (!user) {
+      await this.writeOperationalSetting('locale.default', {
+        value: locale.localeCode,
+      });
+      return this.getLocalizationSupport();
+    }
+
+    await this.accountStateDatabase.updateSettingsState(user.id, {
+      'locale.language_code': locale.localeCode,
+      'locale.language': locale.label,
+    });
+    return this.getLocalizationSupport(authorization);
+  }
+
+  async getMaintenanceMode() {
+    const config = this.toRecord(await this.readOperationalSetting('app.maintenance_mode'));
+    return {
+      title: this.readString(config.title) ?? 'Scheduled Maintenance',
+      message:
+        this.readString(config.message) ??
+        'We are improving your experience. Please retry shortly.',
+      isActive: this.readBoolean(config.isActive, false),
+      isRetrying: this.readBoolean(config.isRetrying, false),
+    };
+  }
+
+  async retryMaintenance() {
+    const state = await this.getMaintenanceMode();
+    const payload = {
+      ...state,
+      isRetrying: false,
+      status: 'retried',
+      lastRetriedAt: new Date().toISOString(),
+    };
+    await this.writeOperationalSetting('app.maintenance_mode', payload);
+    return payload;
+  }
+
   async getLegalConsents(userId: string) {
     const compliance = await this.settingsDatabase.getLegalCompliance(userId);
     const state = (await this.accountStateDatabase.getSettingsState(
@@ -373,6 +767,20 @@ export class AppUtilityDatabaseService {
     return row?.value ?? null;
   }
 
+  private async writeOperationalSetting(key: string, value: Record<string, unknown>) {
+    await this.prisma.adminOperationalSetting.upsert({
+      where: { key },
+      create: {
+        key,
+        value: value as Prisma.InputJsonValue,
+      },
+      update: {
+        value: value as Prisma.InputJsonValue,
+        updatedAt: new Date(),
+      },
+    });
+  }
+
   private async resolveOptionalUserFromAuthorization(authorization?: string) {
     const token = authorization?.replace(/^Bearer\s+/i, '').trim();
     if (!token) {
@@ -407,6 +815,54 @@ export class AppUtilityDatabaseService {
     return 'Pending';
   }
 
+  private resolveAppRoute(url: string) {
+    const uri = UriSafe.parse(url);
+    if (!uri) {
+      return '/';
+    }
+    const first = uri.segments[0];
+    const second = uri.segments[1];
+    if (first === 'post' && second) {
+      return `/post-detail?id=${second}`;
+    }
+    if (first === 'profile' && second) {
+      return `/user-profile?id=${second}`;
+    }
+    if (first === 'chat' && second) {
+      return `/chat?chatId=${second}`;
+    }
+    return uri.path || '/';
+  }
+
+  private async resolveSupportedLocales() {
+    const configured = this.readArrayObjects(
+      await this.readOperationalSetting('app.localization.locales'),
+    )
+      .map((item) => ({
+        localeCode: this.readString(item.localeCode) ?? '',
+        label: this.readString(item.label) ?? '',
+      }))
+      .filter((item) => item.localeCode.length > 0 && item.label.length > 0);
+    return configured.length > 0 ? configured : DEFAULT_LOCALIZATION_OPTIONS;
+  }
+
+  private inferMediaType(url: string, fallbackType?: string | null) {
+    const normalized = url.toLowerCase();
+    if (normalized.match(/\.(mp4|mov|webm|m4v)(\?|$)/)) {
+      return 'video';
+    }
+    if (normalized.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/)) {
+      return 'image';
+    }
+    return fallbackType?.trim().toLowerCase() === 'video' ? 'video' : 'image';
+  }
+
+  private toRecord(value: unknown) {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  }
+
   private readArrayObjects(value: unknown) {
     return Array.isArray(value)
       ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
@@ -432,5 +888,26 @@ export class AppUtilityDatabaseService {
 
   private readString(value: unknown) {
     return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+  }
+}
+
+class UriSafe {
+  static parse(value: string) {
+    try {
+      const normalized = value.trim();
+      if (!normalized) {
+        return null;
+      }
+      const url = normalized.startsWith('optizenqor://')
+        ? normalized.replace('optizenqor://', 'https://optizenqor.app/')
+        : normalized;
+      const parsed = new URL(url);
+      return {
+        path: parsed.pathname,
+        segments: parsed.pathname.split('/').filter(Boolean),
+      };
+    } catch {
+      return null;
+    }
   }
 }

@@ -1,19 +1,26 @@
 import { Controller, Get, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { AppExtensionsDataService } from '../data/app-extensions-data.service';
+import { AppUtilityDatabaseService } from '../services/app-utility-database.service';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('maintenance-mode')
 @Controller('maintenance-mode')
 export class MaintenanceModeController {
-  constructor(private readonly appExtensionsData: AppExtensionsDataService) {}
+  constructor(private readonly appUtilityDatabase: AppUtilityDatabaseService) {}
 
   @Get()
-  getMaintenanceMode() {
-    return this.appExtensionsData.getMaintenanceMode();
+  async getMaintenanceMode() {
+    return successResponse(
+      'Maintenance mode fetched successfully.',
+      await this.appUtilityDatabase.getMaintenanceMode(),
+    );
   }
 
   @Post('retry')
-  retryMaintenance() {
-    return this.appExtensionsData.retryMaintenance();
+  async retryMaintenance() {
+    return successResponse(
+      'Maintenance retry completed successfully.',
+      await this.appUtilityDatabase.retryMaintenance(),
+    );
   }
 }

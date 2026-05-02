@@ -1,19 +1,26 @@
 import { Controller, Get, Param } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { AppExtensionsDataService } from '../data/app-extensions-data.service';
+import { AppUtilityDatabaseService } from '../services/app-utility-database.service';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('media-viewer')
 @Controller('media-viewer')
 export class MediaViewerController {
-  constructor(private readonly appExtensionsData: AppExtensionsDataService) {}
+  constructor(private readonly appUtilityDatabase: AppUtilityDatabaseService) {}
 
   @Get()
-  getMediaViewerItems() {
-    return this.appExtensionsData.getMediaViewerItems();
+  async getMediaViewerItems() {
+    return successResponse(
+      'Media viewer items fetched successfully.',
+      await this.appUtilityDatabase.getMediaViewerItems(),
+    );
   }
 
   @Get(':id')
-  getMediaViewerItem(@Param('id') id: string) {
-    return this.appExtensionsData.getMediaViewerItem(id);
+  async getMediaViewerItem(@Param('id') id: string) {
+    return successResponse(
+      'Media viewer item fetched successfully.',
+      await this.appUtilityDatabase.getMediaViewerItem(id),
+    );
   }
 }

@@ -1,20 +1,27 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { AppExtensionsDataService } from '../data/app-extensions-data.service';
 import { ResolveDeepLinkDto } from '../dto/api.dto';
+import { AppUtilityDatabaseService } from '../services/app-utility-database.service';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('deep-link-handler')
 @Controller('deep-link-handler')
 export class DeepLinkHandlerController {
-  constructor(private readonly appExtensionsData: AppExtensionsDataService) {}
+  constructor(private readonly appUtilityDatabase: AppUtilityDatabaseService) {}
 
   @Get()
-  getDeepLinkState() {
-    return this.appExtensionsData.getDeepLinkHandler();
+  async getDeepLinkState() {
+    return successResponse(
+      'Deep link handler state fetched successfully.',
+      await this.appUtilityDatabase.getDeepLinkHandler(),
+    );
   }
 
   @Post('resolve')
-  resolveLink(@Body() body: ResolveDeepLinkDto) {
-    return this.appExtensionsData.resolveDeepLink(body.url);
+  async resolveLink(@Body() body: ResolveDeepLinkDto) {
+    return successResponse(
+      'Deep link resolved successfully.',
+      await this.appUtilityDatabase.resolveDeepLink(body.url),
+    );
   }
 }
