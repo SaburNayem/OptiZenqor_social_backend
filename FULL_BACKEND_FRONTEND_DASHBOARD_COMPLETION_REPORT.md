@@ -22,6 +22,13 @@ This report is intentionally strict. It reflects only the work completed and the
 
 ### Flutter
 - `lib/feature/media_viewer/controller/media_viewer_controller.dart`
+- `lib/feature/home_feed/repository/home_feed_repository.dart`
+- `lib/feature/business_profile/model/business_profile_model.dart`
+- `lib/feature/business_profile/repository/business_profile_repository.dart`
+- `lib/feature/business_profile/screen/business_profile_screen.dart`
+- `lib/feature/creator_tools/model/creator_metric_model.dart`
+- `lib/feature/creator_tools/repository/creator_dashboard_repository.dart`
+- `lib/feature/creator_tools/screen/creator_dashboard_screen.dart`
 
 ## Backend Endpoints Added Or Changed
 
@@ -64,6 +71,15 @@ This report is intentionally strict. It reflects only the work completed and the
 - Removed fallback stock media from `MediaViewerController`
   - The media viewer no longer injects Unsplash images when real media is absent.
   - It now renders only the items passed into it.
+- Removed runtime feed fallback from `HomeFeedRepository`
+  - Feed loading no longer merges cached or locally created posts into the production feed path when the backend fails.
+  - Feed results now come from the backend only, with an empty state on failure instead of local fallback content.
+- Removed fake default creator identity and analytics values from creator tools
+  - The creator dashboard no longer fabricates names like `Creator`, handles like `@creator`, or `Unavailable`-style values at repository parse time.
+  - The screen now renders neutral empty-safe copy when the backend omits fields.
+- Removed placeholder-oriented business profile field naming and fallback content
+  - The business profile model now uses `analyticsSummary` instead of `analyticsPlaceholder`.
+  - Repository parsing no longer injects fake business title/about strings when the backend omits them.
 
 ## Audit Summary
 
@@ -124,6 +140,11 @@ This report is intentionally strict. It reflects only the work completed and the
 - `I:\flutter\bin\cache\dart-sdk\bin\dart.exe analyze lib --no-fatal-warnings`
   - Passed
   - No issues found
+- `dart format` on the targeted Flutter files changed in this pass
+  - Passed
+- `flutter analyze`
+  - Passed
+  - No issues found
 - `flutter test`
   - No executable tests found
   - The `test` directory exists but does not contain any `_test.dart` files
@@ -133,15 +154,16 @@ This report is intentionally strict. It reflects only the work completed and the
 - Full endpoint diff between every Flutter endpoint constant and every backend controller route was not completed in report form.
 - Full dashboard redesign across every nav item into a highly specialized module page was not completed.
 - Full Flutter cleanup of every remaining placeholder, local cache pattern, and non-authoritative UI fallback was not completed.
+- Several Flutter model-level string fallbacks still exist for defensive parsing and empty labels. They are not all production-fake data, but they have not been fully audited one-by-one in this pass.
 - Admin-authenticated smoke tests are still blocked by missing bootstrap credentials in local environment configuration.
 - Prisma client generation remains blocked by a local Windows file-lock `EPERM`.
-- `dart format lib` was not run across the entire Flutter `lib` tree to avoid a noisy unrelated mass rewrite during this targeted pass.
+- `dart format .` was not run across the entire Flutter repo to avoid a noisy unrelated mass rewrite during this targeted pass.
 
 ## Estimated Completion Percentage
 - Backend: 84%
-- Flutter: 68%
+- Flutter: 73%
 - Dashboard: 82%
-- Full platform: 78%
+- Full platform: 80%
 
 These percentages are not 100% because the protected admin smoke tests did not run, Prisma generate did not complete, and a full repo-wide mock/fallback eradication across Flutter and dashboard was not finished.
 
