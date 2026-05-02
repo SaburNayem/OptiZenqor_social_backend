@@ -328,7 +328,7 @@ export class RealtimeController {
     @Body() body: CreateLiveStreamDto,
   ) {
     const stream = await this.socialStateDatabase.createLiveStream(user.id, {
-      title: body.title ?? 'Go live',
+      title: body.title ?? '',
       description: body.description,
       category: body.category,
       location: body.location,

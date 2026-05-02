@@ -172,24 +172,28 @@ export class ExperienceDatabaseService {
       products,
     );
     const followedSellerIds = followedSellerRows.map((row) => row.sellerId);
+    const categories = this.buildMarketplaceCategories(products);
+    const chatMessages = await this.mapMarketplaceMessages(
+      conversationRows
+        .flatMap((row) => row.messages)
+        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime()),
+    );
+    const offerHistory = await this.mapMarketplaceOffers(offerRows);
 
     return {
       totalProducts,
       products: mappedProducts,
       items: mappedProducts,
       results: mappedProducts,
-      categories: [...new Set(products.map((item) => item.category))],
+      categories,
       sellers,
       orders: orders.map((row) => this.mapMarketplaceOrder(row)),
       drafts: draftRows.map((row) => this.mapMarketplaceDraft(row)),
       savedItemIds: bookmarkRows.map((row) => row.entityId),
       compareItemIds: compareState.productIds,
       followedSellerIds,
-      chatMessages: conversationRows
-        .flatMap((row) => row.messages)
-        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-        .map((row) => this.mapMarketplaceMessage(row)),
-      offerHistory: offerRows.map((row) => this.mapMarketplaceOffer(row)),
+      chatMessages,
+      offerHistory,
       featuredProducts: mappedProducts.slice(0, 5),
       trendingProducts: mappedProducts
         .slice()
@@ -216,21 +220,22 @@ export class ExperienceDatabaseService {
       where: { deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
+    const marketplaceConfig = await this.readMarketplaceConfig();
+    const deliveryMethods = this.readStringArray(marketplaceConfig.deliveryMethods);
+    const paymentMethods = this.readStringArray(marketplaceConfig.paymentMethods);
+    const moderationNotes = this.readStringArray(marketplaceConfig.moderationNotes);
 
     return {
-      requiredProfileType: 'business',
-      categories: [...new Set(products.map((item) => item.category))],
+      requiredProfileType: marketplaceConfig.requiredProfileType ?? 'business',
+      categories: this.buildMarketplaceCategories(products),
       conditions: [...new Set(products.map((item) => item.condition).filter(Boolean))],
       sellerProfiles: await this.buildSellerProfiles(
         [...new Set(products.map((item) => item.sellerId))],
         products,
       ),
-      deliveryMethods: ['Pickup', 'Shipping', 'Local delivery'],
-      paymentMethods: ['Cash on delivery', 'Wallet', 'Card'],
-      moderationNotes: [
-        'Avoid prohibited items and misleading titles.',
-        'Use clear photos and accurate condition details.',
-      ],
+      deliveryMethods,
+      paymentMethods,
+      moderationNotes,
     };
   }
 
@@ -309,17 +314,21 @@ export class ExperienceDatabaseService {
         : Promise.resolve([]),
     ]);
 
+    const chatMessages = await this.mapMarketplaceMessages(
+      conversationRows
+        .flatMap((row) => row.messages)
+        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime()),
+    );
+    const offerHistory = await this.mapMarketplaceOffers(offerRows);
+
     return {
       product: await this.mapMarketplaceProduct(product),
       seller,
       relatedProducts: await Promise.all(related.map((row) => this.mapMarketplaceProduct(row))),
       saved: false,
       sellerFollowed: Boolean(sellerFollow),
-      chatMessages: conversationRows
-        .flatMap((row) => row.messages)
-        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-        .map((row) => this.mapMarketplaceMessage(row)),
-      offerHistory: offerRows.map((row) => this.mapMarketplaceOffer(row)),
+      chatMessages,
+      offerHistory,
       orderHistory: orders.map((row) => this.mapMarketplaceOrder(row)),
     };
   }
@@ -584,10 +593,11 @@ export class ExperienceDatabaseService {
     });
     return {
       conversations: conversations.map((row) => this.mapMarketplaceConversation(row)),
-      messages: conversations
-        .flatMap((row) => row.messages)
-        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-        .map((row) => this.mapMarketplaceMessage(row)),
+      messages: await this.mapMarketplaceMessages(
+        conversations
+          .flatMap((row) => row.messages)
+          .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime()),
+      ),
     };
   }
 
@@ -623,7 +633,7 @@ export class ExperienceDatabaseService {
       where: this.marketplaceOfferScope(productId, userId),
       orderBy: { createdAt: 'desc' },
     });
-    return offers.map((row) => this.mapMarketplaceOffer(row));
+    return this.mapMarketplaceOffers(offers);
   }
 
   async createMarketplaceOffer(
@@ -1951,9 +1961,9 @@ export class ExperienceDatabaseService {
     ]);
     return {
       id: seller?.id ?? sellerId,
-      name: seller?.name ?? 'Unknown Seller',
-      username: seller?.username ?? sellerId,
-      avatar: seller?.avatar ?? 'https://placehold.co/120x120',
+      name: seller?.name ?? '',
+      username: seller?.username ?? '',
+      avatar: seller?.avatar ?? '',
       bio: seller?.bio ?? '',
       verified: seller?.verified ?? false,
       role: seller?.role ?? 'seller',
@@ -1961,9 +1971,42 @@ export class ExperienceDatabaseService {
       following: seller?.following ?? 0,
       activeListings: products.length,
       completedOrders,
-      storeName: seller?.name ?? 'Unknown Seller',
+      storeName: seller?.name ?? '',
       strikeStatus: seller?.status === 'Suspended' ? 'Under review' : 'No warnings',
     };
+  }
+
+  private buildMarketplaceCategories(
+    products: Array<{ category: string; subcategory: string | null }>,
+  ) {
+    const categories = new Map<string, Set<string>>();
+
+    for (const product of products) {
+      const category = product.category.trim();
+      if (!category) {
+        continue;
+      }
+      const subcategories = categories.get(category) ?? new Set<string>();
+      const subcategory = product.subcategory?.trim();
+      if (subcategory) {
+        subcategories.add(subcategory);
+      }
+      categories.set(category, subcategories);
+    }
+
+    return [...categories.entries()].map(([name, subcategories]) => ({
+      id: name.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+      name,
+      subcategories: [...subcategories],
+    }));
+  }
+
+  private async readMarketplaceConfig() {
+    const entry = await this.prisma.supportConfigEntry.findUnique({
+      where: { key: 'marketplace.create_options' },
+    });
+
+    return this.toObject(entry?.value);
   }
 
   private mapMarketplaceProduct(row: {
@@ -2087,6 +2130,20 @@ export class ExperienceDatabaseService {
     };
   }
 
+  private async mapMarketplaceMessages(
+    rows: Array<{
+      id: string;
+      senderId: string;
+      text: string;
+      imageUrl: string | null;
+      kind: string;
+      createdAt: Date;
+    }>,
+  ) {
+    const userDirectory = await this.buildUserDirectory(rows.map((row) => row.senderId));
+    return rows.map((row) => this.mapMarketplaceMessage(row, userDirectory));
+  }
+
   private mapMarketplaceMessage(row: {
     id: string;
     senderId: string;
@@ -2094,17 +2151,42 @@ export class ExperienceDatabaseService {
     imageUrl: string | null;
     kind: string;
     createdAt: Date;
-  }) {
+  }, userDirectory?: Map<string, { name: string; username: string }>) {
+    const sender = userDirectory?.get(row.senderId);
     return {
       id: row.id,
       senderId: row.senderId,
-      senderName: row.senderId,
+      senderName: sender?.name ?? '',
+      senderUsername: sender?.username ?? '',
       text: row.text,
       imageUrl: row.imageUrl ?? undefined,
       kind: row.kind,
       timestamp: row.createdAt.toISOString(),
       createdAt: row.createdAt.toISOString(),
     };
+  }
+
+  private async mapMarketplaceOffers(
+    rows: Array<{
+      id: string;
+      conversationId: string;
+      productId: string;
+      buyerId: string;
+      sellerId: string;
+      amount: Prisma.Decimal;
+      currency: string;
+      status: string;
+      note: string | null;
+      metadata: Prisma.JsonValue;
+      actedAt: Date | null;
+      createdAt: Date;
+      updatedAt: Date;
+    }>,
+  ) {
+    const userDirectory = await this.buildUserDirectory(
+      rows.flatMap((row) => [row.buyerId, row.sellerId]),
+    );
+    return rows.map((row) => this.mapMarketplaceOffer(row, userDirectory));
   }
 
   private mapMarketplaceOffer(row: {
@@ -2121,14 +2203,17 @@ export class ExperienceDatabaseService {
     actedAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
-  }) {
+  }, userDirectory?: Map<string, { name: string; username: string }>) {
+    const buyer = userDirectory?.get(row.buyerId);
     return {
       id: row.id,
       conversationId: row.conversationId,
       productId: row.productId,
       buyerId: row.buyerId,
       sellerId: row.sellerId,
-      actor: row.buyerId,
+      actor: buyer?.name ?? '',
+      actorName: buyer?.name ?? '',
+      actorUsername: buyer?.username ?? '',
       action: this.titleCase(row.status),
       amount: Number(row.amount),
       currency: row.currency,
@@ -2140,6 +2225,28 @@ export class ExperienceDatabaseService {
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
+  }
+
+  private async buildUserDirectory(userIds: string[]) {
+    const normalizedIds = [...new Set(userIds.map((item) => item.trim()).filter(Boolean))];
+    if (normalizedIds.length === 0) {
+      return new Map<string, { name: string; username: string }>();
+    }
+
+    const users = await this.prisma.appUser.findMany({
+      where: { id: { in: normalizedIds } },
+      select: { id: true, name: true, username: true },
+    });
+
+    return new Map(
+      users.map((user) => [
+        user.id,
+        {
+          name: user.name,
+          username: user.username,
+        },
+      ]),
+    );
   }
 
   private async ensureMarketplaceProduct(productId: string) {

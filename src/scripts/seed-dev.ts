@@ -205,6 +205,231 @@ async function main() {
     });
   }
 
+  await prisma.supportConfigEntry.upsert({
+    where: { key: 'marketplace.create_options' },
+    create: {
+      key: 'marketplace.create_options',
+      title: 'Marketplace create options',
+      description: 'Canonical marketplace listing options for production clients.',
+      value: {
+        requiredProfileType: 'business',
+        deliveryMethods: ['Pickup', 'Shipping', 'Local delivery'],
+        paymentMethods: ['Cash on delivery', 'Wallet', 'Card'],
+        moderationNotes: [
+          'Avoid prohibited items and misleading titles.',
+          'Use clear photos and accurate condition details.',
+        ],
+      },
+    },
+    update: {
+      title: 'Marketplace create options',
+      description: 'Canonical marketplace listing options for production clients.',
+      value: {
+        requiredProfileType: 'business',
+        deliveryMethods: ['Pickup', 'Shipping', 'Local delivery'],
+        paymentMethods: ['Cash on delivery', 'Wallet', 'Card'],
+        moderationNotes: [
+          'Avoid prohibited items and misleading titles.',
+          'Use clear photos and accurate condition details.',
+        ],
+      },
+    },
+  });
+
+  for (const locale of [
+    {
+      localeCode: 'en',
+      label: 'English',
+      nativeLabel: 'English',
+      direction: 'ltr',
+      sortOrder: 1,
+      isDefault: true,
+    },
+    {
+      localeCode: 'bn',
+      label: 'Bangla',
+      nativeLabel: 'Bangla',
+      direction: 'ltr',
+      sortOrder: 2,
+      isDefault: false,
+    },
+    {
+      localeCode: 'ar',
+      label: 'Arabic',
+      nativeLabel: 'Arabic',
+      direction: 'rtl',
+      sortOrder: 3,
+      isDefault: false,
+    },
+  ]) {
+    await prisma.localizationLocaleCatalog.upsert({
+      where: { localeCode: locale.localeCode },
+      create: locale,
+      update: locale,
+    });
+  }
+
+  for (const option of [
+    {
+      id: 'accessibility_captions',
+      optionKey: 'accessibility.captions',
+      title: 'Captions by default',
+      description: 'Enable captions by default for compatible content.',
+      settingKey: 'accessibility.captions',
+      valueType: 'boolean',
+      defaultValue: true,
+      options: [],
+      sortOrder: 1,
+      metadata: {},
+    },
+    {
+      id: 'accessibility_high_contrast',
+      optionKey: 'accessibility.high_contrast',
+      title: 'High contrast mode',
+      description: 'Increase contrast for improved readability.',
+      settingKey: 'accessibility.high_contrast',
+      valueType: 'boolean',
+      defaultValue: false,
+      options: [],
+      sortOrder: 2,
+      metadata: {},
+    },
+    {
+      id: 'accessibility_reduce_motion',
+      optionKey: 'accessibility.reduce_motion',
+      title: 'Reduce motion',
+      description: 'Limit non-essential movement and animation.',
+      settingKey: 'accessibility.reduce_motion',
+      valueType: 'boolean',
+      defaultValue: false,
+      options: [],
+      sortOrder: 3,
+      metadata: {},
+    },
+    {
+      id: 'accessibility_screen_reader_hints',
+      optionKey: 'accessibility.screen_reader_hints',
+      title: 'Screen reader hints',
+      description: 'Provide extra spoken guidance for assistive readers.',
+      settingKey: 'accessibility.screen_reader_hints',
+      valueType: 'boolean',
+      defaultValue: true,
+      options: [],
+      sortOrder: 4,
+      metadata: {},
+    },
+  ]) {
+    await prisma.accessibilityOptionCatalog.upsert({
+      where: { optionKey: option.optionKey },
+      create: option,
+      update: option,
+    });
+  }
+
+  for (const document of [
+    {
+      id: 'legal_terms_2026_04',
+      documentKey: 'terms',
+      title: 'Terms of Service',
+      version: '2026.04',
+      body: 'Platform terms of service version 2026.04.',
+      summary: 'Terms governing use of the OptiZenqor platform.',
+      isPublished: true,
+      publishedAt: new Date('2026-04-01T00:00:00.000Z'),
+    },
+    {
+      id: 'legal_privacy_2026_04',
+      documentKey: 'privacy',
+      title: 'Privacy Policy',
+      version: '2026.04',
+      body: 'Platform privacy policy version 2026.04.',
+      summary: 'How OptiZenqor collects and uses personal data.',
+      isPublished: true,
+      publishedAt: new Date('2026-04-01T00:00:00.000Z'),
+    },
+    {
+      id: 'legal_guidelines_2026_04',
+      documentKey: 'guidelines',
+      title: 'Community Guidelines',
+      version: '2026.04',
+      body: 'Platform community guidelines version 2026.04.',
+      summary: 'Community rules and moderation expectations.',
+      isPublished: true,
+      publishedAt: new Date('2026-04-01T00:00:00.000Z'),
+    },
+  ]) {
+    await prisma.legalDocumentVersion.upsert({
+      where: { id: document.id },
+      create: document,
+      update: document,
+    });
+  }
+
+  for (const item of [
+    {
+      id: 'onboarding_slide_identity',
+      catalogType: 'slide',
+      code: 'identity',
+      title: 'Create your social identity',
+      subtitle: 'One profile, multiple roles, premium social tools.',
+      description: 'Set up a profile that works across social, business, and creator journeys.',
+      icon: 'person_pin_circle_rounded',
+      sortOrder: 1,
+      metadata: {},
+    },
+    {
+      id: 'onboarding_slide_discovery',
+      catalogType: 'slide',
+      code: 'discovery',
+      title: 'Discover what matters faster',
+      subtitle: 'Reels, communities, market, jobs, and curated feed.',
+      description: 'Find people, content, commerce, and opportunities in one place.',
+      icon: 'travel_explore_rounded',
+      sortOrder: 2,
+      metadata: {},
+    },
+    {
+      id: 'onboarding_slide_growth',
+      catalogType: 'slide',
+      code: 'growth',
+      title: 'Scale with creator and business tools',
+      subtitle: 'Insights, campaigns, subscriptions, and growth modules.',
+      description: 'Use advanced tools to grow audience, revenue, and reach.',
+      icon: 'insights_rounded',
+      sortOrder: 3,
+      metadata: {},
+    },
+  ]) {
+    await prisma.onboardingCatalogItem.upsert({
+      where: { id: item.id },
+      create: item,
+      update: item,
+    });
+  }
+
+  for (const item of [
+    { id: 'personalization_technology', code: 'technology', title: 'Technology', groupKey: 'interest', sortOrder: 1 },
+    { id: 'personalization_business', code: 'business', title: 'Business', groupKey: 'interest', sortOrder: 2 },
+    { id: 'personalization_music', code: 'music', title: 'Music', groupKey: 'interest', sortOrder: 3 },
+    { id: 'personalization_sports', code: 'sports', title: 'Sports', groupKey: 'interest', sortOrder: 4 },
+    { id: 'personalization_travel', code: 'travel', title: 'Travel', groupKey: 'interest', sortOrder: 5 },
+    { id: 'personalization_education', code: 'education', title: 'Education', groupKey: 'interest', sortOrder: 6 },
+  ]) {
+    await prisma.personalizationCatalogItem.upsert({
+      where: { id: item.id },
+      create: {
+        ...item,
+        description: null,
+        metadata: {},
+      },
+      update: {
+        ...item,
+        description: null,
+        metadata: {},
+      },
+    });
+  }
+
   await prisma.premiumPlan.createMany({
     data: [
       {

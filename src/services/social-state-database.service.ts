@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -478,9 +479,9 @@ export class SocialStateDatabaseService {
       host: user.name,
       username: user.username,
       avatarUrl: user.avatar,
-      title: latest?.title ?? 'Go live',
+      title: latest?.title ?? '',
       description: latest?.description ?? '',
-      category: latest?.category ?? 'Live',
+      category: latest?.category ?? '',
       location: latest?.location ?? '',
       audience: latest?.audience ?? 'public',
       status: latest?.status ?? 'scheduled',
@@ -488,7 +489,7 @@ export class SocialStateDatabaseService {
       quickOptions:
         this.readArrayObjects(latest?.quickOptions).length > 0
           ? this.readArrayObjects(latest?.quickOptions)
-          : this.defaultLiveQuickOptions(),
+          : [],
       comments: (latest?.comments ?? []).map((item) => this.mapLiveComment(item)),
     };
   }
@@ -566,20 +567,24 @@ export class SocialStateDatabaseService {
       previewImageUrl?: string;
     },
   ) {
+    const normalizedTitle = input.title.trim();
+    if (!normalizedTitle) {
+      throw new BadRequestException('Live stream title is required.');
+    }
     await this.coreDatabase.getUser(userId);
     const stream = await this.prisma.liveStreamSession.create({
       data: {
         id: makeId('live_stream'),
         hostId: userId,
-        title: input.title.trim() || 'Go live',
+        title: normalizedTitle,
         description: input.description?.trim() || '',
-        category: input.category?.trim() || 'Live',
+        category: input.category?.trim() || '',
         location: input.location?.trim() || null,
         audience: input.audience?.trim() || 'public',
         status: 'scheduled',
         quickOptions: (Array.isArray(input.quickOptions)
           ? input.quickOptions
-          : this.defaultLiveQuickOptions()) as Prisma.InputJsonValue,
+          : []) as Prisma.InputJsonValue,
         previewImageUrl: input.previewImageUrl?.trim() || null,
       },
       include: {
