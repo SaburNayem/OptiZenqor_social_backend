@@ -553,3 +553,9 @@
 [32m[Nest] 8980  - [39m05/02/2026, 9:49:05 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/admin/premium-plans, POST} route[39m[38;5;3m +0ms[39m
 [32m[Nest] 8980  - [39m05/02/2026, 9:49:05 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/admin/premium-plans/:id, PATCH} route[39m[38;5;3m +0ms[39m
 [32m[Nest] 8980  - [39m05/02/2026, 9:49:09 AM [32m    LOG[39m [38;5;3m[DatabaseService] [39m[32mPostgreSQL connected to ep-shiny-sunset-a4xm3j43-pooler.us-east-1.aws.neon.tech/neondb[39m
+[32m[Nest] 8980  - [39m05/02/2026, 9:49:18 AM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +9354ms[39m
+API running at http://localhost:3000
+Swagger UI at http://localhost:3000/docs
+Swagger alias at http://localhost:3000/swagger
+Public-friendly Swagger UI at http://localhost:3000/docs-online
+OpenAPI JSON at http://localhost:3000/docs-json
