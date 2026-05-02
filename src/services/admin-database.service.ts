@@ -1515,6 +1515,68 @@ export class AdminDatabaseService implements OnModuleInit {
     return this.mapAdminMarketplaceRow(item);
   }
 
+  async getAdminMarketplace(id: string) {
+    const item = await this.prisma.marketplaceProduct.findUnique({
+      where: { id },
+      include: {
+        seller: true,
+        orders: {
+          orderBy: { createdAt: 'desc' },
+          take: 25,
+        },
+        conversations: {
+          orderBy: { updatedAt: 'desc' },
+          take: 25,
+          include: {
+            messages: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+    if (!item) {
+      throw new NotFoundException(`Marketplace item ${id} not found.`);
+    }
+
+    return {
+      ...this.mapAdminMarketplaceRow(item),
+      description: item.description,
+      subcategory: item.subcategory,
+      condition: item.condition,
+      location: item.location,
+      images: this.readStringArray(item.images),
+      seller: {
+        id: item.seller.id,
+        name: item.seller.name,
+        username: item.seller.username,
+        avatarUrl: item.seller.avatar,
+        role: item.seller.role,
+        verification: item.seller.verification,
+      },
+      orderCount: item.orders.length,
+      recentOrders: item.orders.map((order) => ({
+        id: order.id,
+        buyerId: order.buyerId,
+        sellerId: order.sellerId,
+        amount: Number(order.amount),
+        status: order.status,
+        deliveryMethod: order.deliveryMethod,
+        paymentMethod: order.paymentMethod,
+        createdAt: order.createdAt.toISOString(),
+      })),
+      recentConversations: item.conversations.map((conversation) => ({
+        id: conversation.id,
+        buyerId: conversation.buyerId,
+        sellerId: conversation.sellerId,
+        status: conversation.status,
+        latestMessage: conversation.messages[0]?.text ?? '',
+        updatedAt: conversation.updatedAt.toISOString(),
+      })),
+    };
+  }
+
   async updateAdminMarketplace(
     id: string,
     patch: {
@@ -1701,6 +1763,53 @@ export class AdminDatabaseService implements OnModuleInit {
     return this.mapAdminJobRow(item);
   }
 
+  async getAdminJob(id: string) {
+    const item = await this.prisma.job.findUnique({
+      where: { id },
+      include: {
+        recruiter: true,
+        applications: {
+          include: {
+            applicant: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        },
+      },
+    });
+    if (!item) {
+      throw new NotFoundException(`Job ${id} not found.`);
+    }
+
+    return {
+      ...this.mapAdminJobRow(item),
+      description: item.description,
+      location: item.location,
+      experienceLevel: item.experienceLevel,
+      salaryMin: item.salaryMin,
+      salaryMax: item.salaryMax,
+      currency: item.currency,
+      skills: this.readStringArray(item.skills),
+      metadata: this.readObject(item.metadata),
+      recruiter: {
+        id: item.recruiter.id,
+        name: item.recruiter.name,
+        username: item.recruiter.username,
+        avatarUrl: item.recruiter.avatar,
+        role: item.recruiter.role,
+        verification: item.recruiter.verification,
+      },
+      applicants: item.applications.map((application) => ({
+        id: application.id,
+        applicantId: application.applicantId,
+        applicantName: application.applicantName || application.applicant.name,
+        status: application.status,
+        resumeUrl: application.resumeUrl,
+        createdAt: application.createdAt.toISOString(),
+      })),
+    };
+  }
+
   async updateAdminJob(
     id: string,
     patch: {
@@ -1883,6 +1992,37 @@ export class AdminDatabaseService implements OnModuleInit {
     });
 
     return this.mapAdminEventRow(item);
+  }
+
+  async getAdminEvent(id: string) {
+    const item = await this.prisma.event.findUnique({
+      where: { id },
+      include: {
+        organizer: true,
+        rsvps: {
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        },
+      },
+    });
+    if (!item) {
+      throw new NotFoundException(`Event ${id} not found.`);
+    }
+
+    return {
+      ...this.mapAdminEventRow(item),
+      description: item.description,
+      date: item.date,
+      time: item.time,
+      category: item.category,
+      savedCount: item.savedCount,
+      attendees: item.rsvps.map((rsvp) => ({
+        userId: rsvp.userId,
+        status: rsvp.status,
+        saved: rsvp.saved,
+        createdAt: rsvp.createdAt.toISOString(),
+      })),
+    };
   }
 
   async updateAdminEvent(
@@ -3694,6 +3834,7 @@ export class AdminDatabaseService implements OnModuleInit {
   private mapAdminMarketplaceRow(item: {
     id: string;
     title: string;
+    description?: string;
     category: string;
     price: Prisma.Decimal;
     currency: string;
@@ -3702,21 +3843,38 @@ export class AdminDatabaseService implements OnModuleInit {
     sellerId: string;
     views: number;
     watchers: number;
+    subcategory?: string | null;
+    condition?: string | null;
+    location?: string | null;
+    images?: Prisma.JsonValue;
     createdAt: Date;
-    seller: { name: string };
+    seller: { name: string; username?: string; avatar?: string; verification?: string | null; role?: string | null };
+    orders?: Array<unknown>;
+    conversations?: Array<unknown>;
   }) {
     return {
       id: item.id,
       title: item.title,
+      description: item.description ?? '',
       category: item.category,
+      subcategory: item.subcategory ?? '',
+      condition: item.condition ?? '',
+      location: item.location ?? '',
       price: Number(item.price),
       currency: item.currency,
       status: item.status,
       stock: item.stock,
       sellerName: item.seller.name,
       sellerId: item.sellerId,
+      sellerUsername: item.seller.username ?? '',
+      sellerAvatarUrl: item.seller.avatar ?? '',
+      sellerVerification: item.seller.verification ?? '',
+      sellerRole: item.seller.role ?? '',
       views: item.views,
       watchers: item.watchers,
+      imageCount: Array.isArray(item.images) ? item.images.length : 0,
+      orderCount: item.orders?.length ?? 0,
+      conversationCount: item.conversations?.length ?? 0,
       createdAt: item.createdAt.toISOString(),
     };
   }
@@ -3725,21 +3883,39 @@ export class AdminDatabaseService implements OnModuleInit {
     id: string;
     title: string;
     company: string;
+    description?: string;
     status: string;
     type: string;
     recruiterId: string;
+    location?: string | null;
+    experienceLevel?: string | null;
+    salaryMin?: number | null;
+    salaryMax?: number | null;
+    currency?: string;
+    skills?: Prisma.JsonValue;
     createdAt: Date;
-    recruiter: { name: string };
+    recruiter: { name: string; username?: string; avatar?: string; verification?: string | null; role?: string | null };
     applications: Array<unknown>;
   }) {
     return {
       id: item.id,
       title: item.title,
       company: item.company,
+      description: item.description ?? '',
       status: item.status,
       type: item.type,
       recruiterName: item.recruiter.name,
       recruiterId: item.recruiterId,
+      recruiterUsername: item.recruiter.username ?? '',
+      recruiterAvatarUrl: item.recruiter.avatar ?? '',
+      recruiterVerification: item.recruiter.verification ?? '',
+      recruiterRole: item.recruiter.role ?? '',
+      location: item.location ?? '',
+      experienceLevel: item.experienceLevel ?? '',
+      salaryMin: item.salaryMin ?? null,
+      salaryMax: item.salaryMax ?? null,
+      currency: item.currency ?? 'BDT',
+      skills: this.readStringArray(item.skills),
       applications: item.applications.length,
       createdAt: item.createdAt.toISOString(),
     };
@@ -3905,6 +4081,11 @@ export class AdminDatabaseService implements OnModuleInit {
       userName: item.user?.name ?? null,
       username: item.user?.username ?? null,
       userEmail: item.user?.email ?? null,
+      userLabel:
+        item.user?.name ??
+        item.user?.username ??
+        item.user?.email ??
+        (item.userId ? `user:${item.userId}` : null),
       conversationId: item.conversation?.id ?? null,
       conversationStatus: item.conversation?.status ?? null,
       channel: item.conversation?.channel ?? null,

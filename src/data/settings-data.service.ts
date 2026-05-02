@@ -676,13 +676,13 @@ export class SettingsDataService {
             { title: 'Hidden words filter', value: true },
             { title: 'Restrict interaction settings', value: false },
             { title: 'Sensitive content filter', value: true },
-            { title: 'Anti-spam placeholder', value: true },
-            { title: 'Child/teen safety placeholder', value: true },
-            { title: 'Parental control placeholder', value: false },
+            { title: 'Anti-spam protections', value: true },
+            { title: 'Teen safety protections', value: true },
+            { title: 'Parental supervision controls', value: false },
             { title: 'Data saver media mode', value: false },
             { title: 'Auto-play control settings', value: true },
             { title: 'Reduced motion toggle', value: false },
-            { title: 'High contrast mode placeholder', value: false },
+            { title: 'High contrast mode', value: false },
           ],
         };
       case 'notifications':

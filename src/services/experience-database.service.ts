@@ -117,6 +117,9 @@ export class ExperienceDatabaseService {
               OR: [{ buyerId: userId }, { sellerId: userId }],
             }
           : undefined,
+        include: {
+          product: true,
+        },
         orderBy: { createdAt: 'desc' },
         take: 20,
       }),
@@ -242,6 +245,9 @@ export class ExperienceDatabaseService {
   async getMarketplaceProduct(id: string) {
     const product = await this.prisma.marketplaceProduct.findFirst({
       where: { id, deletedAt: null },
+      include: {
+        seller: true,
+      },
     });
     if (!product) {
       throw new NotFoundException(`Marketplace product ${id} not found`);
@@ -264,12 +270,18 @@ export class ExperienceDatabaseService {
           category: product.category,
           id: { not: id },
         },
+        include: {
+          seller: true,
+        },
         orderBy: { createdAt: 'desc' },
         take: 6,
       }),
       this.buildSellerProfile(product.sellerId, [product]),
       this.prisma.marketplaceOrder.findMany({
         where: { productId: id },
+        include: {
+          product: true,
+        },
         orderBy: { createdAt: 'desc' },
       }),
       viewerId
@@ -381,6 +393,9 @@ export class ExperienceDatabaseService {
         images: (body.images ?? []) as Prisma.InputJsonValue,
         status: 'active',
       },
+      include: {
+        seller: true,
+      },
     });
     return this.mapMarketplaceProduct(product);
   }
@@ -409,6 +424,9 @@ export class ExperienceDatabaseService {
         status,
         updatedAt: new Date(),
       },
+      include: {
+        seller: true,
+      },
     });
 
     return this.mapMarketplaceProduct(product);
@@ -436,6 +454,9 @@ export class ExperienceDatabaseService {
         deliveryMethod: input.deliveryMethod,
         paymentMethod: input.paymentMethod,
         status: 'pending',
+      },
+      include: {
+        product: true,
       },
     });
     return this.mapMarketplaceOrder(order);
@@ -721,7 +742,7 @@ export class ExperienceDatabaseService {
       }),
       this.prisma.job.count({ where }),
     ]);
-    const items = jobs.map((row) => this.mapJob(row));
+    const items = await Promise.all(jobs.map((row) => this.mapJob(row)));
     return {
       jobs: items,
       items,
@@ -2050,12 +2071,13 @@ export class ExperienceDatabaseService {
     return this.toObject(entry?.value);
   }
 
-  private mapMarketplaceProduct(row: {
+  private async mapMarketplaceProduct(row: {
     id: string;
     sellerId: string;
     title: string;
     description: string;
     price: Prisma.Decimal;
+    currency?: string;
     category: string;
     subcategory: string | null;
     condition: string | null;
@@ -2066,13 +2088,73 @@ export class ExperienceDatabaseService {
     watchers: number;
     views: number;
     createdAt: Date;
+    seller?: {
+      id: string;
+      name: string;
+      username: string;
+      avatar: string;
+      role: string | null;
+      bio: string | null;
+      verification: string | null;
+      followers: number;
+      following: number;
+      createdAt: Date;
+    } | null;
   }) {
+    const seller =
+      row.seller ??
+      (await this.prisma.appUser.findUnique({
+        where: { id: row.sellerId },
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          avatar: true,
+          role: true,
+          bio: true,
+          verification: true,
+          followers: true,
+          following: true,
+          createdAt: true,
+        },
+      }));
+    const sellerRole = (seller?.role ?? '').trim().toLowerCase();
+    const sellerVerification = (seller?.verification ?? '').trim().toLowerCase();
+    const sellerType =
+      sellerVerification.includes('verified')
+        ? 'verified'
+        : sellerRole === 'business' || sellerRole === 'seller'
+          ? 'shop'
+          : 'individual';
+
     return {
       id: row.id,
       sellerId: row.sellerId,
+      sellerName: seller?.name ?? '',
+      sellerType,
+      seller:
+        seller == null
+          ? null
+          : {
+              id: seller.id,
+              name: seller.name,
+              username: seller.username,
+              avatarUrl: seller.avatar,
+              avatar: seller.avatar,
+              bio: seller.bio ?? '',
+              sellerType,
+              verified: sellerVerification.includes('verified'),
+              isVerified: sellerVerification.includes('verified'),
+              followers: seller.followers,
+              following: seller.following,
+              joinDate: seller.createdAt.toISOString(),
+              createdAt: seller.createdAt.toISOString(),
+              storeName: seller.name,
+            },
       title: row.title,
       description: row.description,
       price: Number(row.price),
+      currency: row.currency ?? 'BDT',
       category: row.category,
       subcategory: row.subcategory ?? '',
       condition: row.condition ?? '',
@@ -2098,10 +2180,15 @@ export class ExperienceDatabaseService {
     paymentMethod: string;
     status: string;
     createdAt: Date;
+    product?: {
+      id: string;
+      title: string;
+    } | null;
   }) {
     return {
       id: row.id,
       productId: row.productId,
+      productTitle: row.product?.title ?? '',
       buyerId: row.buyerId,
       sellerId: row.sellerId,
       amount: Number(row.amount),
@@ -2341,7 +2428,7 @@ export class ExperienceDatabaseService {
     });
   }
 
-  private mapJob(row: {
+  private async mapJob(row: {
     id: string;
     recruiterId: string;
     title: string;
@@ -2352,26 +2439,71 @@ export class ExperienceDatabaseService {
     experienceLevel: string | null;
     salaryMin: number | null;
     salaryMax: number | null;
+    currency: string;
     skills: Prisma.JsonValue;
     metadata: Prisma.JsonValue;
     status: string;
     createdAt: Date;
+    recruiter?: {
+      id: string;
+      name: string;
+      username: string;
+      avatar: string;
+      bio: string | null;
+      emailVerified: boolean;
+      verification: string | null;
+      followers: number;
+    } | null;
   }) {
     const metadata = this.toObject(row.metadata);
+    const recruiter =
+      row.recruiter ??
+      (await this.prisma.appUser.findUnique({
+        where: { id: row.recruiterId },
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          avatar: true,
+          bio: true,
+          emailVerified: true,
+          verification: true,
+          followers: true,
+        },
+      }));
+    const salaryLabel =
+      row.salaryMin != null || row.salaryMax != null
+        ? `${row.salaryMin ?? row.salaryMax ?? 0}-${row.salaryMax ?? row.salaryMin ?? 0} ${row.currency}`
+        : '';
+
     return {
       id: row.id,
       recruiterId: row.recruiterId,
+      recruiterName: recruiter?.name ?? '',
       title: row.title,
-      company: row.company,
+      company: {
+        id: `company_${this.slugify(row.company)}`,
+        name: row.company,
+        tagline: this.compactText(recruiter?.bio || row.description, 96),
+        logoInitial: row.company.trim().charAt(0).toUpperCase() || 'C',
+        colorValue: this.colorFromString(row.company),
+        followers: recruiter?.followers ?? 0,
+        followed: false,
+        verified: Boolean(
+          recruiter?.emailVerified ||
+            `${recruiter?.verification ?? ''}`.toLowerCase().includes('verified'),
+        ),
+      },
       companyName: row.company,
       description: row.description,
       location: row.location ?? '',
       type: row.type,
       experienceLevel: row.experienceLevel ?? 'entry',
-      salary:
-        row.salaryMin != null || row.salaryMax != null
-          ? `${row.salaryMin ?? row.salaryMax ?? 0}-${row.salaryMax ?? row.salaryMin ?? 0}`
-          : '',
+      salary: salaryLabel,
+      salaryLabel,
+      salaryMin: row.salaryMin,
+      salaryMax: row.salaryMax,
+      currency: row.currency,
       skills: this.jsonStringArray(row.skills),
       responsibilities: this.readStringArray(metadata.responsibilities),
       requirements: this.readStringArray(metadata.requirements),

@@ -268,6 +268,15 @@ export class AdminController {
     );
   }
 
+  @Get('marketplace/:id')
+  @ApiOperation({ summary: 'Get marketplace item detail for admin review' })
+  async getMarketplaceDetail(@Param('id') id: string) {
+    return successResponse(
+      'Admin marketplace item fetched successfully.',
+      await this.adminDatabase.getAdminMarketplace(id),
+    );
+  }
+
   @Patch('marketplace/:id')
   @Roles('Super Admin', 'Operations Admin')
   @ApiOperation({ summary: 'Update a marketplace item from the admin surface' })
@@ -318,6 +327,15 @@ export class AdminController {
     );
   }
 
+  @Get('jobs/:id')
+  @ApiOperation({ summary: 'Get job detail for admin review' })
+  async getJobDetail(@Param('id') id: string) {
+    return successResponse(
+      'Admin job fetched successfully.',
+      await this.adminDatabase.getAdminJob(id),
+    );
+  }
+
   @Patch('jobs/:id')
   @Roles('Super Admin', 'Operations Admin')
   @ApiOperation({ summary: 'Update a job from the admin surface' })
@@ -365,6 +383,15 @@ export class AdminController {
     return successResponse(
       'Admin event created successfully.',
       await this.adminDatabase.createAdminEvent(body, admin.adminId),
+    );
+  }
+
+  @Get('events/:id')
+  @ApiOperation({ summary: 'Get event detail for admin review' })
+  async getEventDetail(@Param('id') id: string) {
+    return successResponse(
+      'Admin event fetched successfully.',
+      await this.adminDatabase.getAdminEvent(id),
     );
   }
 
