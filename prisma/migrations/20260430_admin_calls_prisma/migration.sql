@@ -123,6 +123,7 @@ CREATE INDEX IF NOT EXISTS "app_call_session_participants_user_id_joined_at_idx"
 CREATE INDEX IF NOT EXISTS "app_call_session_signals_session_id_created_at_idx" ON "app_call_session_signals"("session_id","created_at" ASC);
 CREATE INDEX IF NOT EXISTS "app_call_session_signals_to_user_id_created_at_idx" ON "app_call_session_signals"("to_user_id","created_at" DESC);
 CREATE INDEX IF NOT EXISTS "app_push_device_tokens_user_id_is_active_updated_at_idx" ON "app_push_device_tokens"("user_id","is_active","updated_at" DESC);
+CREATE INDEX IF NOT EXISTS "admin_sessions_access_token_idx" ON "admin_sessions"("access_token");
 CREATE INDEX IF NOT EXISTS "admin_sessions_admin_id_created_at_idx" ON "admin_sessions"("admin_id","created_at" DESC);
 CREATE INDEX IF NOT EXISTS "admin_audit_logs_actor_admin_id_created_at_idx" ON "admin_audit_logs"("actor_admin_id","created_at" DESC);
 CREATE INDEX IF NOT EXISTS "admin_audit_logs_entity_type_created_at_idx" ON "admin_audit_logs"("entity_type","created_at" DESC);

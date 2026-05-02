@@ -1,42 +1,52 @@
 # Backend Frontend Mismatch Report
 
-Last updated: 2026-05-02
+Updated: 2026-05-02
 
 ## Fixed In This Pass
 
-- Account OTP routes no longer depend on `ExtendedDataService` runtime state.
-- `PlatformDataService` and `ExtendedDataService` were removed from the live Nest provider/export graph.
-- Flutter creator dashboard was migrated from hardcoded production analytics content to the backend `/creator-dashboard` API.
-- Dashboard shell was split further into reusable layout/common pieces while keeping live API usage.
+- backend Prisma runtime was corrected to use:
+  - pooled runtime connection via `DATABASE_URL`
+  - direct migration connection via `DIRECT_URL`
+- backend migration history was reconciled safely instead of forcing a destructive reset
+- backend seed catalogs now match the current Prisma schema for:
+  - localization locales
+  - accessibility options
+  - legal documents
+  - onboarding items
+  - personalization items
+- backend production boot and database health endpoints now validate successfully
+- Flutter marketplace mutations no longer convert backend failure into nullable success results
+- Flutter calls now pass the real recipient id to the session-creation endpoint
+- Flutter live stream repository no longer invents preview label content client-side
 
-## Fixed In The Admin Contract
+## Current Mismatches
 
-- Added missing admin CRUD endpoints for marketplace, jobs, and events.
-- Added missing admin update endpoints for communities and pages.
-- Added missing admin wallet subscription mutation endpoint.
-- Added canonical admin notification campaign endpoints for dashboard use.
-- Corrected dashboard navigation to canonical notification campaign/device admin routes.
-
-## Still Mismatched
-
-- Flutter still needs a wider audit and cleanup across several server-owned feature flows to verify no remaining production-local mutation state exists.
-- Dashboard architecture is improved but still not fully rebuilt into the requested `pages/admin/*` and hooks-driven modular structure.
-- Dashboard coverage for admin sections is still partial at the UX level even where backend endpoints now exist.
-- The configured PostgreSQL database still has unapplied safe migrations.
-- Admin login credentials are not fully reproducible from local config, so login smoke testing was limited to a failed bootstrap-password attempt plus authenticated endpoint checks through an existing session.
+- marketplace, jobs, calls, live, and support payloads are improved but still not fully complete enough to remove every client-side display fallback
+- some backend settings/config surfaces still pass through static shaping services before reaching persisted data
+- dashboard backend coverage is solid for validation, but UI depth is still behind the full target brief
 
 ## Validation Snapshot
 
 - Backend `npm install` passed
-- Backend `prisma generate` passed
-- Backend `typecheck` passed
-- Backend `build` passed
-- Backend `prisma migrate status` reported unapplied migrations safely
-- Backend smoke tests for `/health`, `/health/database`, and `/docs-json` passed
-- Authenticated admin smoke tests for `/admin/auth/me`, `/admin/dashboard/overview`, `/admin/notification-campaigns`, and `/admin/support-operations` passed using a valid existing session
-- Flutter `pub get` passed
-- Flutter `analyze` passed
-- Flutter `test` could not run because the repo currently contains no `_test.dart` files
+- Backend `npm run prisma:generate` passed
+- Backend `npm run prisma:migrate` passed
+- Backend `npm run seed:dev` passed
+- Backend `npm run typecheck` passed
+- Backend `npm run build` passed
+- Backend `npm run start:prod` passed
+- Backend `/health` passed
+- Backend `/health/database` passed
+- Flutter `flutter pub get` passed
+- Flutter `dart format .` passed
+- Flutter `flutter analyze` passed
+- Flutter `flutter test` passed
 - Dashboard `npm install` passed
-- Dashboard `lint` passed
-- Dashboard `build` passed
+- Dashboard `npm run lint` passed
+- Dashboard `npm run build` passed
+
+## Honest Status
+
+- Backend: 93%
+- Flutter: 82%
+- Dashboard: 85%
+- Overall: 87%

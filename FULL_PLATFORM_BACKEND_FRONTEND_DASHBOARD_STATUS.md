@@ -12,30 +12,28 @@ Updated: 2026-05-02
 
 ### Backend
 
-- added admin compatibility routes required by existing mobile/dashboard endpoint references:
-  - `GET /admin/analytics`
-  - `GET /admin/roles`
-  - `GET /admin/chat-cases`
-  - `GET /admin/notifications`
-- added `DELETE /admin/notification-campaigns/:id`
-- moved page-create option suggestions away from hardcoded owner/location arrays
-- revalidated `npm install`, `prisma generate`, `typecheck`, and `build`
+- cleaned `.env` datasource duplication and introduced `DIRECT_URL` for Prisma
+- updated Prisma datasource config to use `directUrl`
+- changed `npm run prisma:migrate` to production-safe `prisma migrate deploy`
+- reconciled missing migration history entries without resetting the database
+- aligned migration SQL/history with the live schema where runtime still depends on `app_state_snapshots`
+- executed normalized catalog/lifecycle SQL and fixed the dev seed script to match the current Prisma models
+- revalidated production boot with a live database connection and healthy `/health` endpoints
 
 ### Flutter
 
-- replaced several fake/static success interactions with honest unavailable or copy-link behavior
-- added a real minimal smoke test suite under `test/smoke/`
-- confirmed:
-  - `flutter pub get`
-  - analyze over `lib` and `test`
-  - `flutter test`
-  - `flutter build apk --debug`
+- removed two remaining marketplace silent-null success paths
+- stopped defaulting marketplace delivery options to a fabricated pickup value when the backend omits them
+- wired call session creation to send the actual recipient id
+- removed hardcoded live-stream preview text derivation from repository payload mapping
+- revalidated formatting, analyze, and test
 
 ### Dashboard
 
-- kept the dashboard on `VITE_API_BASE_URL` only
-- added `.env.example`
-- revalidated `npm install`, `npm run lint`, and `npm run build`
+- extracted the overview section from `src/components/AdminViews.jsx` into `src/pages/admin/overview/OverviewView.jsx`
+- added a real retry action to the authenticated workspace error state
+- kept the dashboard fully API-driven on `VITE_API_BASE_URL`
+- revalidated lint and production build
 
 ## Validation
 
@@ -43,23 +41,20 @@ Updated: 2026-05-02
 
 - `npm install` -> passed
 - `npm run prisma:generate` -> passed
+- `npm run prisma:migrate` -> passed
+- `npm run seed:dev` -> passed
 - `npm run typecheck` -> passed
 - `npm run build` -> passed
-- `npm run prisma:migrate` -> failed
-  - Prisma schema engine error while targeting local PostgreSQL at `localhost:5432`
-- `npm run seed:dev` -> failed
-  - `Can't reach database server at localhost:5432`
-- `npm run start` -> partial pass then failed
-  - Nest boot mapped routes successfully
-  - database init failed with `ECONNREFUSED` for `127.0.0.1:5432` and `::1:5432`
+- `npm run start:prod` -> passed
+- `GET /health` -> passed
+- `GET /health/database` -> passed
 
 ### Flutter
 
 - `flutter pub get` -> passed
-- `dart format` on changed files -> passed
-- `dart analyze lib test --no-fatal-warnings` -> passed
+- `dart format .` -> passed
+- `flutter analyze` -> passed
 - `flutter test` -> passed
-- `flutter build apk --debug` -> passed
 
 ### Dashboard
 
@@ -69,13 +64,13 @@ Updated: 2026-05-02
 
 ## Current Reality
 
-- backend code quality and route coverage improved, but the active database environment is still the main blocker to claiming a fully working backend/database pass
-- Flutter is validating cleanly now, but several feature areas still need deeper backend-only cleanup beyond the focused honesty pass completed here
-- dashboard connectivity and build health are solid, but the requested full professional admin-console modularization and CRUD depth are still incomplete
+- the backend is now genuinely booting against PostgreSQL with Prisma migrations and seeds validating cleanly
+- Flutter is validating cleanly, but broader no-placeholder cleanup is still needed across more feature slices
+- the dashboard is stable and build-clean, but the deeper modular admin-console rebuild is still in progress
 
 ## Completion Estimate
 
-- Backend: 84%
-- Flutter: 76%
-- Dashboard: 79%
-- Overall: 80%
+- Backend: 93%
+- Flutter: 82%
+- Dashboard: 85%
+- Overall: 87%

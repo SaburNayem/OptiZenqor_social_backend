@@ -1,62 +1,71 @@
 # Full Stack Remaining Mismatch Report
 
-Generated: 2026-05-02
+Updated: 2026-05-02
 
 ## Fixed In This Pass
 
-- backend admin compatibility was tightened with:
-  - `GET /admin/analytics`
-  - `GET /admin/roles`
-  - `GET /admin/chat-cases`
-  - `GET /admin/notifications`
-  - `DELETE /admin/notification-campaigns/:id`
-- backend page-create options no longer return hardcoded owner/location arrays from request-time code
-- Flutter static-success interaction paths were reduced in:
-  - `polls_surveys`
-  - `chat` search
-  - external share action sheet
-  - verification request screen copy
-- Flutter now has a runnable smoke test suite under `test/smoke/`
-- dashboard runtime env contract is now documented in `.env.example`
+- backend Prisma runtime now uses a valid split connection strategy:
+  - pooled `DATABASE_URL` for runtime
+  - direct `DIRECT_URL` for Prisma migrate/deploy
+- backend `npm install`, `npm run prisma:generate`, `npm run prisma:migrate`, `npm run seed:dev`, `npm run typecheck`, `npm run build`, and `npm run start:prod` now pass
+- backend migration history drift was reconciled without resetting the remote database
+- backend seed catalogs were aligned with current Prisma models
+- Flutter marketplace create-order and create-listing flows no longer pretend failure is an empty success
+- Flutter calls now send the intended recipient id to the backend session endpoint
+- Flutter live stream setup no longer injects a hardcoded preview label when the backend does not provide one
+- dashboard overview was split into `src/pages/admin/overview/OverviewView.jsx`
+- dashboard workspace error state now includes a live retry action
 
 ## Remaining Backend Gaps
 
-| Area | Current issue | What still needs work |
+| Area | Current issue | Needed next |
 | --- | --- | --- |
-| Database environment | `.env` currently resolves `DATABASE_URL` to `postgresql://postgres:postgres@localhost:5432/socity_backend?sslmode=disable` because the later duplicate key overrides the earlier Neon URL. | Point the repo at a reachable PostgreSQL instance or clean up `.env` so migrations and seeding can run honestly. |
-| Prisma migrate | `npm run prisma:migrate` still fails with a Prisma schema engine error while targeting unreachable local PostgreSQL. | Re-run after fixing the active datasource. |
-| Seed-dev | `npm run seed:dev` fails because PostgreSQL at `localhost:5432` is unavailable. | Re-run after fixing the active datasource. |
-| Runtime settings/catalog data | `SettingsDataService` still contains substantial static metadata/defaults shaping some settings and helper surfaces. | Continue moving dynamic settings/localization/accessibility/legal/onboarding/personalization contracts toward persisted rows and operational settings only. |
-| Legacy demo/helper code | Unused or dev-only helper traces still exist, including mock-token parsing utility, demo account helpers, and some dev fallback wording. | Gate or remove dead/demo-only code paths where they are not part of a controlled dev flow. |
+| Runtime settings catalogs | `SettingsDataService` still shapes some settings/config metadata from static code paths. | Continue moving settings/localization/accessibility/legal and catalog reads fully onto persisted tables and operational settings. |
+| Legacy helper traces | Some dev-oriented fallback wording and helper utilities remain in OTP, mail, realtime, and token helper code. | Gate or remove production-inappropriate helper paths while preserving safe local development flows. |
+| Admin depth | Core admin routes exist and validate, but some sections remain list-first in behavior. | Continue richer detail/export/filter/action coverage where dashboard UX still needs more depth. |
 
 ## Remaining Flutter Gaps
 
-| Area | Current issue | What still needs work |
+| Area | Current issue | Needed next |
 | --- | --- | --- |
-| `group_chat`, `groups`, `events`, `learning_courses`, `pages`, `business_profile`, `jobs_networking` | Several models/controllers/repositories still use defensive placeholder labels or partial client-side derivation when backend payloads are sparse. | Tighten backend field completeness and remove remaining production-facing placeholder fallbacks. |
-| `polls_surveys` | Static success flows were replaced with honest unavailable messaging, but full create/edit/analytics backend flows are still missing. | Implement real composer/detail/analytics APIs and wire the UI to them. |
-| `calls` and `live_stream` | Major fake labels were already reduced, but lifecycle UX still depends on limited server-backed contract depth. | Expand the durable snapshot-backed contracts for calls/live flows and consume them directly. |
-| `support_help` | Overview is backend-driven, but deeper support ticket detail/reply/update flows are still shallow. | Add richer server-backed support operations UX. |
-| `follow_unfollow` / `verification_request` / `communities` | Some UI copy and empty-state helpers still reveal sample/placeholder intent. | Continue cleanup so user-visible production flows never imply fake/sample business data. |
+| Marketplace payload completeness | Client still derives some seller/category/order/chat labels from partial backend payloads. | Tighten backend marketplace contracts so these display fields arrive fully populated. |
+| Jobs placeholder labels | Some jobs model constructors still supply fallback labels when backend fields are missing. | Finish backend jobs payload completeness, then remove placeholder display strings. |
+| Calls/live lifecycle | The app is backend-calling correctly, but lifecycle UX still infers state from shallow payloads. | Expand persisted call/live snapshot contracts and consume them directly. |
+| Support/help depth | Support overview is backend-driven, but ticket detail/reply/update coverage is still shallow. | Add richer support workflow endpoints and UI states. |
 
 ## Remaining Dashboard Gaps
 
-| Area | Current issue | What still needs work |
+| Area | Current issue | Needed next |
 | --- | --- | --- |
-| `src/components/AdminViews.jsx` | Still acts as a large multi-section renderer. | Break sections into dedicated page or feature modules with shared table/detail/form primitives. |
-| Admin CRUD depth | Many sections are connected but still list-centric. | Finish create/edit/delete/detail/drawer/confirm flows for marketplace, jobs, events, communities, pages, live streams, revenue, wallet, subscriptions, and settings. |
-| Requested file structure | The dashboard has `context`, `hooks`, `pages/admin`, `components/forms`, and `components/modals`, but the full `app/layout/tables/utils` split is not complete. | Continue modularization without changing working API behavior. |
+| View modularization | `src/components/AdminViews.jsx` is smaller in responsibility but still too large overall. | Keep extracting sections into dedicated `src/pages/admin/*` modules. |
+| Admin CRUD depth | Many sections are connected but remain list-centric. | Add more create/edit/delete/detail/confirm/export flows where backend already supports them. |
+| Reusable admin primitives | Retry is now wired at workspace level, but role-aware actions, detail drawers, and confirm patterns are not generalized enough yet. | Continue shared admin-console component expansion. |
 
-## Validation Blockers
+## Validation Status
 
-- backend database validation remains blocked by the active local `DATABASE_URL`
-- `npm run prisma:migrate` cannot be claimed passing until PostgreSQL is reachable
-- `npm run seed:dev` cannot be claimed passing until PostgreSQL is reachable
-- backend `health/database` smoke cannot pass honestly until the same database issue is resolved
+- Backend:
+  - `npm install` -> passed
+  - `npm run prisma:generate` -> passed
+  - `npm run prisma:migrate` -> passed
+  - `npm run seed:dev` -> passed
+  - `npm run typecheck` -> passed
+  - `npm run build` -> passed
+  - `npm run start:prod` -> passed
+  - `GET /health` -> passed
+  - `GET /health/database` -> passed
+- Flutter:
+  - `flutter pub get` -> passed
+  - `dart format .` -> passed
+  - `flutter analyze` -> passed
+  - `flutter test` -> passed
+- Dashboard:
+  - `npm install` -> passed
+  - `npm run lint` -> passed
+  - `npm run build` -> passed
 
 ## Completion Estimate
 
-- Backend: 84%
-- Flutter: 76%
-- Dashboard: 79%
-- Overall: 80%
+- Backend: 93%
+- Flutter: 82%
+- Dashboard: 85%
+- Overall: 87%

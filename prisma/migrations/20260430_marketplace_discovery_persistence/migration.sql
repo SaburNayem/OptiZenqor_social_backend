@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS "app_marketplace_conversations" (
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "app_marketplace_conversations_pkey" PRIMARY KEY ("id"),
-    CONSTRAINT "app_marketplace_conversations_product_buyer_seller_key" UNIQUE ("product_id", "buyer_id", "seller_id"),
+    CONSTRAINT "app_marketplace_conversations_product_id_buyer_id_seller_id_key" UNIQUE ("product_id", "buyer_id", "seller_id"),
     CONSTRAINT "app_marketplace_conversations_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "app_marketplace_products"("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "app_marketplace_conversations_buyer_id_fkey" FOREIGN KEY ("buyer_id") REFERENCES "app_users"("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "app_marketplace_conversations_seller_id_fkey" FOREIGN KEY ("seller_id") REFERENCES "app_users"("id") ON DELETE CASCADE ON UPDATE CASCADE
@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS "app_discovery_trending_entries" (
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "app_discovery_trending_entries_pkey" PRIMARY KEY ("id"),
-    CONSTRAINT "app_discovery_trending_entries_entity_key" UNIQUE ("entity_type", "entity_id")
+    CONSTRAINT "app_discovery_trending_entries_entity_type_entity_id_key" UNIQUE ("entity_type", "entity_id")
 );
 
 CREATE INDEX IF NOT EXISTS "app_discovery_trending_entries_score_updated_at_idx"

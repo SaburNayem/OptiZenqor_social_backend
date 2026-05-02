@@ -1,4 +1,13 @@
 -- CreateTable
+CREATE TABLE "app_state_snapshots" (
+    "snapshot_key" TEXT NOT NULL,
+    "payload" JSONB NOT NULL,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "app_state_snapshots_pkey" PRIMARY KEY ("snapshot_key")
+);
+
+-- CreateTable
 CREATE TABLE "chat_user_preferences" (
     "user_id" TEXT NOT NULL,
     "notification_preferences" JSONB NOT NULL DEFAULT '{}',
