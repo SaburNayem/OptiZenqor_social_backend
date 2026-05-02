@@ -1876,6 +1876,47 @@ export class ExperienceDatabaseService {
     };
   }
 
+  async getPageCreateOptions() {
+    const [pages, eligibleOwners] = await Promise.all([
+      this.prisma.page.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 300,
+      }),
+      this.prisma.appUser.findMany({
+        where: {
+          role: {
+            in: ['Creator', 'Business', 'Seller', 'Recruiter'],
+          },
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 100,
+      }),
+    ]);
+
+    const categorySet = new Set<string>();
+    const locationSet = new Set<string>();
+    for (const page of pages) {
+      if (page.category.trim()) {
+        categorySet.add(page.category.trim());
+      }
+      if (page.location?.trim()) {
+        locationSet.add(page.location.trim());
+      }
+    }
+
+    return {
+      requiredProfileType: 'creator',
+      categories: [...categorySet],
+      ownerSuggestions: eligibleOwners.map((owner) => ({
+        id: owner.id,
+        name: owner.name,
+        username: owner.username,
+        role: owner.role,
+      })),
+      locations: [...locationSet],
+    };
+  }
+
   async getPage(id: string) {
     const page = await this.prisma.page.findUnique({ where: { id } });
     if (!page) {

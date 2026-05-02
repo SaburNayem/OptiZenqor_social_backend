@@ -678,6 +678,20 @@ export class AdminController {
     );
   }
 
+  @Get('notifications')
+  @ApiOperation({ summary: 'Backward-compatible notifications overview route' })
+  async getNotificationsOverview(@Query() query: AdminEntityListQueryDto) {
+    const [campaigns, devices] = await Promise.all([
+      this.adminDatabase.queryAdminNotificationCampaigns(query),
+      this.adminDatabase.queryAdminNotificationDevices(query),
+    ]);
+
+    return successResponse('Admin notifications overview fetched successfully.', {
+      campaigns,
+      devices,
+    });
+  }
+
   @Get('notification-campaigns')
   @ApiOperation({ summary: 'List notification campaigns for admin review' })
   async getNotificationCampaigns(@Query() query: AdminEntityListQueryDto) {
@@ -739,6 +753,20 @@ export class AdminController {
     return successResponse(
       'Admin notification campaign action applied successfully.',
       await this.adminDatabase.runAdminNotificationCampaignAction(id, body, admin.adminId),
+    );
+  }
+
+  @Delete('notification-campaigns/:id')
+  @Roles('Super Admin', 'Operations Admin', 'Support Admin')
+  @ApiOperation({ summary: 'Delete a notification campaign through a REST endpoint' })
+  async deleteNotificationCampaign(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin notification campaign deleted successfully.',
+      await this.adminDatabase.deleteAdminNotificationCampaign(id, admin.adminId),
     );
   }
 

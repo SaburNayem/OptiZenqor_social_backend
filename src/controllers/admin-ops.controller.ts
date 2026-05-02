@@ -158,6 +158,14 @@ export class AdminOpsController {
     );
   }
 
+  @Get('chat-cases')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard)
+  @ApiOperation({ summary: 'Backward-compatible chat moderation cases route' })
+  getChatCases() {
+    return this.getChatControl();
+  }
+
   @Patch('chat-control/:id')
   @ApiBearerAuth('admin-bearer')
   @UseGuards(AdminSessionGuard, RolesGuard)
@@ -219,6 +227,14 @@ export class AdminOpsController {
     );
   }
 
+  @Get('analytics')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard)
+  @ApiOperation({ summary: 'Backward-compatible admin analytics route' })
+  getAnalytics() {
+    return this.getAnalyticsPipeline();
+  }
+
   @Get('rbac')
   @ApiBearerAuth('admin-bearer')
   @UseGuards(AdminSessionGuard)
@@ -227,6 +243,14 @@ export class AdminOpsController {
       'Admin permission matrix fetched successfully.',
       this.adminDatabase.getPermissionMatrix(),
     );
+  }
+
+  @Get('roles')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard)
+  @ApiOperation({ summary: 'Backward-compatible admin roles route' })
+  getRoles() {
+    return this.getRbac();
   }
 
   @Get('operational-settings')

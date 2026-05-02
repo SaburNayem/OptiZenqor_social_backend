@@ -209,26 +209,19 @@ export class CommunitiesController {
 
   @Get('pages/create')
   async getCreatePageOptions() {
-    const payload = await this.experienceDatabase.getPages();
-    const pages = payload.pages;
+    const payload = await this.experienceDatabase.getPageCreateOptions();
     return {
       success: true,
       message: 'Page creation options fetched successfully.',
-      requiredProfileType: 'creator',
-      categories: [
-        ...new Set(
-          pages.map(
-            (page: { category: string }) => page.category,
-          ),
-        ),
-      ],
-      ownerSuggestions: ['u1', 'u2', 'u4', 'u5'],
-      locations: ['Dhaka, Bangladesh', 'Remote', 'Global'],
+      requiredProfileType: payload.requiredProfileType,
+      categories: payload.categories,
+      ownerSuggestions: payload.ownerSuggestions,
+      locations: payload.locations,
       data: {
-        requiredProfileType: 'creator',
-        categories: [...new Set(pages.map((page: { category: string }) => page.category))],
-        ownerSuggestions: ['u1', 'u2', 'u4', 'u5'],
-        locations: ['Dhaka, Bangladesh', 'Remote', 'Global'],
+        requiredProfileType: payload.requiredProfileType,
+        categories: payload.categories,
+        ownerSuggestions: payload.ownerSuggestions,
+        locations: payload.locations,
       },
     };
   }
