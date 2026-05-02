@@ -14,53 +14,6 @@ type OnboardingSlideRecord = {
   icon: string;
 };
 
-const DEFAULT_ONBOARDING_SLIDES: OnboardingSlideRecord[] = [
-  {
-    id: 'identity',
-    title: 'Create your social identity',
-    subtitle: 'One profile, multiple roles, premium social tools.',
-    icon: 'person_pin_circle_rounded',
-  },
-  {
-    id: 'discovery',
-    title: 'Discover what matters faster',
-    subtitle: 'Reels, communities, market, jobs, and curated feed.',
-    icon: 'travel_explore_rounded',
-  },
-  {
-    id: 'growth',
-    title: 'Scale with creator and business tools',
-    subtitle: 'Insights, campaigns, subscriptions, and growth modules.',
-    icon: 'insights_rounded',
-  },
-];
-
-const DEFAULT_REFERRAL_MILESTONES = [
-  { count: 5, reward: 'Premium profile badge' },
-  { count: 10, reward: '1 month premium access' },
-  { count: 25, reward: 'Priority creator review' },
-];
-
-const DEFAULT_DEEP_LINK_PREFIXES = [
-  'optizenqor://',
-  'https://optizenqor.app/',
-  'https://www.optizenqor.app/',
-];
-
-const DEFAULT_SHARE_REPOST_OPTIONS = [
-  { title: 'Share to chat' },
-  { title: 'Share externally' },
-  { title: 'Copy post link' },
-  { title: 'Repost' },
-  { title: 'Quote-share' },
-];
-
-const DEFAULT_LOCALIZATION_OPTIONS = [
-  { localeCode: 'en', label: 'English' },
-  { localeCode: 'bn', label: 'Bangla' },
-  { localeCode: 'ar', label: 'Arabic (RTL ready)' },
-];
-
 @Injectable()
 export class AppUtilityDatabaseService {
   constructor(
@@ -86,8 +39,6 @@ export class AppUtilityDatabaseService {
         reward: this.readString(item.reward) ?? '',
       }))
       .filter((item) => item.count > 0 && item.reward.trim().length > 0);
-    const milestonesSource =
-      settingsMilestones.length > 0 ? settingsMilestones : DEFAULT_REFERRAL_MILESTONES;
     const invitedFriends = this.readArrayObjects(state['growth.referral.invited_friends']).map((item) => ({
       id:
         this.readString(item.id) ??
@@ -107,12 +58,10 @@ export class AppUtilityDatabaseService {
     const benefit =
       this.readString(state['growth.referral.benefit']) ??
       this.readString(await this.readOperationalSetting('growth.referral.benefit')) ??
-      'Invite friends to join OptiZenqor Social and unlock program rewards together.';
+      null;
     const shareBaseUrl =
-      this.readString(await this.readOperationalSetting('growth.referral.share_base_url')) ??
-      process.env.APP_SHARE_BASE_URL?.trim() ??
-      'https://optizenqor.app/invite';
-    const milestones = milestonesSource.map((item) => ({
+      this.readString(await this.readOperationalSetting('growth.referral.share_base_url')) ?? null;
+    const milestones = settingsMilestones.map((item) => ({
       count: item.count,
       reward: item.reward,
       isAchieved: joinedCount >= item.count,
@@ -124,7 +73,7 @@ export class AppUtilityDatabaseService {
       currentInvites: joinedCount,
       pendingInvites: pendingCount,
       totalMilestone: milestones.length > 0 ? Math.max(...milestones.map((item) => item.count)) : 0,
-      shareLink: `${shareBaseUrl.replace(/\/$/, '')}/${inviteCode}`,
+      shareLink: shareBaseUrl ? `${shareBaseUrl.replace(/\/$/, '')}/${inviteCode}` : null,
       milestones,
       invitedFriends,
       summary: {
@@ -141,7 +90,7 @@ export class AppUtilityDatabaseService {
     )
       .map((item, index) => this.normalizeOnboardingSlide(item, index))
       .filter((item) => item.title.trim().length > 0);
-    const slides = configured.length > 0 ? configured : DEFAULT_ONBOARDING_SLIDES;
+    const slides = configured;
     return {
       slides,
       items: slides,
@@ -270,8 +219,7 @@ export class AppUtilityDatabaseService {
     const config = this.toRecord(await this.readOperationalSetting('app.deep_link_handler'));
     const supportedPrefixes = this.readStringArray(config.supportedPrefixes);
     return {
-      supportedPrefixes:
-        supportedPrefixes.length > 0 ? supportedPrefixes : DEFAULT_DEEP_LINK_PREFIXES,
+      supportedPrefixes,
       recentLinks: this.readStringArray(config.recentLinks).slice(0, 10),
       allowUniversalLinks: this.readBoolean(config.allowUniversalLinks, true),
       openExternalLinksInApp: this.readBoolean(config.openExternalLinksInApp, false),
@@ -310,7 +258,7 @@ export class AppUtilityDatabaseService {
       }))
       .filter((item) => item.title.length > 0);
 
-    return options.length > 0 ? options : DEFAULT_SHARE_REPOST_OPTIONS;
+    return options;
   }
 
   async trackShareRepost(targetId: string, option: string) {
@@ -537,13 +485,11 @@ export class AppUtilityDatabaseService {
   async getAppUpdateFlow() {
     const config = this.toRecord(await this.readOperationalSetting('app.update_flow'));
     return {
-      type: this.readString(config.type) ?? 'optional',
-      message:
-        this.readString(config.message) ??
-        'A new app version is available with stability and moderation improvements.',
+      type: this.readString(config.type) ?? '',
+      message: this.readString(config.message) ?? null,
       isUpdating: this.readBoolean(config.isUpdating, false),
-      latestVersion: this.readString(config.latestVersion) ?? '1.0.0',
-      minVersion: this.readString(config.minVersion) ?? '1.0.0',
+      latestVersion: this.readString(config.latestVersion) ?? null,
+      minVersion: this.readString(config.minVersion) ?? null,
     };
   }
 
@@ -574,8 +520,8 @@ export class AppUtilityDatabaseService {
           this.readString(await this.readOperationalSetting('locale.default')) ??
           fallbackLocale ??
           supportedLocales[0]?.localeCode ??
-          'en',
-        fallbackLocale: fallbackLocale ?? 'en',
+          '',
+        fallbackLocale: fallbackLocale ?? '',
       };
     }
 
@@ -589,8 +535,8 @@ export class AppUtilityDatabaseService {
         this.readString(state['locale.language'])?.slice(0, 2).toLowerCase() ??
         fallbackLocale ??
         supportedLocales[0]?.localeCode ??
-        'en',
-      fallbackLocale: fallbackLocale ?? 'en',
+        '',
+      fallbackLocale: fallbackLocale ?? '',
     };
   }
 
@@ -619,10 +565,8 @@ export class AppUtilityDatabaseService {
   async getMaintenanceMode() {
     const config = this.toRecord(await this.readOperationalSetting('app.maintenance_mode'));
     return {
-      title: this.readString(config.title) ?? 'Scheduled Maintenance',
-      message:
-        this.readString(config.message) ??
-        'We are improving your experience. Please retry shortly.',
+      title: this.readString(config.title) ?? null,
+      message: this.readString(config.message) ?? null,
       isActive: this.readBoolean(config.isActive, false),
       isRetrying: this.readBoolean(config.isRetrying, false),
     };
@@ -843,7 +787,7 @@ export class AppUtilityDatabaseService {
         label: this.readString(item.label) ?? '',
       }))
       .filter((item) => item.localeCode.length > 0 && item.label.length > 0);
-    return configured.length > 0 ? configured : DEFAULT_LOCALIZATION_OPTIONS;
+    return configured;
   }
 
   private inferMediaType(url: string, fallbackType?: string | null) {

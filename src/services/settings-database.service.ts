@@ -11,15 +11,6 @@ import { MonetizationDatabaseService } from './monetization-database.service';
 import { PrismaService } from './prisma.service';
 import { UploadsDatabaseService } from './uploads-database.service';
 
-const DEFAULT_PUSH_PREFERENCES = [
-  { title: 'Likes', enabled: true },
-  { title: 'Comments', enabled: true },
-  { title: 'Mentions', enabled: true },
-  { title: 'Messages', enabled: true },
-  { title: 'Calls', enabled: false },
-  { title: 'Live alerts', enabled: false },
-] as const;
-
 type SettingsContext = {
   user: Awaited<ReturnType<CoreDatabaseService['getUser']>>;
   settingsState: Record<string, unknown>;
@@ -108,33 +99,28 @@ export class SettingsDatabaseService {
   async getAccessibilitySupport(userId: string) {
     const context = await this.buildContext(userId);
     const state = context.settingsState;
+    const catalog = await this.readArraySetting('app.accessibility.options');
+    const options = catalog
+      .map((item) => ({
+        title: this.readString(item['title']) ?? '',
+        key: this.readString(item['key']) ?? '',
+        enabledByDefault: this.readBoolean(item['enabledByDefault'], false),
+      }))
+      .filter((item) => item.title.length > 0 && item.key.length > 0);
+
     return {
-      options: [
-        {
-          title: 'Captions by default',
-          enabled: this.readBoolean(state['accessibility.captions'], true),
-        },
-        {
-          title: 'High contrast mode',
-          enabled: this.readBoolean(state['accessibility.high_contrast'], false),
-        },
-        {
-          title: 'Reduce motion',
-          enabled: this.readBoolean(state['accessibility.reduce_motion'], false),
-        },
-        {
-          title: 'Screen reader hints',
-          enabled: this.readBoolean(state['accessibility.screen_reader_hints'], true),
-        },
-      ],
+      options: options.map((item) => ({
+        title: item.title,
+        enabled: this.readBoolean(state[item.key], item.enabledByDefault),
+      })),
       previewState: {
         screenReaderHints: this.readBoolean(
           state['accessibility.screen_reader_hints'],
-          true,
+          false,
         ),
         motionPreviewAvailable: this.readBoolean(
           state['accessibility.motion_preview_available'],
-          true,
+          false,
         ),
       },
     };
@@ -166,7 +152,18 @@ export class SettingsDatabaseService {
 
   async getPushNotificationPreferences(userId: string) {
     const context = await this.buildContext(userId);
-    return this.resolvePushPreferences(context.settingsState);
+    const stored = this.resolvePushPreferences(context.settingsState);
+    if (stored.length > 0) {
+      return stored;
+    }
+
+    const catalog = await this.readArraySetting('notifications.push_categories');
+    return catalog
+      .map((item) => ({
+        title: this.readString(item['title']) ?? '',
+        enabled: this.readBoolean(item['enabledByDefault'], false),
+      }))
+      .filter((item) => item.title.length > 0);
   }
 
   async updatePushNotificationPreferences(
@@ -194,15 +191,18 @@ export class SettingsDatabaseService {
 
   async getLegalCompliance(userId: string) {
     const state = (await this.buildContext(userId)).settingsState;
+    const documents = (await this.readArraySetting('legal.documents'))
+      .map((item) => ({
+        key: this.readString(item['key']) ?? '',
+        title: this.readString(item['title']) ?? '',
+        version: this.readString(item['version']) ?? '',
+      }))
+      .filter((item) => item.key.length > 0 && item.title.length > 0);
     return {
-      termsAccepted: this.readBoolean(state['legal.terms_accepted'], true),
-      privacyAccepted: this.readBoolean(state['legal.privacy_accepted'], true),
-      guidelinesAccepted: this.readBoolean(state['legal.guidelines_accepted'], true),
-      documents: [
-        { key: 'terms', title: 'Terms of Service', version: '2026.04' },
-        { key: 'privacy', title: 'Privacy Policy', version: '2026.04' },
-        { key: 'guidelines', title: 'Community Guidelines', version: '2026.04' },
-      ],
+      termsAccepted: this.readBoolean(state['legal.terms_accepted'], false),
+      privacyAccepted: this.readBoolean(state['legal.privacy_accepted'], false),
+      guidelinesAccepted: this.readBoolean(state['legal.guidelines_accepted'], false),
+      documents,
     };
   }
 
@@ -604,12 +604,8 @@ export class SettingsDatabaseService {
         };
       case 'localization-support':
         return {
-          supportedLocales:
-            this.readStringArray(state['locale.supported_locales']).length > 0
-              ? this.readStringArray(state['locale.supported_locales'])
-              : ['en', 'bn'],
-          fallbackLocale:
-            this.readString(state['locale.fallback_locale']) ?? 'en',
+          supportedLocales: this.readStringArray(state['locale.supported_locales']),
+          fallbackLocale: this.readString(state['locale.fallback_locale']) ?? '',
         };
       case 'accessibility-support':
         return {
@@ -661,7 +657,19 @@ export class SettingsDatabaseService {
           typeof (item as Record<string, unknown>).enabled === 'boolean',
       );
     }
-    return [...DEFAULT_PUSH_PREFERENCES];
+    return [];
+  }
+
+  private async readArraySetting(key: string) {
+    const row = await this.prisma.adminOperationalSetting.findUnique({
+      where: { key },
+    });
+    if (!Array.isArray(row?.value)) {
+      return [] as Array<Record<string, unknown>>;
+    }
+    return row.value
+      .filter((item) => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+      .map((item) => item as Record<string, unknown>);
   }
 
   private isSection(

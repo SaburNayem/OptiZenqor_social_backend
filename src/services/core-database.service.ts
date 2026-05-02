@@ -10,6 +10,10 @@ import * as argon2 from 'argon2';
 import { randomUUID, scryptSync, timingSafeEqual } from 'crypto';
 import { QueryResultRow } from 'pg';
 import { makeId } from '../common/id.util';
+import {
+  DEFAULT_SETTINGS_STATE,
+  DEFAULT_USER_PRIVACY,
+} from '../common/settings-defaults';
 import { DatabaseService } from './database.service';
 import { JwtLikePayload, JwtTokenService } from './jwt-token.service';
 
@@ -295,7 +299,7 @@ export class CoreDatabaseService implements OnModuleInit {
         input.name,
         input.username,
         input.email,
-        input.avatar?.trim() || 'https://placehold.co/120x120',
+        input.avatar?.trim() || '',
         input.bio?.trim() ?? '',
         JSON.stringify(interests),
         input.role,
@@ -548,6 +552,32 @@ export class CoreDatabaseService implements OnModuleInit {
         patch.profileType
           ? this.normalizeProfileType(patch.profileType)
           : null,
+      ],
+    );
+    await this.database.query(
+      `insert into app_user_settings (user_id, settings, updated_at)
+       values ($1, $2::jsonb, now())
+       on conflict (user_id) do nothing`,
+      [id, JSON.stringify(DEFAULT_SETTINGS_STATE)],
+    );
+    await this.database.query(
+      `insert into app_user_privacy (
+        user_id, profile_private, activity_status, allow_tagging, allow_mentions,
+        allow_reposts, allow_comments, hide_sensitive, hide_likes, updated_at
+      ) values (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,now()
+      )
+      on conflict (user_id) do nothing`,
+      [
+        id,
+        DEFAULT_USER_PRIVACY.profilePrivate,
+        DEFAULT_USER_PRIVACY.activityStatus,
+        DEFAULT_USER_PRIVACY.allowTagging,
+        DEFAULT_USER_PRIVACY.allowMentions,
+        DEFAULT_USER_PRIVACY.allowReposts,
+        DEFAULT_USER_PRIVACY.allowComments,
+        DEFAULT_USER_PRIVACY.hideSensitive,
+        DEFAULT_USER_PRIVACY.hideLikes,
       ],
     );
     return this.getUser(id);

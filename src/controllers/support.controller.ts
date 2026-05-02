@@ -39,7 +39,7 @@ export class SupportController {
       faqs: await this.supportDatabase.getFaqs(),
       tickets,
       chat: await this.supportDatabase.getSupportChat(user?.id ?? null),
-      mail: this.supportDatabase.getSupportMail(),
+      mail: await this.supportDatabase.getSupportMail(),
     });
   }
 
@@ -78,10 +78,10 @@ export class SupportController {
   }
 
   @Get('support-help/mail')
-  getSupportHelpMail() {
+  async getSupportHelpMail() {
     return successResponse(
       'Support mail settings fetched successfully.',
-      this.supportDatabase.getSupportMail(),
+      await this.supportDatabase.getSupportMail(),
     );
   }
 

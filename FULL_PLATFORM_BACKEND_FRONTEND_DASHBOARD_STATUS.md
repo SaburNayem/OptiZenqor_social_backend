@@ -4,37 +4,74 @@ Updated: 2026-05-02
 
 ## Scope
 
-Repositories audited and changed from the current local workspace:
+Repositories audited from the active workspace:
 
 - `G:/My Project/Socity_backend`
 - `G:/My Project/OptiZenqor_social`
 - `G:/My Project/OptiZenqor_social_dashboard`
 
+## Latest Implementation Delta
+
+This continuation pass focused on removing more production fallbacks and aligning the reports with the real validation state.
+
+### Backend
+
+- removed request-time settings fallback merging from account state reads
+- moved default user settings/privacy into bootstrap helpers used at user creation and dev seed time instead of response-time fallback
+- removed request-time static support contact mail values and now read support contact config from persisted admin operational settings
+- removed request-time static onboarding, referral, deep-link, share/repost, localization, maintenance, and update-flow arrays/copy from app utility responses
+- moved push categories, accessibility options, and legal document metadata reads onto persisted admin operational settings
+- seeded development bootstrap operational settings for the new backend-driven config reads
+
+### Flutter
+
+- jobs networking repository no longer converts failed aggregate/list requests into fake empty success
+- jobs networking screen now renders explicit loading, retry, error, and empty states for key tabs
+- blocked/muted, accessibility, localization, personalization onboarding, and legal compliance controllers from the earlier pass remain tightened against bad backend payloads
+
+### Dashboard
+
+- no new dashboard source files changed in this continuation pass
+- the last dashboard code delta in this implementation cycle remains the notification campaign mutation wiring in `src/App.jsx` and `src/components/AdminViews.jsx`
+
 ## Exact Files Changed
 
 ### Backend
 
+- `src/common/settings-defaults.ts`
 - `src/controllers/admin-ops.controller.ts`
 - `src/controllers/admin.controller.ts`
+- `src/controllers/support.controller.ts`
 - `src/dto/admin.dto.ts`
+- `src/scripts/seed-dev.ts`
+- `src/services/account-state-database.service.ts`
 - `src/services/admin-database.service.ts`
+- `src/services/app-utility-database.service.ts`
+- `src/services/core-database.service.ts`
+- `src/services/settings-database.service.ts`
+- `src/services/support-database.service.ts`
+- `FULL_STACK_REMAINING_MISMATCH_REPORT.md`
+- `FULL_PLATFORM_BACKEND_FRONTEND_DASHBOARD_STATUS.md`
 
 ### Flutter
 
 - `lib/feature/accessibility_support/controller/accessibility_support_controller.dart`
 - `lib/feature/blocked_muted_accounts/repository/blocked_muted_accounts_repository.dart`
+- `lib/feature/jobs_networking/repository/jobs_networking_repository.dart`
+- `lib/feature/jobs_networking/screen/jobs_networking_screen.dart`
 - `lib/feature/legal_compliance/controller/legal_compliance_controller.dart`
 - `lib/feature/localization_support/controller/localization_support_controller.dart`
 - `lib/feature/personalization_onboarding/controller/personalization_onboarding_controller.dart`
 
 ### Dashboard
 
-- `src/App.jsx`
-- `src/components/AdminViews.jsx`
+- `src/App.jsx` from the earlier notification-campaign integration pass in this implementation cycle
+- `src/components/AdminViews.jsx` from the earlier notification-campaign integration pass in this implementation cycle
+- `DASHBOARD_BACKEND_INTEGRATION_REPORT.md`
 
-## Routes Added / Changed
+## Backend Endpoints Added Or Tightened
 
-### Backend admin routes added in this pass
+### Added
 
 - `GET /admin/support-operations/:id`
 - `GET /admin/notification-devices/:id`
@@ -42,7 +79,7 @@ Repositories audited and changed from the current local workspace:
 - `GET /admin/notification-campaigns/:id`
 - `POST /admin/notification-campaigns/:id/actions`
 
-### Backend admin routes tightened in this pass
+### Tightened
 
 - `PATCH /admin/marketplace/:id`
 - `PATCH /admin/jobs/:id`
@@ -50,69 +87,40 @@ Repositories audited and changed from the current local workspace:
 - `PATCH /admin/support-operations/:id`
 - `PATCH /admin/notification-devices/:id`
 - `PATCH /admin/notification-campaigns/:id`
+- `GET /support/mail` now reads persisted operational config instead of request-time static values
+- settings/account utility reads now return persisted state/config instead of code-defined business catalogs where updated in this pass
 
-### Dashboard API usage changes
+## Prisma / Database Status
 
-- notification campaigns now use live update forms through `/admin/notification-campaigns/:id`
-- notification campaigns now support send/cancel lifecycle actions through `/admin/notification-campaigns/:id/actions`
-- existing notification device state management remains live and backend-backed
+### Models used by the new backend-driven reads
 
-### Flutter integration changes
+- `AdminOperationalSetting`
+- `SupportTicket`
+- `SupportConversation`
+- `SupportMessage`
+- `NotificationCampaign`
+- `PushDeviceToken`
+- `AdminAuditLog`
+- `AdminSession`
+- `UserSettings`
+- `UserPrivacy`
 
-- blocked/muted accounts no longer convert request or payload failures into empty production state
-- accessibility, localization, personalization onboarding, and legal compliance controllers now validate the canonical backend envelope more strictly
+### New Prisma models and migrations
 
-## DB Tables / Models Used
+- No new Prisma model was added in this pass.
+- No migration file was added in this pass.
+- The pass reused existing Prisma models and shifted request-time config reads to persisted operational settings.
 
-- `SupportTicket` / `support_tickets`
-- `SupportConversation` / `support_conversations`
-- `SupportMessage` / `support_messages`
-- `PushDeviceToken` / `app_push_device_tokens`
-- `NotificationCampaign` / `app_notification_campaigns`
-- `AdminSession` / `admin_sessions`
-- `AdminAuditLog` / `admin_audit_logs`
+## Mock / Static / Fallback Removal In This Cycle
 
-## New Database Models / Migrations Added
+- removed request-time static support mail content from backend support responses
+- removed request-time static onboarding/referral/deep-link/share/localization/update/maintenance config from backend app utility responses
+- removed request-time default settings merge from backend account state reads
+- removed silent empty-state fallback from Flutter blocked/muted and jobs networking repository flows
+- removed silent acceptance of empty backend payloads from Flutter accessibility, localization, personalization onboarding, and legal compliance controllers
+- removed dashboard notification campaign read-only behavior in the earlier dashboard pass of this cycle
 
-- No new Prisma models were added in this pass.
-- No new migration was created in this pass.
-- This pass reused existing Prisma-backed tables and services.
-
-## Mock / Static / Local-Only Flows Removed
-
-- removed silent empty-list fallback from Flutter blocked/muted account loading
-- removed silent acceptance of empty accessibility/localization/legal/personalization payloads in Flutter
-- removed dashboard read-only behavior for notification campaigns by adding live lifecycle controls
-
-## What Was Fixed
-
-### Backend
-
-- Replaced unvalidated admin update bodies for marketplace, jobs, and events with dedicated DTO classes.
-- Expanded support operations so admins can fetch ticket detail, assign ownership, append admin notes, reply into the support conversation, and attach SLA metadata with audit logging.
-- Expanded notification administration so campaigns support detail plus send/schedule/cancel/delete actions and devices support detail plus delete, all through protected admin routes with audit logs.
-
-### Flutter
-
-- Tightened blocked/muted account loading so contract drift and request failures now surface to the UI instead of looking like a genuine empty state.
-- Tightened accessibility, localization, personalization onboarding, and legal compliance controllers so malformed backend payloads now produce explicit errors.
-
-### Dashboard
-
-- Added live notification campaign lifecycle controls instead of leaving that module read-only.
-- Added live campaign edit forms wired to backend mutations with no runtime API fallback URL logic.
-
-## Remaining Gaps
-
-- Runtime default business/config data is still present in backend settings, app-utility, and support services; the Prisma catalog/config migration requested in the brief is still outstanding.
-- Backend `/health`, `/health/database`, `/docs-json`, admin login, and full per-route mutation smoke tests were not run in this pass.
-- Dashboard is still not fully rebuilt into the larger modular page/hook structure requested.
-- Flutter still has other server-owned flows outside this slice that need the same strict contract cleanup, including marketplace, jobs networking aggregates, live/call lifecycle, and additional account utility screens.
-- `flutter test` still cannot pass because the repo does not contain any `*_test.dart` files.
-- `npm run prisma:generate` is currently blocked on Windows by an `EPERM` rename failure against `node_modules/.prisma/client/query_engine-windows.dll.node`.
-- I did not run destructive migration/reset operations, and I did not run `prisma migrate` because the task explicitly required a safe non-destructive approach.
-
-## Verification Commands And Results
+## Validation Commands And Results
 
 ### Backend
 
@@ -124,17 +132,25 @@ Repositories audited and changed from the current local workspace:
   - Passed
 - `npm.cmd run build`
   - Passed
+- `npm.cmd run seed:dev`
+  - Passed
+- local backend smoke checks on `start:prod`
+  - `GET /health`: passed
+  - `GET /health/database`: passed
+  - `GET /docs-json`: passed
+- authenticated admin smoke login using `ADMIN_BOOTSTRAP_EMAIL` and `ADMIN_BOOTSTRAP_PASSWORD`
+  - Not run because those values were not present in the active local `.env`
 
 ### Flutter
 
 - `flutter pub get`
   - Passed
-- `dart format lib/feature/blocked_muted_accounts/repository/blocked_muted_accounts_repository.dart lib/feature/accessibility_support/controller/accessibility_support_controller.dart lib/feature/localization_support/controller/localization_support_controller.dart lib/feature/legal_compliance/controller/legal_compliance_controller.dart lib/feature/personalization_onboarding/controller/personalization_onboarding_controller.dart`
+- `dart format` on the changed Flutter files
   - Passed
 - `flutter analyze`
   - Passed
 - `flutter test`
-  - Failed with: no `*_test.dart` files in `test`
+  - Failed because the repo has no `*_test.dart` files under `test`
 
 ### Dashboard
 
@@ -145,9 +161,18 @@ Repositories audited and changed from the current local workspace:
 - `npm.cmd run build`
   - Passed
 
+## Remaining Gaps
+
+- Prisma-backed normalized catalog/model work is still incomplete for localization catalog, accessibility catalog, legal document versioning, support config, onboarding/personalization catalogs, chat presence/call lifecycle snapshots, and analytics snapshots.
+- `npm run prisma:generate` is still blocked by a Windows file lock, so Prisma regeneration cannot be claimed complete yet.
+- `npm run prisma:migrate` was not run because no new safe migration was created in this pass.
+- full authenticated admin smoke tests were not completed because bootstrap admin credentials were not available in the active environment.
+- the dashboard still is not rebuilt into the requested modular architecture with layout/context/pages/services split and broad action UX across every admin module.
+- Flutter still has meaningful production-readiness work remaining in marketplace payload derivation, call/live lifecycle, support workflows, and additional server-owned account utility screens.
+
 ## Completion Estimate
 
-- Backend: 90%
-- Flutter: 84%
+- Backend: 91%
+- Flutter: 86%
 - Dashboard: 88%
-- Overall: 87%
+- Overall: 88%

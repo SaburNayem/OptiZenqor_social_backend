@@ -6,32 +6,6 @@ import { PrismaService } from './prisma.service';
 import { ReelsDatabaseService } from './reels-database.service';
 import { StoriesDatabaseService } from './stories-database.service';
 
-const DEFAULT_SETTINGS_STATE: Record<string, unknown> = {
-  'privacy.profile_private': false,
-  'privacy.activity_status': true,
-  'privacy.allow_tagging': true,
-  'privacy.allow_mentions': true,
-  'privacy.allow_reposts': true,
-  'privacy.allow_comments': true,
-  'privacy.hide_sensitive': true,
-  'privacy.hide_likes': false,
-  'notifications.push_enabled': true,
-  'notifications.email_enabled': true,
-  'notifications.in_app_sounds': true,
-  'notifications.marketing': false,
-  'messages.message_requests': true,
-  'messages.read_receipts': true,
-  'messages.allow_calls': true,
-  'messages.auto_download': true,
-  'security.two_factor': false,
-  'security.login_alerts': true,
-  'feed.autoplay': true,
-  'feed.data_saver': false,
-  'creator.professional_dashboard': true,
-  'creator.branded_content': true,
-  'creator.tips': true,
-};
-
 @Injectable()
 export class AccountStateDatabaseService {
   constructor(
@@ -433,7 +407,6 @@ export class AccountStateDatabaseService {
     ]);
 
     return {
-      ...DEFAULT_SETTINGS_STATE,
       ...(this.toObject(settingsRow?.settings ?? {}) as Record<string, unknown>),
       ...this.privacyRowToSettings(privacyRow),
     };

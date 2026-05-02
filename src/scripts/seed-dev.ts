@@ -1,5 +1,9 @@
 import * as argon2 from 'argon2';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
+import {
+  DEFAULT_SETTINGS_STATE,
+  DEFAULT_USER_PRIVACY,
+} from '../common/settings-defaults';
 import {
   coreSeedCommentReactions,
   coreSeedFollows,
@@ -38,6 +42,169 @@ async function hashPassword(password: string) {
 }
 
 async function main() {
+  await prisma.adminOperationalSetting.upsert({
+    where: { key: 'support.contact' },
+    create: {
+      key: 'support.contact',
+      value: {
+        contactEmail: 'support@optizenqor.app',
+        escalationEmail: 'trust@optizenqor.app',
+        responseTime: 'Usually within 24 hours',
+      },
+    },
+    update: {
+      value: {
+        contactEmail: 'support@optizenqor.app',
+        escalationEmail: 'trust@optizenqor.app',
+        responseTime: 'Usually within 24 hours',
+      },
+    },
+  });
+
+  const operationalSettings = [
+    {
+      key: 'app.onboarding.slides',
+      value: [
+        {
+          id: 'identity',
+          title: 'Create your social identity',
+          subtitle: 'One profile, multiple roles, premium social tools.',
+          icon: 'person_pin_circle_rounded',
+        },
+        {
+          id: 'discovery',
+          title: 'Discover what matters faster',
+          subtitle: 'Reels, communities, market, jobs, and curated feed.',
+          icon: 'travel_explore_rounded',
+        },
+        {
+          id: 'growth',
+          title: 'Scale with creator and business tools',
+          subtitle: 'Insights, campaigns, subscriptions, and growth modules.',
+          icon: 'insights_rounded',
+        },
+      ],
+    },
+    {
+      key: 'app.onboarding.interests',
+      value: ['Technology', 'Business', 'Music', 'Sports', 'Travel', 'Education'],
+    },
+    {
+      key: 'growth.referral.milestones',
+      value: [
+        { count: 5, reward: 'Premium profile badge' },
+        { count: 10, reward: '1 month premium access' },
+        { count: 25, reward: 'Priority creator review' },
+      ],
+    },
+    {
+      key: 'growth.referral.benefit',
+      value: 'Invite friends to join OptiZenqor Social and unlock program rewards together.',
+    },
+    {
+      key: 'growth.referral.share_base_url',
+      value: 'https://optizenqor.app/invite',
+    },
+    {
+      key: 'app.deep_link_handler',
+      value: {
+        supportedPrefixes: [
+          'optizenqor://',
+          'https://optizenqor.app/',
+          'https://www.optizenqor.app/',
+        ],
+        recentLinks: [],
+        allowUniversalLinks: true,
+        openExternalLinksInApp: false,
+      },
+    },
+    {
+      key: 'app.share_repost',
+      value: {
+        options: [
+          { title: 'Share to chat' },
+          { title: 'Share externally' },
+          { title: 'Copy post link' },
+          { title: 'Repost' },
+          { title: 'Quote-share' },
+        ],
+        recentActivity: [],
+      },
+    },
+    {
+      key: 'app.localization.locales',
+      value: [
+        { localeCode: 'en', label: 'English' },
+        { localeCode: 'bn', label: 'Bangla' },
+        { localeCode: 'ar', label: 'Arabic (RTL ready)' },
+      ],
+    },
+    {
+      key: 'locale.fallback_locale',
+      value: 'en',
+    },
+    {
+      key: 'notifications.push_categories',
+      value: [
+        { title: 'Likes', enabledByDefault: true },
+        { title: 'Comments', enabledByDefault: true },
+        { title: 'Mentions', enabledByDefault: true },
+        { title: 'Messages', enabledByDefault: true },
+        { title: 'Calls', enabledByDefault: false },
+        { title: 'Live alerts', enabledByDefault: false },
+      ],
+    },
+    {
+      key: 'app.accessibility.options',
+      value: [
+        { key: 'accessibility.captions', title: 'Captions by default', enabledByDefault: true },
+        { key: 'accessibility.high_contrast', title: 'High contrast mode', enabledByDefault: false },
+        { key: 'accessibility.reduce_motion', title: 'Reduce motion', enabledByDefault: false },
+        { key: 'accessibility.screen_reader_hints', title: 'Screen reader hints', enabledByDefault: true },
+      ],
+    },
+    {
+      key: 'legal.documents',
+      value: [
+        { key: 'terms', title: 'Terms of Service', version: '2026.04' },
+        { key: 'privacy', title: 'Privacy Policy', version: '2026.04' },
+        { key: 'guidelines', title: 'Community Guidelines', version: '2026.04' },
+      ],
+    },
+    {
+      key: 'app.update_flow',
+      value: {
+        type: 'optional',
+        message: 'A new app version is available with stability and moderation improvements.',
+        isUpdating: false,
+        latestVersion: '1.0.0',
+        minVersion: '1.0.0',
+      },
+    },
+    {
+      key: 'app.maintenance_mode',
+      value: {
+        title: 'Scheduled Maintenance',
+        message: 'We are improving your experience. Please retry shortly.',
+        isActive: false,
+        isRetrying: false,
+      },
+    },
+  ] as const;
+
+  for (const setting of operationalSettings) {
+    await prisma.adminOperationalSetting.upsert({
+      where: { key: setting.key },
+      create: {
+        key: setting.key,
+        value: setting.value,
+      },
+      update: {
+        value: setting.value,
+      },
+    });
+  }
+
   await prisma.premiumPlan.createMany({
     data: [
       {
@@ -109,6 +276,26 @@ async function main() {
         lastActive: user.lastActive,
         emailVerified: user.emailVerified,
         blocked: user.blocked,
+      },
+    });
+    await prisma.userSettings.upsert({
+      where: { userId },
+      create: {
+        userId,
+        settings: DEFAULT_SETTINGS_STATE as Prisma.InputJsonValue,
+      },
+      update: {
+        settings: DEFAULT_SETTINGS_STATE as Prisma.InputJsonValue,
+      },
+    });
+    await prisma.userPrivacy.upsert({
+      where: { userId },
+      create: {
+        userId,
+        ...DEFAULT_USER_PRIVACY,
+      },
+      update: {
+        ...DEFAULT_USER_PRIVACY,
       },
     });
   }

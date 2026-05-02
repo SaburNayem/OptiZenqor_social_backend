@@ -24,11 +24,18 @@ export class SupportDatabaseService {
     }));
   }
 
-  getSupportMail() {
+  async getSupportMail() {
+    const row = await this.prisma.adminOperationalSetting.findUnique({
+      where: { key: 'support.contact' },
+    });
+    const config =
+      row?.value && typeof row.value === 'object' && !Array.isArray(row.value)
+        ? (row.value as Record<string, unknown>)
+        : {};
     return {
-      contactEmail: process.env.SUPPORT_CONTACT_EMAIL?.trim() || 'support@optizenqor.app',
-      escalationEmail: process.env.SUPPORT_ESCALATION_EMAIL?.trim() || 'trust@optizenqor.app',
-      responseTime: process.env.SUPPORT_RESPONSE_TIME?.trim() || 'Usually within 24 hours',
+      contactEmail: this.readString(config.contactEmail),
+      escalationEmail: this.readString(config.escalationEmail),
+      responseTime: this.readString(config.responseTime),
     };
   }
 
@@ -249,5 +256,9 @@ export class SupportDatabaseService {
     const metadata = this.readMetadataObject(value);
     const item = metadata[key];
     return typeof item === 'string' && item.trim().length > 0 ? item : undefined;
+  }
+
+  private readString(value: unknown) {
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
   }
 }
