@@ -639,12 +639,51 @@ export class AdminDatabaseService implements OnModuleInit {
     };
   }
 
-  async getSupportOperations() {
-    const [tickets, actions] = await Promise.all([
+  async getSupportOperations(query?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    priority?: string;
+  }) {
+    const page = this.resolvePage(query?.page);
+    const limit = this.resolveLimit(query?.limit);
+    const search = query?.search?.trim();
+    const where: Prisma.SupportTicketWhereInput = {
+      ...(query?.status ? { status: query.status.trim().toLowerCase() } : {}),
+      ...(query?.priority ? { priority: query.priority.trim().toLowerCase() } : {}),
+      ...(search
+        ? {
+            OR: [
+              { subject: { contains: search, mode: 'insensitive' } },
+              { category: { contains: search, mode: 'insensitive' } },
+              { user: { name: { contains: search, mode: 'insensitive' } } },
+              { user: { username: { contains: search, mode: 'insensitive' } } },
+              { user: { email: { contains: search, mode: 'insensitive' } } },
+            ],
+          }
+        : {}),
+    };
+
+    const [tickets, total, actions] = await Promise.all([
       this.prisma.supportTicket.findMany({
+        where,
+        include: {
+          user: true,
+          conversation: {
+            include: {
+              messages: {
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+              },
+            },
+          },
+        },
         orderBy: { updatedAt: 'desc' },
-        take: 100,
+        skip: (page - 1) * limit,
+        take: limit,
       }),
+      this.prisma.supportTicket.count({ where }),
       this.prisma.adminAuditLog.findMany({
         where: { entityType: 'support_ticket' },
         orderBy: { createdAt: 'desc' },
@@ -652,8 +691,25 @@ export class AdminDatabaseService implements OnModuleInit {
       }),
     ]);
 
+    const paginatedTickets = this.wrapPaginated(
+      tickets.map((ticket) => this.mapSupportTicket(ticket)),
+      page,
+      limit,
+      total,
+    );
+
     return {
-      tickets,
+      tickets: paginatedTickets.items,
+      results: paginatedTickets.results,
+      items: paginatedTickets.items,
+      total: paginatedTickets.total,
+      count: paginatedTickets.count,
+      pagination: paginatedTickets.pagination,
+      filters: {
+        search: search ?? '',
+        status: query?.status?.trim().toLowerCase() ?? '',
+        priority: query?.priority?.trim().toLowerCase() ?? '',
+      },
       actions: actions.map((row) => ({
         id: row.id,
         action: row.action,
@@ -662,6 +718,94 @@ export class AdminDatabaseService implements OnModuleInit {
         createdAt: row.createdAt.toISOString(),
       })),
     };
+  }
+
+  async updateSupportTicket(
+    id: string,
+    patch: { status?: string; priority?: string; adminNote?: string },
+    actorAdminId?: string,
+  ) {
+    const existing = await this.prisma.supportTicket.findUnique({
+      where: { id },
+      include: {
+        user: true,
+        conversation: {
+          include: {
+            messages: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Support ticket ${id} not found.`);
+    }
+
+    const metadata = this.readObject(existing.metadata);
+    const adminNotes = this.readStringArray(metadata.adminNotes);
+    const note = patch.adminNote?.trim();
+    const nextStatus = patch.status?.trim().toLowerCase();
+    const nextPriority = patch.priority?.trim().toLowerCase();
+
+    const [ticket] = await this.prisma.$transaction([
+      this.prisma.supportTicket.update({
+        where: { id },
+        data: {
+          status: nextStatus ?? undefined,
+          priority: nextPriority ?? undefined,
+          metadata: {
+            ...metadata,
+            adminNotes: note
+              ? [
+                  ...adminNotes,
+                  `${new Date().toISOString()} ${note}`,
+                ]
+              : adminNotes,
+            lastAdminActionAt: new Date().toISOString(),
+          } as Prisma.InputJsonValue,
+          updatedAt: new Date(),
+        },
+        include: {
+          user: true,
+          conversation: {
+            include: {
+              messages: {
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.supportConversation.updateMany({
+        where: { ticketId: id },
+        data: {
+          status:
+            nextStatus === 'resolved' || nextStatus === 'closed'
+              ? 'closed'
+              : nextStatus === 'reviewing'
+                ? 'reviewing'
+                : undefined,
+          updatedAt: new Date(),
+        },
+      }),
+    ]);
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'support.ticket.update',
+      entityType: 'support_ticket',
+      entityId: ticket.id,
+      metadata: {
+        status: nextStatus ?? existing.status,
+        priority: nextPriority ?? existing.priority,
+        adminNote: note ?? null,
+      },
+    });
+
+    return this.mapSupportTicket(ticket);
   }
 
   async getDashboardOverview() {
@@ -2280,6 +2424,49 @@ export class AdminDatabaseService implements OnModuleInit {
       enforcementActions: this.readStringArray(item.enforcementActions),
       frozen: Boolean(metadata.frozen),
       restrictedParticipants: this.readStringArray(metadata.restrictedParticipants),
+    };
+  }
+
+  private mapSupportTicket(item: {
+    id: string;
+    userId: string | null;
+    subject: string;
+    category: string;
+    status: string;
+    priority: string;
+    createdAt: Date;
+    updatedAt: Date;
+    metadata: Prisma.JsonValue;
+    user?: { id: string; name: string; username: string; email: string } | null;
+    conversation?: {
+      id: string;
+      status: string;
+      channel: string;
+      messages?: Array<{ id: string; body: string; createdAt: Date }>;
+    } | null;
+  }) {
+    const metadata = this.readObject(item.metadata);
+    const adminNotes = this.readStringArray(metadata.adminNotes);
+    const latestMessage = item.conversation?.messages?.[0];
+    return {
+      id: item.id,
+      subject: item.subject,
+      category: item.category,
+      status: item.status,
+      priority: item.priority,
+      userId: item.userId,
+      userName: item.user?.name ?? null,
+      username: item.user?.username ?? null,
+      userEmail: item.user?.email ?? null,
+      conversationId: item.conversation?.id ?? null,
+      conversationStatus: item.conversation?.status ?? null,
+      channel: item.conversation?.channel ?? null,
+      latestMessage: latestMessage?.body ?? null,
+      latestMessageAt: latestMessage?.createdAt?.toISOString() ?? null,
+      adminNotes,
+      metadata,
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString(),
     };
   }
 

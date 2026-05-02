@@ -370,6 +370,35 @@ Trending and hashtag datasets are now persisted in PostgreSQL through:
 - `app_discovery_trending_entries`
 - `app_discovery_hashtag_entries`
 
+## Admin support contract
+
+### `GET /admin/support-operations`
+### `PATCH /admin/support-operations/:id`
+
+- Purpose: list live support tickets for the admin dashboard and mutate ticket state
+- Auth: admin bearer token required
+- `GET` query params:
+  - `page`
+  - `limit`
+  - `search`
+  - `status`
+  - `priority`
+- `PATCH` body:
+
+```json
+{
+  "status": "reviewing",
+  "priority": "high",
+  "adminNote": "Escalated for payment review"
+}
+```
+
+- Response data keys:
+  - `tickets`
+  - `actions`
+  - `filters`
+  - `pagination`
+
 ### Communities and pages
 
 - `GET /communities`

@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -19,7 +20,11 @@ import {
 import { AdminSessionGuard } from '../auth/admin-session.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
-import { AdminSessionRefreshDto } from '../dto/admin.dto';
+import {
+  AdminSessionRefreshDto,
+  AdminSupportOperationsQueryDto,
+  AdminSupportTicketUpdateDto,
+} from '../dto/admin.dto';
 import { AdminLoginDto } from '../dto/auth.dto';
 import { AdminDatabaseService } from '../services/admin-database.service';
 import { successResponse } from '../utils/api-response.util';
@@ -282,10 +287,26 @@ export class AdminOpsController {
   @Get('support-operations')
   @ApiBearerAuth('admin-bearer')
   @UseGuards(AdminSessionGuard)
-  async getSupportOperations() {
+  async getSupportOperations(@Query() query: AdminSupportOperationsQueryDto) {
     return successResponse(
       'Support operations fetched successfully.',
-      await this.adminDatabase.getSupportOperations(),
+      await this.adminDatabase.getSupportOperations(query),
+    );
+  }
+
+  @Patch('support-operations/:id')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard, RolesGuard)
+  @Roles('Super Admin', 'Operations Admin', 'Support Admin')
+  async updateSupportOperation(
+    @Param('id') id: string,
+    @Body() body: AdminSupportTicketUpdateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Support ticket updated successfully.',
+      await this.adminDatabase.updateSupportTicket(id, body, admin.adminId),
     );
   }
 }

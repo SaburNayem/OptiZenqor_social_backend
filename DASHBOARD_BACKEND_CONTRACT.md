@@ -110,13 +110,25 @@ Runtime requirement:
 
 ### `GET /admin/support-operations`
 - Auth: admin bearer token
+- Query params supported by backend:
+  - `page`
+  - `limit`
+  - `search`
+  - `status`
+  - `priority`
 - Response keys consumed:
   - `data.tickets`
+  - `data.actions`
+  - `data.filters`
+  - `data.pagination`
+- Mutation route:
+  - `PATCH /admin/support-operations/:id`
 - Dashboard files:
+  - `src/App.jsx`
   - `src/config/navigation.js`
   - `src/components/AdminViews.jsx`
 - Remaining gap:
-  - dashboard has no ticket assignment/status/reply actions yet
+  - ticket assignment, reply composer, and SLA workflows are still missing
 
 ### `GET /admin/marketplace`
 ### `GET /admin/jobs`
@@ -181,6 +193,6 @@ Runtime requirement:
 
 - The dashboard is authenticated and API-backed for all listed pages.
 - The main remaining admin gap is feature depth, not connectivity:
-  - filters/search/pagination controls are not exposed in the UI yet
+  - filters/search/pagination controls are still missing on many pages outside support
   - many operational pages are still read-only
   - several admin mutation endpoints still need to be added in the backend

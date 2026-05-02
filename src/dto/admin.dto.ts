@@ -173,6 +173,38 @@ export class AdminEntityListQueryDto {
   status?: string;
 }
 
+export class AdminSupportOperationsQueryDto {
+  @ApiPropertyOptional({ minimum: 1, default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 100, default: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ enum: ['open', 'reviewing', 'resolved', 'closed'] })
+  @IsOptional()
+  @IsIn(['open', 'reviewing', 'resolved', 'closed'])
+  status?: 'open' | 'reviewing' | 'resolved' | 'closed';
+
+  @ApiPropertyOptional({ enum: ['low', 'normal', 'high', 'urgent'] })
+  @IsOptional()
+  @IsIn(['low', 'normal', 'high', 'urgent'])
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
+}
+
 export class AdminPremiumPlanCreateDto {
   @ApiProperty()
   @IsString()
@@ -333,6 +365,23 @@ export class AdminSettingsPatchDto {
   @ApiProperty({ type: 'object', additionalProperties: true })
   @IsObject()
   patch!: Record<string, unknown>;
+}
+
+export class AdminSupportTicketUpdateDto {
+  @ApiPropertyOptional({ enum: ['open', 'reviewing', 'resolved', 'closed'] })
+  @IsOptional()
+  @IsIn(['open', 'reviewing', 'resolved', 'closed'])
+  status?: 'open' | 'reviewing' | 'resolved' | 'closed';
+
+  @ApiPropertyOptional({ enum: ['low', 'normal', 'high', 'urgent'] })
+  @IsOptional()
+  @IsIn(['low', 'normal', 'high', 'urgent'])
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  adminNote?: string;
 }
 
 export class RegisterPushDeviceDto {
