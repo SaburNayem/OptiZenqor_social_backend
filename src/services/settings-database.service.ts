@@ -170,7 +170,7 @@ export class SettingsDatabaseService {
     const context = await this.buildContext(userId);
     const recommendationScore = this.readNumber(
       context.settingsState['explore.recommendation_score'],
-      0.81,
+      0,
     );
     return {
       recommendationScore,
@@ -781,28 +781,28 @@ export class SettingsDatabaseService {
       case 'communities-groups':
         return {
           state: {
-            communityInvites: this.readBoolean(state['communities.invites'], true),
+            communityInvites: this.readBoolean(state['communities.invites'], false),
             groupMentions: this.readBoolean(
               state['communities.group_mentions'],
-              true,
+              false,
             ),
             eventsReminders: this.readBoolean(
               state['communities.events_reminders'],
-              true,
+              false,
             ),
           },
         };
       case 'language-region':
         return {
           state: {
-            language: this.readString(state['locale.language']) ?? 'English',
-            region: this.readString(state['locale.region']) ?? 'Bangladesh',
+            language: this.readString(state['locale.language']) ?? '',
+            region: this.readString(state['locale.region']) ?? '',
           },
         };
       case 'accessibility':
         return {
           state: {
-            captions: this.readBoolean(state['accessibility.captions'], true),
+            captions: this.readBoolean(state['accessibility.captions'], false),
             highContrast: this.readBoolean(
               state['accessibility.high_contrast'],
               false,
@@ -811,7 +811,7 @@ export class SettingsDatabaseService {
               state['accessibility.reduce_motion'],
               false,
             ),
-            textSize: this.readString(state['accessibility.text_size']) ?? 'Default',
+            textSize: this.readString(state['accessibility.text_size']) ?? '',
           },
         };
       case 'localization-support':
@@ -824,11 +824,11 @@ export class SettingsDatabaseService {
           ...{
             screenReaderHints: this.readBoolean(
               state['accessibility.screen_reader_hints'],
-              true,
+              false,
             ),
             motionPreviewAvailable: this.readBoolean(
               state['accessibility.motion_preview_available'],
-              true,
+              false,
             ),
           },
         };
@@ -840,16 +840,16 @@ export class SettingsDatabaseService {
               state['data.ad_personalization'],
               false,
             ),
-            dataCollection: this.readBoolean(state['data.data_collection'], true),
+            dataCollection: this.readBoolean(state['data.data_collection'], false),
           },
         };
       case 'legal-compliance':
         return {
-          termsAccepted: this.readBoolean(state['legal.terms_accepted'], true),
-          privacyAccepted: this.readBoolean(state['legal.privacy_accepted'], true),
+          termsAccepted: this.readBoolean(state['legal.terms_accepted'], false),
+          privacyAccepted: this.readBoolean(state['legal.privacy_accepted'], false),
           guidelinesAccepted: this.readBoolean(
             state['legal.guidelines_accepted'],
-            true,
+            false,
           ),
         };
       default:

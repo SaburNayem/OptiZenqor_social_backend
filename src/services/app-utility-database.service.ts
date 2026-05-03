@@ -86,13 +86,9 @@ export class AppUtilityDatabaseService {
 
   async getOnboardingSlides() {
     const normalizedSlides = await this.readOnboardingCatalogItems('slide');
-    const configured =
-      normalizedSlides.length > 0
-        ? normalizedSlides.map((item, index) => this.normalizeOnboardingSlide(item, index))
-        : this.readArrayObjects(await this.readOperationalSetting('app.onboarding.slides'))
-            .map((item, index) => this.normalizeOnboardingSlide(item, index))
-            .filter((item) => item.title.trim().length > 0);
-    const slides = configured;
+    const slides = normalizedSlides.map((item, index) =>
+      this.normalizeOnboardingSlide(item, index),
+    );
     return {
       slides,
       items: slides,
@@ -133,11 +129,6 @@ export class AppUtilityDatabaseService {
     const normalizedOnboarding = await this.readOnboardingInterestCatalog();
     if (normalizedOnboarding.length > 0) {
       return normalizedOnboarding;
-    }
-
-    const configured = this.readStringArray(await this.readOperationalSetting('app.onboarding.interests'));
-    if (configured.length > 0) {
-      return configured;
     }
 
     const users = await this.prisma.appUser.findMany({

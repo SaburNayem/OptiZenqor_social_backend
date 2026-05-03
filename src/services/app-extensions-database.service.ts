@@ -8,12 +8,6 @@ import { Prisma } from '@prisma/client';
 import { CoreDatabaseService } from './core-database.service';
 import { PrismaService } from './prisma.service';
 
-const DEFAULT_VERIFICATION_DOCUMENTS = [
-  'Government ID',
-  'Business proof',
-  'Profile photo',
-];
-
 type ExtensionSettingsState = {
   accountSwitching?: {
     linkedAccountIds?: string[];
@@ -366,8 +360,7 @@ export class AppExtensionsDatabaseService {
       status,
       reason,
       selectedDocuments,
-      requiredDocuments:
-        requiredDocuments.length > 0 ? requiredDocuments : [...DEFAULT_VERIFICATION_DOCUMENTS],
+      requiredDocuments,
       submittedAt: this.readString(stored.submittedAt) ?? null,
     };
   }
