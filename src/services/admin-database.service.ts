@@ -3061,8 +3061,24 @@ export class AdminDatabaseService implements OnModuleInit {
     const [total, items] = await Promise.all([
       this.prisma.pushDeviceToken.count({ where }),
       this.prisma.pushDeviceToken.findMany({
+        select: {
+          id: true,
+          token: true,
+          platform: true,
+          deviceLabel: true,
+          appVersion: true,
+          isActive: true,
+          lastSeenAt: true,
+          createdAt: true,
+          updatedAt: true,
+          userId: true,
+          user: {
+            select: {
+              name: true,
+            },
+          },
+        },
         where,
-        include: { user: true },
         orderBy: { updatedAt: 'desc' },
         skip,
         take: limit,
@@ -3375,21 +3391,53 @@ export class AdminDatabaseService implements OnModuleInit {
     actorAdminId?: string,
   ) {
     const existing = await this.prisma.pushDeviceToken.findUnique({
+      select: {
+        id: true,
+        token: true,
+        platform: true,
+        deviceLabel: true,
+        appVersion: true,
+        isActive: true,
+        lastSeenAt: true,
+        createdAt: true,
+        updatedAt: true,
+        userId: true,
+        user: {
+          select: {
+            name: true,
+          },
+        },
+      },
       where: { id },
-      include: { user: true },
     });
     if (!existing) {
       throw new NotFoundException(`Push notification device ${id} not found.`);
     }
 
     const updated = await this.prisma.pushDeviceToken.update({
+      select: {
+        id: true,
+        token: true,
+        platform: true,
+        deviceLabel: true,
+        appVersion: true,
+        isActive: true,
+        lastSeenAt: true,
+        createdAt: true,
+        updatedAt: true,
+        userId: true,
+        user: {
+          select: {
+            name: true,
+          },
+        },
+      },
       where: { id },
       data: {
         isActive: patch.isActive,
         updatedAt: new Date(),
         lastSeenAt: new Date(),
       },
-      include: { user: true },
     });
 
     await this.createAuditLog({
@@ -3421,8 +3469,24 @@ export class AdminDatabaseService implements OnModuleInit {
 
   async getAdminNotificationDevice(id: string) {
     const item = await this.prisma.pushDeviceToken.findUnique({
+      select: {
+        id: true,
+        token: true,
+        platform: true,
+        deviceLabel: true,
+        appVersion: true,
+        isActive: true,
+        lastSeenAt: true,
+        createdAt: true,
+        updatedAt: true,
+        userId: true,
+        user: {
+          select: {
+            name: true,
+          },
+        },
+      },
       where: { id },
-      include: { user: true },
     });
     if (!item) {
       throw new NotFoundException(`Push notification device ${id} not found.`);
@@ -3445,8 +3509,24 @@ export class AdminDatabaseService implements OnModuleInit {
 
   async deleteAdminNotificationDevice(id: string, actorAdminId?: string) {
     const existing = await this.prisma.pushDeviceToken.findUnique({
+      select: {
+        id: true,
+        token: true,
+        platform: true,
+        deviceLabel: true,
+        appVersion: true,
+        isActive: true,
+        lastSeenAt: true,
+        createdAt: true,
+        updatedAt: true,
+        userId: true,
+        user: {
+          select: {
+            name: true,
+          },
+        },
+      },
       where: { id },
-      include: { user: true },
     });
     if (!existing) {
       throw new NotFoundException(`Push notification device ${id} not found.`);
@@ -3792,6 +3872,17 @@ export class AdminDatabaseService implements OnModuleInit {
   ) {
     await this.coreDatabase.getUser(userId);
     const device = await this.prisma.pushDeviceToken.upsert({
+      select: {
+        id: true,
+        token: true,
+        platform: true,
+        deviceLabel: true,
+        appVersion: true,
+        isActive: true,
+        lastSeenAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
       where: { token: input.token.trim() },
       create: {
         id: makeId('push_device'),
@@ -3860,6 +3951,17 @@ export class AdminDatabaseService implements OnModuleInit {
     },
   ) {
     const items = await this.prisma.pushDeviceToken.findMany({
+      select: {
+        id: true,
+        token: true,
+        platform: true,
+        deviceLabel: true,
+        appVersion: true,
+        isActive: true,
+        lastSeenAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
       where: {
         userId,
         ...(query?.platform?.trim()
@@ -3879,6 +3981,17 @@ export class AdminDatabaseService implements OnModuleInit {
 
   async getUserPushDevice(userId: string, id: string) {
     const item = await this.prisma.pushDeviceToken.findFirst({
+      select: {
+        id: true,
+        token: true,
+        platform: true,
+        deviceLabel: true,
+        appVersion: true,
+        isActive: true,
+        lastSeenAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
       where: { id, userId },
     });
     if (!item) {
@@ -3899,6 +4012,17 @@ export class AdminDatabaseService implements OnModuleInit {
     },
   ) {
     const existing = await this.prisma.pushDeviceToken.findFirst({
+      select: {
+        id: true,
+        token: true,
+        platform: true,
+        deviceLabel: true,
+        appVersion: true,
+        isActive: true,
+        lastSeenAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
       where: { id, userId },
     });
     if (!existing) {
@@ -3907,6 +4031,17 @@ export class AdminDatabaseService implements OnModuleInit {
 
     const nextIsActive = patch.enabled === undefined ? patch.isActive : patch.enabled;
     const updated = await this.prisma.pushDeviceToken.update({
+      select: {
+        id: true,
+        token: true,
+        platform: true,
+        deviceLabel: true,
+        appVersion: true,
+        isActive: true,
+        lastSeenAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
       where: { id: existing.id },
       data: {
         isActive: nextIsActive ?? undefined,

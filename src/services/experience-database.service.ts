@@ -2064,7 +2064,7 @@ export class ExperienceDatabaseService {
   }
 
   private async readMarketplaceConfig() {
-    const entry = await this.prisma.supportConfigEntry.findUnique({
+    const entry = await (this.prisma as any).supportConfigEntry.findUnique({
       where: { key: 'marketplace.create_options' },
     });
 
