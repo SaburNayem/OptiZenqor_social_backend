@@ -20,6 +20,34 @@ export function listResponse<T>(
   return successResponse(message, items, meta);
 }
 
+export function compatibilityResponse<T>(
+  message: string,
+  data: T,
+  options?: {
+    aliases?: Record<string, unknown>;
+    pagination?: Record<string, unknown>;
+  },
+) {
+  return {
+    ...successResponse(message, data, options?.pagination),
+    ...(options?.aliases ?? {}),
+  };
+}
+
+export function compatibilityListResponse<T>(
+  message: string,
+  items: T[],
+  options?: {
+    aliases?: Record<string, unknown>;
+    pagination?: Record<string, unknown>;
+  },
+) {
+  return compatibilityResponse(message, items, {
+    aliases: options?.aliases,
+    pagination: options?.pagination,
+  });
+}
+
 function isPaginationShape(
   value?: Record<string, unknown>,
 ): value is Record<string, unknown> {

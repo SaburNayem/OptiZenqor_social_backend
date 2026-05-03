@@ -14,6 +14,7 @@ import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CloudinaryUploadService } from '../services/cloudinary-upload.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { UploadsDatabaseService } from '../services/uploads-database.service';
+import { compatibilityListResponse, compatibilityResponse } from '../utils/api-response.util';
 
 @ApiTags('uploads')
 @Controller()
@@ -27,31 +28,29 @@ export class UploadsController {
   @Get('uploads')
   async getUploads() {
     const uploads = await this.uploadsDatabase.getUploads();
-    return {
-      success: true,
-      message: 'Uploads fetched successfully.',
-      data: uploads,
+    return compatibilityListResponse('Uploads fetched successfully.', uploads, {
+      aliases: {
       items: uploads,
       results: uploads,
       count: uploads.length,
-    };
+      },
+    });
   }
 
   @Get('uploads/:id')
   async getUpload(@Param('id') id: string) {
     const upload = await this.uploadsDatabase.getUpload(id);
     const remotePath = upload.secureUrl ?? upload.url ?? null;
-    return {
-      success: true,
-      message: 'Upload fetched successfully.',
-      upload,
-      url: remotePath,
-      secureUrl: upload.secureUrl,
-      remotePath,
-      path: remotePath,
-      fileUrl: remotePath,
-      data: upload,
-    };
+    return compatibilityResponse('Upload fetched successfully.', upload, {
+      aliases: {
+        upload,
+        url: remotePath,
+        secureUrl: upload.secureUrl,
+        remotePath,
+        path: remotePath,
+        fileUrl: remotePath,
+      },
+    });
   }
 
   @Post(['uploads', 'upload-manager'])
@@ -145,11 +144,8 @@ export class UploadsController {
       fileUrl: remotePath ?? null,
     };
 
-    return {
-      success: true,
-      message: 'File uploaded successfully.',
-      ...payload,
-      data: payload,
-    };
+    return compatibilityResponse('File uploaded successfully.', payload, {
+      aliases: payload,
+    });
   }
 }

@@ -1,6 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { compatibilityListResponse } from '../utils/api-response.util';
 
 @ApiTags('feed')
 @Controller()
@@ -24,13 +25,12 @@ export class ContentController {
   }
 
   private wrapFeedResponse(message: string, items: unknown[]) {
-    return {
-      success: true,
-      message,
-      data: items,
+    return compatibilityListResponse(message, items, {
+      aliases: {
       items,
       results: items,
       count: items.length,
-    };
+      },
+    });
   }
 }

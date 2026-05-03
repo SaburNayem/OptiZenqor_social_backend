@@ -12,6 +12,7 @@ import { AccountStateDatabaseService } from '../services/account-state-database.
 import { AdminDatabaseService } from '../services/admin-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { MonetizationDatabaseService } from '../services/monetization-database.service';
+import { compatibilityListResponse, compatibilityResponse, successResponse } from '../utils/api-response.util';
 
 @ApiTags('notifications')
 @Controller('notifications')
@@ -36,63 +37,64 @@ export class NotificationsController {
         .then((user) => user.id)
         .catch(() => undefined));
     const notifications = await this.coreDatabase.getNotificationInbox(resolvedUser);
-    return {
-      success: true,
-      message: 'Notifications fetched successfully.',
+    const campaigns = await this.monetizationDatabase.getNotificationCampaigns();
+    const preferences = resolvedUser
+      ? await this.accountStateDatabase.getSettingsState(resolvedUser)
+      : {};
+    return compatibilityResponse('Notifications fetched successfully.', {
       notifications,
-      items: notifications,
-      results: notifications,
-      data: notifications,
-      inbox: notifications,
-      campaigns: await this.monetizationDatabase.getNotificationCampaigns(),
-      preferences: resolvedUser
-        ? await this.accountStateDatabase.getSettingsState(resolvedUser)
-        : {},
-    };
+      campaigns,
+      preferences,
+    }, {
+      aliases: {
+        notifications,
+        items: notifications,
+        results: notifications,
+        inbox: notifications,
+        campaigns,
+        preferences,
+      },
+    });
   }
 
   @Get('inbox')
   @ApiQuery({ name: 'userId', required: false })
   async getInbox(@Query('userId') userId?: string) {
     const notifications = await this.coreDatabase.getNotificationInbox(userId);
-    return {
-      success: true,
-      message: 'Notification inbox fetched successfully.',
-      notifications,
-      items: notifications,
-      results: notifications,
-      data: notifications,
-      inbox: notifications,
-    };
+    return compatibilityListResponse('Notification inbox fetched successfully.', notifications, {
+      aliases: {
+        notifications,
+        items: notifications,
+        results: notifications,
+        inbox: notifications,
+      },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
   @Get('preferences')
   async getPreferences(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return {
-      success: true,
-      message: 'Notification preferences fetched successfully.',
-      data: await this.accountStateDatabase.getSettingsState(user.id),
-    };
+    return successResponse(
+      'Notification preferences fetched successfully.',
+      await this.accountStateDatabase.getSettingsState(user.id),
+    );
   }
 
   @Get('campaigns')
   async getCampaigns() {
-    return {
-      success: true,
-      message: 'Notification campaigns fetched successfully.',
-      data: await this.monetizationDatabase.getNotificationCampaigns(),
-    };
+    return successResponse(
+      'Notification campaigns fetched successfully.',
+      await this.monetizationDatabase.getNotificationCampaigns(),
+    );
   }
 
   @Post('campaigns')
   async createCampaign(@Body() body: CreateNotificationCampaignDto) {
-    return {
-      success: true,
-      message: 'Notification campaign created successfully.',
-      data: await this.monetizationDatabase.createNotificationCampaign(body),
-    };
+    return successResponse(
+      'Notification campaign created successfully.',
+      await this.monetizationDatabase.createNotificationCampaign(body),
+    );
   }
 
   @UseGuards(SessionAuthGuard)
@@ -103,11 +105,10 @@ export class NotificationsController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return {
-      success: true,
-      message: 'Push device registered successfully.',
-      data: await this.adminDatabase.registerPushDevice(user.id, body),
-    };
+    return successResponse(
+      'Push device registered successfully.',
+      await this.adminDatabase.registerPushDevice(user.id, body),
+    );
   }
 
   @UseGuards(SessionAuthGuard)
@@ -117,11 +118,10 @@ export class NotificationsController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return {
-      success: true,
-      message: 'Push devices fetched successfully.',
-      data: await this.adminDatabase.listUserPushDevices(user.id, query),
-    };
+    return successResponse(
+      'Push devices fetched successfully.',
+      await this.adminDatabase.listUserPushDevices(user.id, query),
+    );
   }
 
   @UseGuards(SessionAuthGuard)
@@ -132,11 +132,10 @@ export class NotificationsController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return {
-      success: true,
-      message: 'Push device updated successfully.',
-      data: await this.adminDatabase.updateUserPushDevice(user.id, id, body),
-    };
+    return successResponse(
+      'Push device updated successfully.',
+      await this.adminDatabase.updateUserPushDevice(user.id, id, body),
+    );
   }
 
   @UseGuards(SessionAuthGuard)
@@ -146,11 +145,10 @@ export class NotificationsController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return {
-      success: true,
-      message: 'Push device unregistered successfully.',
-      data: await this.adminDatabase.unregisterPushDevice(user.id, token),
-    };
+    return successResponse(
+      'Push device unregistered successfully.',
+      await this.adminDatabase.unregisterPushDevice(user.id, token),
+    );
   }
 
   @UseGuards(SessionAuthGuard)
@@ -160,11 +158,10 @@ export class NotificationsController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return {
-      success: true,
-      message: 'Push device deleted successfully.',
-      data: await this.adminDatabase.deleteUserPushDevice(user.id, id),
-    };
+    return successResponse(
+      'Push device deleted successfully.',
+      await this.adminDatabase.deleteUserPushDevice(user.id, id),
+    );
   }
 
   @Patch(':id/read')
@@ -179,12 +176,11 @@ export class NotificationsController {
       body.userId,
     );
     const notification = await this.coreDatabase.markNotificationRead(id, actor.id);
-    return {
-      success: true,
-      message: 'Notification marked as read successfully.',
-      ...notification,
-      notification,
-      data: notification,
-    };
+    return compatibilityResponse('Notification marked as read successfully.', notification, {
+      aliases: {
+        ...notification,
+        notification,
+      },
+    });
   }
 }

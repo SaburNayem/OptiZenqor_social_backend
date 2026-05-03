@@ -20,6 +20,7 @@ import {
 import { CoreDatabaseService } from '../services/core-database.service';
 import { RealtimeStateService } from '../services/realtime-state.service';
 import { SocialStateDatabaseService } from '../services/social-state-database.service';
+import { compatibilityListResponse, compatibilityResponse, successResponse } from '../utils/api-response.util';
 
 @ApiTags('realtime')
 @Controller()
@@ -67,14 +68,13 @@ export class RealtimeController {
         activeForUser: (thread.participantIds ?? []).includes(user.id),
       }));
 
-    return {
-      success: true,
-      message: 'Group chats fetched successfully.',
-      data: groups,
-      items: groups,
-      results: groups,
-      groups,
-    };
+    return compatibilityListResponse('Group chats fetched successfully.', groups, {
+      aliases: {
+        items: groups,
+        results: groups,
+        groups,
+      },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
@@ -82,12 +82,9 @@ export class RealtimeController {
   async getGroupChat(@Param('id') id: string) {
     const thread = await this.coreDatabase.getThread(id);
     const group = this.mapGroupChat(thread);
-    return {
-      success: true,
-      message: 'Group chat fetched successfully.',
-      data: group,
-      group,
-    };
+    return compatibilityResponse('Group chat fetched successfully.', group, {
+      aliases: { group },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
@@ -99,12 +96,9 @@ export class RealtimeController {
       body.participantIds ?? [],
     );
     const group = this.mapGroupChat(thread);
-    return {
-      success: true,
-      message: 'Group chat created successfully.',
-      data: group,
-      group,
-    };
+    return compatibilityResponse('Group chat created successfully.', group, {
+      aliases: { group },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
@@ -116,22 +110,18 @@ export class RealtimeController {
   ) {
     const thread = await this.coreDatabase.updateGroupThread(id, user.id, body.name);
     const group = this.mapGroupChat(thread);
-    return {
-      success: true,
-      message: 'Group chat updated successfully.',
-      data: group,
-      group,
-    };
+    return compatibilityResponse('Group chat updated successfully.', group, {
+      aliases: { group },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
   @Delete('group-chat/:id')
   async deleteGroupChat(@Param('id') id: string, @CurrentUser() user: { id: string }) {
-    return {
-      success: true,
-      message: 'Group chat deleted successfully.',
-      data: await this.coreDatabase.deleteGroupThread(id, user.id),
-    };
+    return successResponse(
+      'Group chat deleted successfully.',
+      await this.coreDatabase.deleteGroupThread(id, user.id),
+    );
   }
 
   @UseGuards(SessionAuthGuard)
@@ -149,12 +139,9 @@ export class RealtimeController {
       body.role ?? 'member',
     );
     const group = this.mapGroupChat(thread);
-    return {
-      success: true,
-      message: 'Group member added successfully.',
-      data: group,
-      group,
-    };
+    return compatibilityResponse('Group member added successfully.', group, {
+      aliases: { group },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
@@ -166,12 +153,9 @@ export class RealtimeController {
   ) {
     const thread = await this.coreDatabase.removeThreadParticipant(id, user.id, userId);
     const group = this.mapGroupChat(thread);
-    return {
-      success: true,
-      message: 'Group member removed successfully.',
-      data: group,
-      group,
-    };
+    return compatibilityResponse('Group member removed successfully.', group, {
+      aliases: { group },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
@@ -189,12 +173,9 @@ export class RealtimeController {
       body.role ?? 'member',
     );
     const group = this.mapGroupChat(thread);
-    return {
-      success: true,
-      message: 'Group member role updated successfully.',
-      data: group,
-      group,
-    };
+    return compatibilityResponse('Group member role updated successfully.', group, {
+      aliases: { group },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
@@ -241,26 +222,22 @@ export class RealtimeController {
       }),
     );
 
-    return {
-      success: true,
-      message: 'Calls fetched successfully.',
-      data: calls,
-      items: calls,
-      results: calls,
-      calls,
-    };
+    return compatibilityListResponse('Calls fetched successfully.', calls, {
+      aliases: {
+        items: calls,
+        results: calls,
+        calls,
+      },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
   @Get('calls/:id')
   async getCall(@Param('id') id: string) {
     const session = this.realtimeState.getCallSession(id);
-    return {
-      success: true,
-      message: 'Call fetched successfully.',
-      data: session,
-      call: session,
-    };
+    return compatibilityResponse('Call fetched successfully.', session, {
+      aliases: { call: session },
+    });
   }
 
   @Get('live-stream')
@@ -274,36 +251,32 @@ export class RealtimeController {
       status,
       userId,
     });
-    return {
-      success: true,
-      message: 'Live streams fetched successfully.',
-      ...payload,
-      streams: payload.items,
-    };
+    return compatibilityResponse('Live streams fetched successfully.', payload, {
+      pagination: payload.pagination,
+      aliases: {
+        items: payload.items,
+        results: payload.results,
+        streams: payload.items,
+      },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
   @Get('live-stream/setup')
   async getLiveStreamSetup(@CurrentUser() user: { id: string }) {
     const setup = await this.socialStateDatabase.getLiveStreamSetup(user.id);
-    return {
-      success: true,
-      message: 'Live stream setup fetched successfully.',
-      data: setup,
-      setup,
-    };
+    return compatibilityResponse('Live stream setup fetched successfully.', setup, {
+      aliases: { setup },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
   @Get('live-stream/studio')
   async getLiveStreamStudio(@CurrentUser() user: { id: string }) {
     const studio = await this.socialStateDatabase.getLiveStreamStudio(user.id);
-    return {
-      success: true,
-      message: 'Live stream studio fetched successfully.',
-      data: studio,
-      studio,
-    };
+    return compatibilityResponse('Live stream studio fetched successfully.', studio, {
+      aliases: { studio },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
@@ -313,12 +286,9 @@ export class RealtimeController {
     @Body() body: UpdateLiveStreamStudioDto,
   ) {
     const studio = await this.socialStateDatabase.updateLiveStreamStudio(user.id, body);
-    return {
-      success: true,
-      message: 'Live stream studio updated successfully.',
-      data: studio,
-      studio,
-    };
+    return compatibilityResponse('Live stream studio updated successfully.', studio, {
+      aliases: { studio },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
@@ -336,36 +306,27 @@ export class RealtimeController {
       quickOptions: body.quickOptions,
       previewImageUrl: body.previewImageUrl,
     });
-    return {
-      success: true,
-      message: 'Live stream created successfully.',
-      data: stream,
-      stream,
-    };
+    return compatibilityResponse('Live stream created successfully.', stream, {
+      aliases: { stream },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
   @Patch('live-stream/:id/start')
   async startLiveStream(@Param('id') id: string, @CurrentUser() user: { id: string }) {
     const stream = await this.socialStateDatabase.startLiveStream(id, user.id);
-    return {
-      success: true,
-      message: 'Live stream started successfully.',
-      data: stream,
-      stream,
-    };
+    return compatibilityResponse('Live stream started successfully.', stream, {
+      aliases: { stream },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
   @Patch('live-stream/:id/end')
   async endLiveStream(@Param('id') id: string, @CurrentUser() user: { id: string }) {
     const stream = await this.socialStateDatabase.endLiveStream(id, user.id);
-    return {
-      success: true,
-      message: 'Live stream ended successfully.',
-      data: stream,
-      stream,
-    };
+    return compatibilityResponse('Live stream ended successfully.', stream, {
+      aliases: { stream },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
@@ -380,12 +341,9 @@ export class RealtimeController {
       user.id,
       body,
     );
-    return {
-      success: true,
-      message: 'Live stream moderation updated successfully.',
-      data: stream,
-      stream,
-    };
+    return compatibilityResponse('Live stream moderation updated successfully.', stream, {
+      aliases: { stream },
+    });
   }
 
   @Get('live-stream/:id/comments')
@@ -394,12 +352,14 @@ export class RealtimeController {
     @Query() query: PaginationQueryDto,
   ) {
     const payload = await this.socialStateDatabase.listLiveStreamComments(id, query);
-    return {
-      success: true,
-      message: 'Live stream comments fetched successfully.',
-      ...payload,
-      comments: payload.items,
-    };
+    return compatibilityResponse('Live stream comments fetched successfully.', payload, {
+      pagination: payload.pagination,
+      aliases: {
+        items: payload.items,
+        results: payload.results,
+        comments: payload.items,
+      },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
@@ -418,12 +378,9 @@ export class RealtimeController {
       actor.id,
       body.message,
     );
-    return {
-      success: true,
-      message: 'Live stream comment created successfully.',
-      data: comment,
-      comment,
-    };
+    return compatibilityResponse('Live stream comment created successfully.', comment, {
+      aliases: { comment },
+    });
   }
 
   @Get('live-stream/:id/reactions')
@@ -432,12 +389,14 @@ export class RealtimeController {
     @Query() query: PaginationQueryDto,
   ) {
     const payload = await this.socialStateDatabase.listLiveStreamReactions(id, query);
-    return {
-      success: true,
-      message: 'Live stream reactions fetched successfully.',
-      ...payload,
-      reactions: payload.items,
-    };
+    return compatibilityResponse('Live stream reactions fetched successfully.', payload, {
+      pagination: payload.pagination,
+      aliases: {
+        items: payload.items,
+        results: payload.results,
+        reactions: payload.items,
+      },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
@@ -453,24 +412,20 @@ export class RealtimeController {
       actor.id,
       body.type,
     );
-    return {
-      success: true,
-      message: 'Live stream reaction created successfully.',
-      data: payload,
-      reaction: payload.reaction,
-      summary: payload.summary,
-    };
+    return compatibilityResponse('Live stream reaction created successfully.', payload, {
+      aliases: {
+        reaction: payload.reaction,
+        summary: payload.summary,
+      },
+    });
   }
 
   @Get('live-stream/:id')
   async getLiveStream(@Param('id') id: string) {
     const stream = await this.socialStateDatabase.getLiveStream(id);
-    return {
-      success: true,
-      message: 'Live stream fetched successfully.',
-      data: stream,
-      stream,
-    };
+    return compatibilityResponse('Live stream fetched successfully.', stream, {
+      aliases: { stream },
+    });
   }
 
   @Get('socket/contract')
@@ -486,25 +441,21 @@ export class RealtimeController {
   @Get('calls/sessions')
   getCallSessions() {
     const sessions = this.realtimeState.getCallSessions();
-    return {
-      success: true,
-      message: 'Call sessions fetched successfully.',
-      data: sessions,
-      items: sessions,
-      results: sessions,
-      sessions,
-    };
+    return compatibilityListResponse('Call sessions fetched successfully.', sessions, {
+      aliases: {
+        items: sessions,
+        results: sessions,
+        sessions,
+      },
+    });
   }
 
   @Get('calls/sessions/:id')
   getCallSession(@Param('id') id: string) {
     const session = this.realtimeState.getCallSession(id);
-    return {
-      success: true,
-      message: 'Call session fetched successfully.',
-      data: session,
-      session,
-    };
+    return compatibilityResponse('Call session fetched successfully.', session, {
+      aliases: { session },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
@@ -521,12 +472,9 @@ export class RealtimeController {
       ...body,
       initiatorId: actor.id,
     });
-    return {
-      success: true,
-      message: 'Call session created successfully.',
-      data: session,
-      session,
-    };
+    return compatibilityResponse('Call session created successfully.', session, {
+      aliases: { session },
+    });
   }
 
   @UseGuards(SessionAuthGuard)
@@ -541,11 +489,8 @@ export class RealtimeController {
       body.endedBy,
     );
     const session = this.realtimeState.endCallSession(id, actor.id, body.reason);
-    return {
-      success: true,
-      message: 'Call session ended successfully.',
-      data: session,
-      session,
-    };
+    return compatibilityResponse('Call session ended successfully.', session, {
+      aliases: { session },
+    });
   }
 }
