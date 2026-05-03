@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Headers, Param, Post, Query } from '@nes
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { BuddyActionDto, BuddyRequestCreateDto } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { listResponse, successResponse } from '../utils/api-response.util';
 
 @ApiTags('buddies')
 @Controller('buddies')
@@ -137,20 +138,12 @@ export class BuddiesController {
       }
     }
 
-    const token = authorization?.replace(/^Bearer\s+/i, '');
-    const user = await this.coreDatabase.resolveUserFromAccessToken(token);
-    return user?.id ?? 'u1';
+    const actor = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return actor.id;
   }
 
   private wrapListResponse(message: string, items: unknown[]) {
-    return {
-      success: true,
-      message,
-      data: items,
-      items,
-      results: items,
-      count: items.length,
-    };
+    return listResponse(message, items);
   }
 
   private wrapEntityResponse(
@@ -158,12 +151,6 @@ export class BuddiesController {
     payload: Record<string, unknown>,
     key: 'buddy' | 'request',
   ) {
-    return {
-      success: true,
-      message,
-      ...payload,
-      [key]: payload,
-      data: payload,
-    };
+    return successResponse(message, payload);
   }
 }

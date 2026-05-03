@@ -9,19 +9,15 @@ export function successResponse<T>(
     message,
     data,
     ...(pagination ? { pagination } : {}),
-    ...(meta ? { meta } : {}),
   };
 }
 
 export function listResponse<T>(
   message: string,
   items: T[],
-  meta: Record<string, unknown> = {},
+  meta?: Record<string, unknown>,
 ) {
-  return successResponse(message, items, {
-    count: items.length,
-    ...meta,
-  });
+  return successResponse(message, items, meta);
 }
 
 function isPaginationShape(

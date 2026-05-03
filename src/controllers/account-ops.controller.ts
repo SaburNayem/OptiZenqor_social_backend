@@ -11,6 +11,7 @@ import { RealtimeStateService } from '../services/realtime-state.service';
 import { ReelsDatabaseService } from '../services/reels-database.service';
 import { SocialStateDatabaseService } from '../services/social-state-database.service';
 import { SupportDatabaseService } from '../services/support-database.service';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('account-ops')
 @Controller()
@@ -68,18 +69,11 @@ export class AccountOpsController {
 
       await this.coreDatabase.deleteAuthCode(destination, purpose);
 
-      return {
-        success: true,
-        message: 'OTP verified successfully.',
+      return successResponse('OTP verified successfully.', {
         destination,
         channel: purpose === 'verify_email' ? 'email' : 'phone',
         verificationStatus: 'verified',
-        data: {
-          destination,
-          channel: purpose === 'verify_email' ? 'email' : 'phone',
-          verificationStatus: 'verified',
-        },
-      };
+      });
     }
 
     throw new BadRequestException('A destination or email is required to verify OTP.');
@@ -88,11 +82,10 @@ export class AccountOpsController {
   @Get('recommendations')
   async getRecommendations(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return {
-      success: true,
-      message: 'Recommendations fetched successfully.',
-      data: await this.appUtilityDatabase.getRecommendations(user.id),
-    };
+    return successResponse(
+      'Recommendations fetched successfully.',
+      await this.appUtilityDatabase.getRecommendations(user.id),
+    );
   }
 
   @Get('chat/presence')
@@ -104,12 +97,7 @@ export class AccountOpsController {
   async getConversationPreferences(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
     const preferences = await this.socialStateDatabase.getChatPreferences(user.id);
-    return {
-      success: true,
-      message: 'Chat preferences fetched successfully.',
-      data: preferences,
-      preferences,
-    };
+    return successResponse('Chat preferences fetched successfully.', preferences);
   }
 
   @Patch('notification-preferences')
@@ -118,74 +106,64 @@ export class AccountOpsController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return {
-      success: true,
-      message: 'Notification preferences updated successfully.',
-      data: await this.accountStateDatabase.updateSettingsState(user.id, body),
-    };
+    return successResponse(
+      'Notification preferences updated successfully.',
+      await this.accountStateDatabase.updateSettingsState(user.id, body),
+    );
   }
 
   @Get('notification-preferences')
   async getNotificationPreferences(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return {
-      success: true,
-      message: 'Notification preferences fetched successfully.',
-      data: await this.accountStateDatabase.getSettingsState(user.id),
-    };
+    return successResponse(
+      'Notification preferences fetched successfully.',
+      await this.accountStateDatabase.getSettingsState(user.id),
+    );
   }
 
   @Get('safety/config')
   async getSafetyConfig(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
     const preferences = await this.socialStateDatabase.getChatPreferences(user.id);
-    return {
-      success: true,
-      message: 'Safety config fetched successfully.',
-      data: preferences.safetyConfig,
-      safetyConfig: preferences.safetyConfig,
-    };
+    return successResponse(
+      'Safety config fetched successfully.',
+      preferences.safetyConfig,
+    );
   }
 
   @Get('support/chat')
   async getSupportChat(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization).catch(() => null);
-    return {
-      success: true,
-      message: 'Support chat fetched successfully.',
-      data: await this.supportDatabase.getSupportChat(user?.id ?? null),
-    };
+    return successResponse(
+      'Support chat fetched successfully.',
+      await this.supportDatabase.getSupportChat(user?.id ?? null),
+    );
   }
 
   @Get('wallet/ledger')
   async getWalletLedger(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return {
-      success: true,
-      message: 'Wallet ledger fetched successfully.',
-      data: await this.monetizationDatabase.getWalletTransactions(user.id),
-    };
+    return successResponse(
+      'Wallet ledger fetched successfully.',
+      await this.monetizationDatabase.getWalletTransactions(user.id),
+    );
   }
 
   @Get('master-data')
   async getMasterData() {
-    return {
-      success: true,
-      message: 'Master data fetched successfully.',
-      data: await this.appUtilityDatabase.getMasterData(),
-    };
+    return successResponse(
+      'Master data fetched successfully.',
+      await this.appUtilityDatabase.getMasterData(),
+    );
   }
 
   @Get('legal/consents')
   async getLegalConsents(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    const data = await this.appUtilityDatabase.getLegalConsents(user.id);
-    return {
-      success: true,
-      message: 'Legal consents fetched successfully.',
-      data,
-      result: data,
-    };
+    return successResponse(
+      'Legal consents fetched successfully.',
+      await this.appUtilityDatabase.getLegalConsents(user.id),
+    );
   }
 
   @Patch('legal/consents')
@@ -194,11 +172,10 @@ export class AccountOpsController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return {
-      success: true,
-      message: 'Legal consents updated successfully.',
-      data: await this.appUtilityDatabase.updateLegalConsents(user.id, body),
-    };
+    return successResponse(
+      'Legal consents updated successfully.',
+      await this.appUtilityDatabase.updateLegalConsents(user.id, body),
+    );
   }
 
   @Post('legal/account-deletion')
@@ -207,11 +184,10 @@ export class AccountOpsController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    return {
-      success: true,
-      message: 'Account deletion requested successfully.',
-      data: await this.appUtilityDatabase.requestAccountDeletion(user.id, body.reason),
-    };
+    return successResponse(
+      'Account deletion requested successfully.',
+      await this.appUtilityDatabase.requestAccountDeletion(user.id, body.reason),
+    );
   }
 
   @Post('legal/data-export')
@@ -221,38 +197,28 @@ export class AccountOpsController {
   ) {
     const userId = await this.resolveExportUserId(body.userId, authorization);
     const exportRequest = await this.appUtilityDatabase.requestDataExport(userId, body.format);
-
-    return {
-      success: true,
-      message: 'Data export requested successfully.',
+    return successResponse('Data export requested successfully.', {
       userId,
-      data: exportRequest.summary,
-      result: exportRequest.summary,
-      exportRequest,
-    };
+      ...exportRequest.summary,
+    });
   }
 
   @Get('security/state')
   async getSecurityState(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    const data = await this.appUtilityDatabase.getSecurityState(user.id);
-    return {
-      success: true,
-      message: 'Security state fetched successfully.',
-      data,
-      result: data,
-    };
+    return successResponse(
+      'Security state fetched successfully.',
+      await this.appUtilityDatabase.getSecurityState(user.id),
+    );
   }
 
   @Post('security/logout-all')
   async logoutAll(@Headers('authorization') authorization?: string) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
-    const data = await this.appUtilityDatabase.logoutAllSessions(user.id);
-    return {
-      success: true,
-      message: 'All sessions logged out successfully.',
-      data,
-    };
+    return successResponse(
+      'All sessions logged out successfully.',
+      await this.appUtilityDatabase.logoutAllSessions(user.id),
+    );
   }
 
   private async sendPersistedOtp(
@@ -283,22 +249,13 @@ export class AccountOpsController {
         ? `A new 6-digit verification code has been sent to your ${channel}.`
         : `A 6-digit verification code has been sent to your ${channel}.`;
 
-    return {
-      success: true,
-      message,
+    return successResponse(message, {
       destination: normalizedDestination,
       channel,
       cooldownSeconds: 45,
       verificationStatus,
       delivery,
-      data: {
-        destination: normalizedDestination,
-        channel,
-        cooldownSeconds: 45,
-        verificationStatus,
-        delivery,
-      },
-    };
+    });
   }
 
   private resolveOtpPurpose(destination: string) {

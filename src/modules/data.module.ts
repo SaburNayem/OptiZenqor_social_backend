@@ -1,6 +1,4 @@
 import { Global, Module } from '@nestjs/common';
-import { AppExtensionsDataService } from '../data/app-extensions-data.service';
-import { EcosystemDataService } from '../data/ecosystem-data.service';
 import { AdminSessionGuard } from '../auth/admin-session.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
@@ -30,8 +28,6 @@ import { AppUtilityDatabaseService } from '../services/app-utility-database.serv
 @Global()
 @Module({
   providers: [
-    EcosystemDataService,
-    AppExtensionsDataService,
     AdminSessionGuard,
     RolesGuard,
     SessionAuthGuard,
@@ -59,8 +55,6 @@ import { AppUtilityDatabaseService } from '../services/app-utility-database.serv
     AppUtilityDatabaseService,
   ],
   exports: [
-    EcosystemDataService,
-    AppExtensionsDataService,
     AdminSessionGuard,
     RolesGuard,
     SessionAuthGuard,

@@ -8,6 +8,7 @@ import {
 } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { ReelsDatabaseService } from '../services/reels-database.service';
+import { listResponse, successResponse } from '../utils/api-response.util';
 
 @ApiTags('reels')
 @Controller('reels')
@@ -33,13 +34,7 @@ export class ReelsController {
       comments: await this.reelsDatabase.getReelComments(id),
       reactions: await this.reelsDatabase.getReelReactions(id),
     };
-    return {
-      success: true,
-      message: 'Reel fetched successfully.',
-      ...payload,
-      reel: payload,
-      data: payload,
-    };
+    return successResponse('Reel fetched successfully.', payload);
   }
 
   @Post()
@@ -52,23 +47,13 @@ export class ReelsController {
       body.authorId,
     );
     const reel = await this.reelsDatabase.createReel(user.id, body);
-    return {
-      success: true,
-      message: 'Reel created successfully.',
-      reel,
-      data: reel,
-    };
+    return successResponse('Reel created successfully.', reel);
   }
 
   @Patch(':id')
   async updateReel(@Param('id') id: string, @Body() body: UpdateReelDto) {
     const reel = await this.reelsDatabase.updateReel(id, body);
-    return {
-      success: true,
-      message: 'Reel updated successfully.',
-      reel,
-      data: reel,
-    };
+    return successResponse('Reel updated successfully.', reel);
   }
 
   @Get(':id/comments')
@@ -113,13 +98,6 @@ export class ReelsController {
   }
 
   private wrapListResponse(message: string, items: unknown[]) {
-    return {
-      success: true,
-      message,
-      data: items,
-      items,
-      results: items,
-      count: items.length,
-    };
+    return listResponse(message, items);
   }
 }

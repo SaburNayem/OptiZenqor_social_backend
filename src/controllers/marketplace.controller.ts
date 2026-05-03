@@ -33,13 +33,7 @@ export class MarketplaceController {
   ) {
     const viewer = await this.coreDatabase.requireUserFromAuthorization(authorization).catch(() => null);
     const payload = await this.experienceDatabase.getMarketplaceOverview(query, viewer?.id);
-    return {
-      ...successResponse('Marketplace fetched successfully.', payload, payload.pagination),
-      items: payload.items,
-      results: payload.results,
-      products: payload.products,
-      result: payload,
-    };
+    return successResponse('Marketplace fetched successfully.', payload, payload.pagination);
   }
 
   @Get('create')
@@ -110,12 +104,11 @@ export class MarketplaceController {
   @Get('products')
   async getProducts(@Query() query: MarketplaceProductsQueryDto) {
     const payload = await this.experienceDatabase.getMarketplaceOverview(query);
-    return {
-      ...successResponse('Marketplace products fetched successfully.', payload, payload.pagination),
-      items: payload.items,
-      results: payload.results,
-      products: payload.products,
-    };
+    return successResponse(
+      'Marketplace products fetched successfully.',
+      payload,
+      payload.pagination,
+    );
   }
 
   @Get('products/:id')

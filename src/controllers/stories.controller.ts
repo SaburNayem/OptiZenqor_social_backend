@@ -11,6 +11,7 @@ import {
 import { CoreDatabaseService } from '../services/core-database.service';
 import { SocialStateDatabaseService } from '../services/social-state-database.service';
 import { StoriesDatabaseService } from '../services/stories-database.service';
+import { listResponse, successResponse } from '../utils/api-response.util';
 
 @ApiTags('stories')
 @Controller('stories')
@@ -42,11 +43,11 @@ export class StoriesController {
       'story',
       {},
     );
-    return {
-      success: true,
-      message: 'Archived stories fetched successfully.',
-      ...payload,
-    };
+    return successResponse(
+      'Archived stories fetched successfully.',
+      payload.items,
+      payload.pagination,
+    );
   }
 
   @Get(':id/viewers')
@@ -66,13 +67,7 @@ export class StoriesController {
       reactions: await this.storiesDatabase.getStoryReactions(id),
       viewers: await this.storiesDatabase.getStoryViewers(id),
     };
-    return {
-      success: true,
-      message: 'Story fetched successfully.',
-      ...payload,
-      story: payload,
-      data: payload,
-    };
+    return successResponse('Story fetched successfully.', payload);
   }
 
   @Post()
@@ -161,18 +156,11 @@ export class StoriesController {
       mediaPath: body.mediaPath,
     });
 
-    return {
-      success: true,
-      message: 'Story reply sent successfully.',
-      data: {
-        storyId: id,
-        threadId: thread.id,
-        message,
-      },
+    return successResponse('Story reply sent successfully.', {
       storyId: id,
       threadId: thread.id,
-      reply: message,
-    };
+      message,
+    });
   }
 
   @Delete(':id')
@@ -181,14 +169,7 @@ export class StoriesController {
   }
 
   private wrapListResponse(message: string, items: unknown[]) {
-    return {
-      success: true,
-      message,
-      data: items,
-      items,
-      results: items,
-      count: items.length,
-    };
+    return listResponse(message, items);
   }
 
   private async resolveViewerId(userId?: string, authorization?: string) {
@@ -198,13 +179,13 @@ export class StoriesController {
     const user = await this.coreDatabase
       .requireUserFromAuthorization(authorization)
       .catch(() => null);
-    return user?.id ?? 'u1';
+    return user?.id ?? null;
   }
 
   private async selectStories(
     userId: string | undefined,
     scope: string | undefined,
-    viewerId: string,
+    viewerId: string | null,
   ) {
     if (userId?.trim()) {
       return this.storiesDatabase.getActiveStories(userId.trim());
@@ -212,6 +193,10 @@ export class StoriesController {
 
     if (scope?.trim().toLowerCase() !== 'buddies') {
       return this.storiesDatabase.getActiveStories();
+    }
+
+    if (!viewerId) {
+      return [];
     }
 
     const buddyIds = await this.coreDatabase

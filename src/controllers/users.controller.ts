@@ -6,6 +6,7 @@ import {
   UpdateUserDto,
 } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { listResponse, successResponse } from '../utils/api-response.util';
 
 @ApiTags('users')
 @Controller('users')
@@ -138,10 +139,8 @@ export class UsersController {
     if (actorId) {
       return actorId;
     }
-
-    const token = authorization?.replace(/^Bearer\s+/i, '');
-    const user = await this.coreDatabase.resolveUserFromAccessToken(token);
-    return user?.id ?? 'u1';
+    const actor = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    return actor.id;
   }
 
   private async resolveOptionalActorId(
@@ -164,18 +163,16 @@ export class UsersController {
     candidates: Array<string | undefined>,
     authorization?: string,
   ) {
-    return (await this.resolveOptionalActorId(candidates, authorization)) ?? 'u1';
+    const actorId = await this.resolveOptionalActorId(candidates, authorization);
+    if (!actorId) {
+      const actor = await this.coreDatabase.requireUserFromAuthorization(authorization);
+      return actor.id;
+    }
+    return actorId;
   }
 
   private wrapListResponse(message: string, items: unknown[]) {
-    return {
-      success: true,
-      message,
-      data: items,
-      items,
-      results: items,
-      count: items.length,
-    };
+    return listResponse(message, items);
   }
 
   private wrapUserResponse(
@@ -185,14 +182,7 @@ export class UsersController {
   ) {
     const followPayload = followState ? this.decorateFollowState(followState) : {};
     const userPayload = { ...user, ...followPayload };
-    return {
-      success: true,
-      message,
-      ...userPayload,
-      user: userPayload,
-      profile: userPayload,
-      data: userPayload,
-    };
+    return successResponse(message, userPayload);
   }
 
   private wrapFollowResponse(
@@ -201,9 +191,7 @@ export class UsersController {
     followerId: string,
     isFollowing: boolean,
   ) {
-    return {
-      success: true,
-      message,
+    return successResponse(message, {
       targetId,
       followerId,
       isFollowing,
@@ -213,18 +201,7 @@ export class UsersController {
       pending: false,
       requested: false,
       requestPending: false,
-      data: {
-        targetId,
-        followerId,
-        isFollowing,
-        following: isFollowing,
-        followed: isFollowing,
-        hasPendingRequest: false,
-        pending: false,
-        requested: false,
-        requestPending: false,
-      },
-    };
+    });
   }
 
   private wrapFollowStateResponse(
@@ -232,13 +209,7 @@ export class UsersController {
     followState: Awaited<ReturnType<CoreDatabaseService['getFollowState']>>,
   ) {
     const payload = this.decorateFollowState(followState);
-    return {
-      success: true,
-      message,
-      ...payload,
-      data: payload,
-      result: payload,
-    };
+    return successResponse(message, payload);
   }
 
   private decorateFollowState(
