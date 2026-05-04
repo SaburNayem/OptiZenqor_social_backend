@@ -4082,6 +4082,17 @@ export class AdminDatabaseService implements OnModuleInit {
     if (!email || !password) {
       return;
     }
+    const weakPasswords = new Set([
+      'admin123',
+      '123456',
+      'password',
+      'change_this_bootstrap_password',
+    ]);
+    if (password.length < 12 || weakPasswords.has(password.toLowerCase())) {
+      throw new Error(
+        'ADMIN_BOOTSTRAP_PASSWORD must be a strong non-demo value with at least 12 characters.',
+      );
+    }
     const name = process.env.ADMIN_BOOTSTRAP_NAME?.trim() || 'Admin';
     const role = process.env.ADMIN_BOOTSTRAP_ROLE?.trim() || 'Super Admin';
     const forceSync =

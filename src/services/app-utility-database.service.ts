@@ -550,9 +550,7 @@ export class AppUtilityDatabaseService {
 
     const user = await this.resolveOptionalUserFromAuthorization(authorization);
     if (!user) {
-      await this.writeOperationalSetting('locale.default', {
-        value: locale.localeCode,
-      });
+      await this.writeOperationalSetting('locale.default', locale.localeCode);
       return this.getLocalizationSupport();
     }
 
@@ -712,15 +710,15 @@ export class AppUtilityDatabaseService {
     return row?.value ?? null;
   }
 
-  private async writeOperationalSetting(key: string, value: Record<string, unknown>) {
+  private async writeOperationalSetting(key: string, value: Prisma.InputJsonValue) {
     await this.prisma.adminOperationalSetting.upsert({
       where: { key },
       create: {
         key,
-        value: value as Prisma.InputJsonValue,
+        value,
       },
       update: {
-        value: value as Prisma.InputJsonValue,
+        value,
         updatedAt: new Date(),
       },
     });

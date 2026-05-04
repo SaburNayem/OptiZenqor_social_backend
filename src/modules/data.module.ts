@@ -24,6 +24,7 @@ import { AppExtensionsDatabaseService } from '../services/app-extensions-databas
 import { SocialStateDatabaseService } from '../services/social-state-database.service';
 import { AdminDatabaseService } from '../services/admin-database.service';
 import { AppUtilityDatabaseService } from '../services/app-utility-database.service';
+import { ReferenceDataBootstrapService } from '../services/reference-data-bootstrap.service';
 
 @Global()
 @Module({
@@ -53,6 +54,7 @@ import { AppUtilityDatabaseService } from '../services/app-utility-database.serv
     SocialStateDatabaseService,
     AdminDatabaseService,
     AppUtilityDatabaseService,
+    ReferenceDataBootstrapService,
   ],
   exports: [
     AdminSessionGuard,
@@ -80,6 +82,7 @@ import { AppUtilityDatabaseService } from '../services/app-utility-database.serv
     SocialStateDatabaseService,
     AdminDatabaseService,
     AppUtilityDatabaseService,
+    ReferenceDataBootstrapService,
   ],
 })
 export class DataModule {}

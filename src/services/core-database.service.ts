@@ -197,20 +197,6 @@ export class CoreDatabaseService implements OnModuleInit {
     await this.ensureSchema();
   }
 
-  async getDemoAuthAccounts() {
-    const { rows } = await this.database.query<UserRow>(
-      `select * from app_users order by created_at asc`,
-    );
-    return rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      username: row.username,
-      email: row.email,
-      role: row.role,
-      emailVerified: row.email_verified,
-    }));
-  }
-
   async getUsers(role?: string) {
     const { rows } = role
       ? await this.database.query<UserRow>(

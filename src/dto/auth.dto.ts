@@ -131,7 +131,7 @@ export class SignupDto {
   interests?: string[];
 
   @ApiPropertyOptional({
-    example: 'https://res.cloudinary.com/demo/image/upload/v1/avatar.jpg',
+    example: 'https://res.cloudinary.com/optizenqor/image/upload/v1/avatar.jpg',
     description:
       'Optional uploaded avatar URL. Use one photo field only. Alias: photoUrl.',
   })
@@ -140,7 +140,7 @@ export class SignupDto {
   avatarUrl?: string;
 
   @ApiPropertyOptional({
-    example: 'https://res.cloudinary.com/demo/image/upload/v1/avatar.jpg',
+    example: 'https://res.cloudinary.com/optizenqor/image/upload/v1/avatar.jpg',
     description:
       'Optional uploaded photo URL alias for signup. Use one photo field only. Alias: avatarUrl.',
   })
@@ -180,7 +180,7 @@ export class ResetPasswordDto {
   @IsEmail()
   email!: string;
 
-  @ApiProperty({ example: '123456' })
+  @ApiProperty({ example: '482951' })
   @IsNotEmpty()
   @IsString()
   otp!: string;
@@ -209,7 +209,7 @@ export class VerifyEmailConfirmDto {
   @IsEmail()
   email!: string;
 
-  @ApiProperty({ example: '123456' })
+  @ApiProperty({ example: '482951' })
   @IsNotEmpty()
   @IsString()
   code!: string;
@@ -223,7 +223,7 @@ export class ResendOtpDto {
 }
 
 export class VerifyOtpDto {
-  @ApiProperty({ example: '123456' })
+  @ApiProperty({ example: '482951' })
   @IsNotEmpty()
   @IsString()
   code!: string;
@@ -236,7 +236,7 @@ export class AdminLoginDto {
   email!: string;
 
   @ApiProperty({
-    example: 'admin123',
+    example: 'UseYourRealAdminPassword',
     description: 'Registered admin password.',
   })
   @IsNotEmpty()
@@ -263,7 +263,7 @@ export class GoogleAuthDto {
   @IsString()
   name!: string;
 
-  @ApiProperty({ example: 'google-id-token-placeholder' })
+  @ApiProperty({ example: 'google-id-token-from-client' })
   @IsNotEmpty()
   @IsString()
   googleIdToken!: string;
