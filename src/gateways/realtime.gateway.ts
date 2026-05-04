@@ -12,10 +12,56 @@ import { Server, Socket } from 'socket.io';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { RealtimeStateService } from '../services/realtime-state.service';
 
+const defaultGatewayOriginPatterns = [
+  /^https?:\/\/localhost(?::\d+)?$/i,
+  /^https?:\/\/127\.0\.0\.1(?::\d+)?$/i,
+  /^https?:\/\/0\.0\.0\.0(?::\d+)?$/i,
+  /^https:\/\/([a-z0-9-]+\.)*vercel\.app$/i,
+  /^https:\/\/([a-z0-9-]+\.)*optizenqor\.app$/i,
+];
+
+function normalizeOrigin(value: string) {
+  return value.trim().replace(/\/+$/, '');
+}
+
+function parseGatewayCorsOrigins() {
+  const configured = [
+    process.env.CORS_ORIGINS,
+    process.env.CORS_ORIGIN,
+    process.env.FRONTEND_URL,
+    process.env.CLIENT_URL,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .flatMap((value) => value.split(','))
+    .map(normalizeOrigin)
+    .filter(Boolean);
+
+  const explicitOrigins = [...new Set(configured)];
+  return (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    const normalizedOrigin = normalizeOrigin(origin);
+    if (explicitOrigins.includes(normalizedOrigin)) {
+      callback(null, true);
+      return;
+    }
+
+    if (defaultGatewayOriginPatterns.some((pattern) => pattern.test(normalizedOrigin))) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`Socket CORS blocked for origin: ${normalizedOrigin}`));
+  };
+}
+
 @WebSocketGateway({
   namespace: '/realtime',
   cors: {
-    origin: process.env.CLIENT_URL ?? true,
+    origin: parseGatewayCorsOrigins(),
     credentials: true,
   },
 })

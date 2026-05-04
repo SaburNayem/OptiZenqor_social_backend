@@ -10,6 +10,18 @@ import {
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
 
+const defaultCorsOriginPatterns = [
+  /^https?:\/\/localhost(?::\d+)?$/i,
+  /^https?:\/\/127\.0\.0\.1(?::\d+)?$/i,
+  /^https?:\/\/0\.0\.0\.0(?::\d+)?$/i,
+  /^https:\/\/([a-z0-9-]+\.)*vercel\.app$/i,
+  /^https:\/\/([a-z0-9-]+\.)*optizenqor\.app$/i,
+];
+
+function normalizeOrigin(value: string) {
+  return value.trim().replace(/\/+$/, '');
+}
+
 function parseCorsOrigins() {
   const configured = [
     process.env.CORS_ORIGINS,
@@ -19,10 +31,29 @@ function parseCorsOrigins() {
   ]
     .filter((value): value is string => Boolean(value))
     .flatMap((value) => value.split(','))
-    .map((value) => value.trim())
+    .map(normalizeOrigin)
     .filter(Boolean);
 
-  return configured.length > 0 ? [...new Set(configured)] : true;
+  const explicitOrigins = [...new Set(configured)];
+  return (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    const normalizedOrigin = normalizeOrigin(origin);
+    if (explicitOrigins.includes(normalizedOrigin)) {
+      callback(null, true);
+      return;
+    }
+
+    if (defaultCorsOriginPatterns.some((pattern) => pattern.test(normalizedOrigin))) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`CORS blocked for origin: ${normalizedOrigin}`));
+  };
 }
 
 function assertStartupEnv() {
