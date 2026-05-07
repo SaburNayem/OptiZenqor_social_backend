@@ -1906,7 +1906,7 @@ export class ExperienceDatabaseService {
       this.prisma.appUser.findMany({
         where: {
           role: {
-            in: ['Creator', 'Business', 'Seller', 'Recruiter'],
+            in: ['Creator'],
           },
         },
         orderBy: { updatedAt: 'desc' },

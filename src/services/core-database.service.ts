@@ -2729,18 +2729,12 @@ export class CoreDatabaseService implements OnModuleInit {
     capability: 'jobs' | 'marketplace' | 'pages',
   ) {
     const profileType = this.normalizeProfileType(user.profileType, user.role);
-    const role = (user.role ?? '').trim().toLowerCase();
 
     if (capability === 'pages') {
-      return profileType === 'creator' || role === 'creator';
+      return profileType === 'creator';
     }
 
-    return (
-      profileType === 'business' ||
-      role === 'business' ||
-      role === 'seller' ||
-      role === 'recruiter'
-    );
+    return profileType === 'business';
   }
 
   private buildProfileSetup(
