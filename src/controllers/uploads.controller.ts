@@ -14,7 +14,7 @@ import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CloudinaryUploadService } from '../services/cloudinary-upload.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { UploadsDatabaseService } from '../services/uploads-database.service';
-import { compatibilityListResponse, compatibilityResponse } from '../utils/api-response.util';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('uploads')
 @Controller()
@@ -28,12 +28,9 @@ export class UploadsController {
   @Get('uploads')
   async getUploads() {
     const uploads = await this.uploadsDatabase.getUploads();
-    return compatibilityListResponse('Uploads fetched successfully.', uploads, {
-      aliases: {
+    return successResponse('Uploads fetched successfully.', {
       items: uploads,
-      results: uploads,
       count: uploads.length,
-      },
     });
   }
 
@@ -41,15 +38,13 @@ export class UploadsController {
   async getUpload(@Param('id') id: string) {
     const upload = await this.uploadsDatabase.getUpload(id);
     const remotePath = upload.secureUrl ?? upload.url ?? null;
-    return compatibilityResponse('Upload fetched successfully.', upload, {
-      aliases: {
-        upload,
-        url: remotePath,
-        secureUrl: upload.secureUrl,
-        remotePath,
-        path: remotePath,
-        fileUrl: remotePath,
-      },
+    return successResponse('Upload fetched successfully.', {
+      upload,
+      mediaUrl: remotePath,
+      secureUrl: upload.secureUrl,
+      remotePath,
+      path: remotePath,
+      fileUrl: remotePath,
     });
   }
 
@@ -144,8 +139,6 @@ export class UploadsController {
       fileUrl: remotePath ?? null,
     };
 
-    return compatibilityResponse('File uploaded successfully.', payload, {
-      aliases: payload,
-    });
+    return successResponse('File uploaded successfully.', payload);
   }
 }

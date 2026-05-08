@@ -1,83 +1,267 @@
 # FULL_PLATFORM_CURRENT_MISMATCH_REPORT
 
-Audit date: 2026-05-03
+Audit date: 2026-05-08
 
-Workspace audited from current local source:
+## Local + GitHub Scope
+
+Local workspaces audited:
+
 - `G:\My Project\Socity_backend`
 - `G:\My Project\OptiZenqor_social`
 - `G:\My Project\OptiZenqor_social_dashboard`
+- `G:\My Project\Optizenqor_socity_frontend`
 
-## Scope
+GitHub origins compared:
 
-This report is based on current source inspection, local route scans, and the latest validated code changes already present in the three working trees. It replaces earlier stale assumptions where source has already moved forward.
+- `SaburNayem/OptiZenqor_social_backend`
+- `SaburNayem/OptiZenqor_social`
+- `SaburNayem/OptiZenqor_social_dashboard`
+- `SaburNayem/OptiZenqor_social_frontend`
 
-## Backend route inventory summary
+GitHub comparison summary:
 
-NestJS controller scan confirms broad route coverage across:
-- app bootstrap, health, auth, uploads, feed, posts, stories, reels, chat, calls, live stream
-- communities, groups, pages, marketplace, jobs, events
-- notifications, preferences, onboarding, localization, accessibility, legal, support
-- admin auth, dashboard, analytics, users, content, reports, support operations, marketplace, jobs, events, communities, pages, live streams, wallet, subscriptions, premium plans, notification campaigns, notification devices, audit logs, settings
+- backend local matches GitHub HEAD
+- dashboard local matches GitHub HEAD
+- Flutter local differs from GitHub HEAD
+- web frontend local differs from GitHub HEAD
 
-Admin alias coverage already present in current backend source:
-- `GET /admin/analytics`
-- `GET /admin/roles`
-- `GET /admin/chat-cases`
-- `GET /admin/notifications`
-- `DELETE /admin/notification-campaigns/:id`
+## Backend Route Inventory Summary
 
-This is an important correction from older reports that still described those routes as missing.
+Current local backend route coverage includes:
 
-## Flutter API inventory summary
+- app bootstrap, health, docs, auth
+- recommendations, notification preferences, safety, legal, security
+- users, profile, follow/block/bookmark/archive/hide
+- feed, posts, comments, likes, media viewer, share/repost
+- stories, reels, uploads
+- chat, group chat, calls, live stream, socket contract
+- onboarding, personalization, accessibility, localization, maintenance, offline sync
+- communities, groups, pages
+- marketplace, jobs, events
+- notifications, wallets, subscriptions, monetization, premium plans
+- support, report center, verification request
+- admin auth, admin dashboard, admin users/content/reports/settings/audit
+- admin marketplace/jobs/events/communities/pages/live streams
+- admin revenue/wallet/subscriptions/premium plans
+- admin notification devices/campaigns and support operations
 
-Flutter endpoint definitions and direct client calls reference a wide surface including:
-- `/auth/*`, `/feed`, `/posts`, `/stories`, `/reels`, `/chat`, `/calls`, `/live-stream`
-- `/communities`, `/pages`, `/events`, `/marketplace`, `/jobs`
-- `/settings`, `/accessibility-support`, `/localization-support`, `/legal-compliance`
-- `/follow-unfollow/*`, `/deep-link-handler/*`, `/share-repost/*`, `/polls-surveys/*`
-- admin routes under `/admin/*` are still present in endpoint definitions even though they do not belong to the normal mobile runtime surface
+## Flutter Endpoint Inventory Summary
 
-## Dashboard API inventory summary
+Flutter references backend APIs for:
 
-Dashboard API usage is real-backend oriented and centered around `/admin/*` endpoints through `VITE_API_BASE_URL`, including navigation coverage for:
-- overview and analytics
-- users, content moderation, reports
+- auth/session
+- profile/users/follow/block
+- feed/posts/comments/reactions
+- stories/reels
+- chat/group chat/calls/live streams
+- communities/groups/pages
+- marketplace/drafts/offers/chats/orders
+- jobs/applications/alerts/companies
+- events
+- notifications/devices/preferences
+- settings/accessibility/localization/legal
+- support
+- verification, onboarding, personalization, offline sync
+
+Flutter-specific mismatches still active:
+
+- `lib/core/data/api/api_payload_reader.dart` still tolerates many legacy alias shapes
+- `lib/feature/stories/screen/story_text_composer_screen.dart` creates `local_story_*`
+- `lib/feature/stories/screen/story_preview_screen.dart` creates `local_story_*`
+- `lib/feature/stories/screen/story_view_screen.dart` contains local story special handling
+- `lib/feature/communities/service/community_local_data_source.dart` persists full community payload cache
+- `lib/feature/posts/repository/posts_repository.dart` persists local drafts
+- admin endpoints remain present in mobile endpoint constants and should be isolated from normal app runtime
+
+## Dashboard Endpoint Inventory Summary
+
+Dashboard currently calls real admin APIs for:
+
+- admin auth/session
+- overview
+- users
+- content moderation
+- reports
 - support operations
-- marketplace, jobs, events, communities, pages, live streams
-- revenue, wallet, subscriptions, premium plans
-- notification campaigns, notification devices
-- admin sessions, audit logs, settings
+- marketplace
+- jobs
+- events
+- communities
+- pages
+- live streams
+- dashboard revenue
+- wallet
+- subscriptions
+- wallet-subscriptions
+- premium plans
+- notification campaigns
+- notification devices
+- admin settings
+- audit logs
 
-The current dashboard problem is incomplete operational depth, not widespread mock dataset usage.
+Dashboard-specific mismatches still active:
 
-## Missing backend routes required by Flutter
+- many modules remain list/detail/export only
+- mutations are missing for marketplace, jobs, events, communities, pages, live streams, wallet/subscription actions
+- confirm dialog and generalized detail drawer patterns are still missing
+- `src/components/AdminViews.jsx` is still too large and central
 
-No longer confirmed from current source for the previously flagged admin aliases:
-- `/admin/analytics` exists
-- `/admin/roles` exists
-- `/admin/chat-cases` exists
-- `/admin/notifications` exists
+## Web Endpoint Inventory Summary
 
-Still needing verification or deeper contract work:
-- some Flutter features call routes that exist but still require stronger payload completeness so the app does not derive labels or lifecycle state on-device
-- Flutter still carries endpoint constants for admin APIs that should be reviewed for cleanup or strict separation from end-user mobile flows
+Web frontend currently calls:
 
-## Missing backend routes required by dashboard
+- auth/login, signup, forgot-password, me
+- profile and user-profile follower/following routes
+- chat threads and thread messages
+- settings
+- marketplace
+- events
+- pages
+- calls
+- live-stream
+- users
+- feed
+- stories
+- reels
+- jobs-networking
+- communities
+- trending
+- notifications
 
-Previously reported missing route is now present:
-- `DELETE /admin/notification-campaigns/:id` exists in current source
+Web-specific mismatches still active:
 
-Current dashboard/backend gaps are feature-depth gaps rather than outright missing list routes:
-- many sections still need detail/create/edit/delete/action UI to fully exercise existing admin APIs
-- some dashboard modules do not yet expose all available admin operations even though backend list endpoints exist
+- `src/data/mockSocialData.ts` still exists with production-like demo data
+- `src/lib/api.ts` still falls back to `http://localhost:3000`
+- `src/lib/api.ts` still synthesizes IDs, avatar URLs, fallback copy, and display labels
+- `src/hooks/useSocialApp.ts` still creates optimistic-only local posts/comments/messages
+- UI still uses direct avatar fallbacks in multiple components
 
-## Backend routes still using static/data-service/in-memory/default runtime data
+## Missing Route Mismatches
 
-Current status after the latest pass:
-- runtime settings catalog authority has been moved onto persisted PostgreSQL tables:
-  - `app_settings_section_catalog`
-  - `app_settings_item_catalog`
-- `src/services/settings-database.service.ts` now reads settings sections and items from database-backed catalog rows instead of `SettingsDataService`
+High-confidence current state:
+
+- major missing-route problems are fewer than before
+- the main problem is now payload shape/completeness and client-side fake fallback behavior, not wholesale absent route families
+
+Known route/integration mismatches still active:
+
+- web uses `/notifications` as a list source while backend historically exposed mixed notifications overview payloads
+- web uses `/jobs-networking` as a user-facing list/overview source while the response still carries a large mixed object
+- Flutter settings, marketplace, jobs, and support features still rely on permissive parsing because backend payload shape is not yet strict across all modules
+
+## Response Shape Mismatches
+
+Still active in backend:
+
+- `src/controllers/learning-courses.controller.ts`
+- `src/controllers/polls-surveys.controller.ts`
+- remaining alias-heavy routes in `src/controllers/jobs.controller.ts`
+- parts of `src/services/admin-database.service.ts`
+- parts of `src/services/experience-database.service.ts`
+
+Normalized in this pass:
+
+- `src/controllers/notifications.controller.ts`
+- `src/controllers/discovery.controller.ts`
+- `src/controllers/content.controller.ts`
+- `src/controllers/jobs.controller.ts`
+- `src/controllers/communities.controller.ts`
+- `src/controllers/events.controller.ts`
+- `src/controllers/uploads.controller.ts`
+- `src/controllers/realtime.controller.ts`
+
+## Auth / Token Mismatches
+
+Current status:
+
+- admin auth and user auth are correctly separated at route-guard level
+- dashboard uses admin auth flows
+- mobile and web use user auth flows
+
+Remaining issues:
+
+- web and Flutter clients still contain permissive/fallback behavior that can hide auth contract errors
+- mobile endpoint constants still include admin endpoints that should not be part of normal end-user runtime
+
+## Media URL Mismatches
+
+Still active:
+
+- web still generates avatar/media fallbacks client-side
+- Flutter still relies on media resolution fallback behavior
+- backend media payloads are not yet fully normalized across posts, stories, reels, marketplace, live streams, and profiles
+
+## Pagination / Search / Filter Mismatches
+
+Still active:
+
+- not every useful list route has consistent `page`, `limit`, `search`, and filters
+- dashboard assumes pagination metadata exists, but some feature routes still behave like unpaginated arrays
+- admin list services are more advanced than many public/mobile-facing feature routes
+
+## Persistence Gaps Still Open
+
+Needed relational history models still missing:
+
+- support assignment history
+- support SLA history
+- support action history
+- moderation action history
+- moderation escalation history
+- moderation assignee history
+- report escalation/assignment history
+- media asset ownership/entity mapping
+
+## Validation Snapshot
+
+Passed during this audit:
+
+- backend `npm install`
+- backend `npm run prisma:generate`
+- backend `npm run prisma:migrate`
+- backend `npm run seed:dev` is not available in current `package.json`
+- backend `npm run typecheck`
+- backend `npm run build`
+- dashboard `npm install`
+- dashboard `npm run lint`
+- dashboard `npm run build`
+- web frontend `npm install`
+- web frontend `npm run lint`
+- web frontend `npm run build`
+- Flutter `flutter pub get`
+- Flutter `dart format .`
+- Flutter `flutter analyze`
+- Flutter `flutter test`
+- backend smoke:
+  - `GET /health`
+  - `GET /health/database`
+  - `GET /docs-json`
+  - `POST /admin/auth/login`
+  - `GET /admin/dashboard/overview`
+  - `GET /admin/users`
+  - `GET /admin/content`
+  - `GET /admin/reports`
+  - `GET /admin/settings`
+  - `GET /admin/support-operations`
+  - `GET /admin/marketplace`
+  - `GET /admin/jobs`
+  - `GET /admin/events`
+  - `GET /admin/communities`
+  - `GET /admin/pages`
+  - `GET /admin/notification-campaigns`
+  - `GET /admin/notification-devices`
+
+Not yet completed in this turn:
+
+- backend safe end-user login smoke without introducing new runtime data
+
+## Highest-Priority Remaining Work
+
+1. Finish backend response normalization for learning courses, polls/surveys, remaining jobs aliases, and service-level alias emitters.
+2. Add relational Prisma history tables for support and moderation workflows.
+3. Remove web mock/static production behavior and strict-fail on missing backend data.
+4. Remove or isolate mobile local production IDs and permissive alias parsing.
+5. Turn dashboard list modules into full CRUD/action control surfaces for the existing admin APIs.
 - `SettingsDataService` still exists as a legacy/dev seed source, but it is no longer the production runtime authority for settings section/item catalogs
 
 Still remaining production-style blockers:

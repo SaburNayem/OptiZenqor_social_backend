@@ -16,7 +16,7 @@ import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { CommunitiesQueryDto, CreatePageDto, PagesQueryDto } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { ExperienceDatabaseService } from '../services/experience-database.service';
-import { compatibilityListResponse, compatibilityResponse, successResponse } from '../utils/api-response.util';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('communities')
 @Controller()
@@ -29,14 +29,7 @@ export class CommunitiesController {
   @Get('communities')
   async getCommunities(@Query() query: CommunitiesQueryDto) {
     const payload = await this.experienceDatabase.getCommunities(query);
-    return compatibilityResponse('Communities fetched successfully.', payload, {
-      pagination: payload.pagination,
-      aliases: {
-      items: payload.items,
-      results: payload.results,
-      communities: payload.communities,
-      },
-    });
+    return successResponse('Communities fetched successfully.', payload, payload.pagination);
   }
 
   @Get('communities/:id')
@@ -111,16 +104,10 @@ export class CommunitiesController {
       this.readString(body.userId) ?? this.readString(body.actorId),
     );
     const result = await this.experienceDatabase.joinCommunity(id, actor.id);
-    return compatibilityResponse('Community membership updated successfully.', {
-        joined: result.joined,
-        memberCount: result.memberCount,
-        community: result.community,
-      }, {
-      aliases: {
+    return successResponse('Community membership updated successfully.', {
       joined: result.joined,
       memberCount: result.memberCount,
       community: result.community,
-      },
     });
   }
 
@@ -136,16 +123,10 @@ export class CommunitiesController {
       this.readString(body.userId) ?? this.readString(body.actorId),
     );
     const result = await this.experienceDatabase.leaveCommunity(id, actor.id);
-    return compatibilityResponse('Community membership updated successfully.', {
-        joined: result.joined,
-        memberCount: result.memberCount,
-        community: result.community,
-      }, {
-      aliases: {
+    return successResponse('Community membership updated successfully.', {
       joined: result.joined,
       memberCount: result.memberCount,
       community: result.community,
-      },
     });
   }
 
@@ -163,9 +144,7 @@ export class CommunitiesController {
       ...this.normalizeCommunityCreateInput(body),
       ownerId: owner.id,
     });
-    return compatibilityResponse('Community created successfully.', community, {
-      aliases: { community },
-    });
+    return successResponse('Community created successfully.', community);
   }
 
   @UseGuards(SessionAuthGuard)
@@ -187,39 +166,23 @@ export class CommunitiesController {
       id,
       this.normalizeCommunityPatch(body),
     );
-    return compatibilityResponse('Community updated successfully.', community, {
-      aliases: { community },
-    });
+    return successResponse('Community updated successfully.', community);
   }
 
   @Get('pages')
   async getPages(@Query() query: PagesQueryDto) {
     const payload = await this.experienceDatabase.getPages(query);
-    return compatibilityResponse('Pages fetched successfully.', payload, {
-      pagination: payload.pagination,
-      aliases: {
-      items: payload.items,
-      results: payload.results,
-      pages: payload.pages,
-      },
-    });
+    return successResponse('Pages fetched successfully.', payload, payload.pagination);
   }
 
   @Get('pages/create')
   async getCreatePageOptions() {
     const payload = await this.experienceDatabase.getPageCreateOptions();
-    return compatibilityResponse('Page creation options fetched successfully.', {
-        requiredProfileType: payload.requiredProfileType,
-        categories: payload.categories,
-        ownerSuggestions: payload.ownerSuggestions,
-        locations: payload.locations,
-      }, {
-      aliases: {
+    return successResponse('Page creation options fetched successfully.', {
       requiredProfileType: payload.requiredProfileType,
       categories: payload.categories,
       ownerSuggestions: payload.ownerSuggestions,
       locations: payload.locations,
-      },
     });
   }
 
@@ -285,13 +248,7 @@ export class CommunitiesController {
       memberCount: community.memberCount,
       privacy: community.privacy,
     }));
-    return compatibilityListResponse('Groups fetched successfully.', groups, {
-      aliases: {
-        items: groups,
-        results: groups,
-        groups,
-      },
-    });
+    return successResponse('Groups fetched successfully.', { items: groups, groups });
   }
 
   @Get('groups/:id')

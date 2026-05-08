@@ -1,7 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { CoreDatabaseService } from '../services/core-database.service';
-import { compatibilityListResponse } from '../utils/api-response.util';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('feed')
 @Controller()
@@ -10,7 +10,7 @@ export class ContentController {
 
   @Get('feed')
   async getFeed() {
-    return this.wrapFeedResponse(
+    return successResponse(
       'Feed fetched successfully.',
       await this.coreDatabase.getFeed(),
     );
@@ -18,19 +18,9 @@ export class ContentController {
 
   @Get('feed/home')
   async getHomeFeed() {
-    return this.wrapFeedResponse(
+    return successResponse(
       'Feed fetched successfully.',
       await this.coreDatabase.getFeed(),
     );
-  }
-
-  private wrapFeedResponse(message: string, items: unknown[]) {
-    return compatibilityListResponse(message, items, {
-      aliases: {
-      items,
-      results: items,
-      count: items.length,
-      },
-    });
   }
 }

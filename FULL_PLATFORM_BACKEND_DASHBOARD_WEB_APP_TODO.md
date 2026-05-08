@@ -17,6 +17,49 @@ Completed in this pass:
 - Re-ran backend validation after the controller cleanup:
   - `npm run typecheck` passed
   - `npm run build` passed
+- Normalized additional backend controllers so they no longer leak top-level compatibility aliases:
+  - `src/controllers/content.controller.ts`
+  - `src/controllers/jobs.controller.ts` for list/networking/create-options routes
+  - `src/controllers/communities.controller.ts`
+  - `src/controllers/events.controller.ts`
+  - `src/controllers/uploads.controller.ts`
+  - `src/controllers/realtime.controller.ts`
+- Added shared cross-repo docs:
+  - `FULL_PLATFORM_API_CONTRACT.md`
+  - updated `FULL_PLATFORM_CURRENT_MISMATCH_REPORT.md`
+- Completed validation sweep across local repos:
+  - backend `npm install` passed with `EBADENGINE` warning because package expects Node `20.x` and local runtime is Node `24.14.0`
+  - backend `npm run prisma:generate` passed
+  - backend `npm run prisma:migrate` passed with no pending migrations
+  - backend `npm run seed:dev` not available in current `package.json`
+  - dashboard `npm install` passed
+  - dashboard `npm run lint` passed
+  - dashboard `npm run build` passed
+  - web frontend `npm install` passed with 2 moderate vulnerabilities reported
+  - web frontend `npm run lint` passed
+  - web frontend `npm run build` passed
+  - Flutter `flutter pub get` passed
+  - Flutter `dart format .` passed
+  - Flutter `flutter analyze` passed
+  - Flutter `flutter test` passed
+- Ran live backend smoke checks:
+  - `GET /health` passed
+  - `GET /health/database` passed
+  - `GET /docs-json` passed
+  - `POST /admin/auth/login` passed
+  - `GET /admin/dashboard/overview` passed
+  - `GET /admin/users` passed
+  - `GET /admin/content` passed
+  - `GET /admin/reports` passed
+  - `GET /admin/settings` passed
+  - `GET /admin/support-operations` passed
+  - `GET /admin/marketplace` passed
+  - `GET /admin/jobs` passed
+  - `GET /admin/events` passed
+  - `GET /admin/communities` passed
+  - `GET /admin/pages` passed
+  - `GET /admin/notification-campaigns` passed
+  - `GET /admin/notification-devices` passed
 
 ## Completion Estimate
 
@@ -24,12 +67,12 @@ These are audit estimates, not feature-acceptance signoff.
 
 | Area | Estimated Completion |
 | --- | --- |
-| Backend API | 74% |
+| Backend API | 77% |
 | Database / Prisma persistence | 78% |
 | Flutter mobile app | 69% |
 | Admin dashboard | 61% |
 | Web frontend | 46% |
-| Full platform end-to-end integration | 63% |
+| Full platform end-to-end integration | 65% |
 
 ## Repo Paths Audited
 
@@ -91,16 +134,11 @@ The following files were manually inspected during this audit:
 
 The backend already has a central response helper in `src/utils/api-response.util.ts`, but many controllers and services still emit compatibility aliases outside `data`, including `items`, `results`, `communities`, `pages`, `jobs`, `streams`, `comments`, `reactions`, and `tickets`.
 
-Confirmed examples:
+Confirmed remaining examples:
 
-- `src/controllers/communities.controller.ts`
-- `src/controllers/notifications.controller.ts`
-- `src/controllers/uploads.controller.ts`
-- `src/controllers/realtime.controller.ts`
-- `src/controllers/discovery.controller.ts`
-- `src/controllers/events.controller.ts`
-- `src/controllers/jobs.controller.ts`
-- `src/controllers/content.controller.ts`
+- `src/controllers/learning-courses.controller.ts`
+- `src/controllers/polls-surveys.controller.ts`
+- remaining alias-heavy routes inside `src/controllers/jobs.controller.ts`
 - `src/services/admin-database.service.ts`
 - `src/services/discovery-database.service.ts`
 - `src/services/experience-database.service.ts`
@@ -458,15 +496,57 @@ These admin routes already exist in `src/controllers/admin.controller.ts` but ar
 
 Backend:
 
+- `npm install`
+  result: passed
 - `npm run typecheck`
   result: passed
 - `npm run build`
   result: passed
 - `npm run prisma:generate`
   result: passed as part of `npm run build`
+- `npm run prisma:migrate`
+  result: passed, no pending migrations
+- `npm run start:dev`
+  result: passed enough for local smoke testing
+- `GET /health`
+  result: passed
+- `GET /health/database`
+  result: passed
+- `GET /docs-json`
+  result: passed
+- `POST /admin/auth/login`
+  result: passed
+- `GET /admin/dashboard/overview`
+  result: passed
+- `GET /admin/users`
+  result: passed
+- `GET /admin/content`
+  result: passed
+- `GET /admin/reports`
+  result: passed
+- `GET /admin/settings`
+  result: passed
+- `GET /admin/support-operations`
+  result: passed
+- `GET /admin/marketplace`
+  result: passed
+- `GET /admin/jobs`
+  result: passed
+- `GET /admin/events`
+  result: passed
+- `GET /admin/communities`
+  result: passed
+- `GET /admin/pages`
+  result: passed
+- `GET /admin/notification-campaigns`
+  result: passed
+- `GET /admin/notification-devices`
+  result: passed
 
 Admin dashboard:
 
+- `npm install`
+  result: passed
 - `npm run lint`
   result: passed
 - `npm run build`
@@ -474,41 +554,34 @@ Admin dashboard:
 
 Web frontend:
 
+- `npm install`
+  result: passed
 - `npm run lint`
   result: passed
 - `npm run build`
   result: passed
+  note: `npm install` reported 2 moderate vulnerabilities in dependencies
 
 Flutter:
 
+- `flutter pub get`
+  result: passed
+- `dart format .`
+  result: passed
 - `flutter analyze`
   result: passed
   note: first run timed out at ~124s due command timeout window; second run completed with `No issues found!`
+- `flutter test`
+  result: passed
 
 ### Not yet run in this audit file
 
 Backend:
 
-- `npm install`
-- `npm run prisma:migrate`
-- `seed:dev` if available
-- smoke tests requiring a running backend process:
-  `GET /health`
-  `GET /health/database`
-  `GET /docs-json`
-  admin login
-  admin dashboard overview
-  users list
-  content list
-  reports list
-  support list
-  marketplace list
-  jobs list
-  events list
-  communities list
-  pages list
-  notifications list
-  settings list
+- `seed:dev`
+  result: script missing in current backend `package.json`
+- remaining smoke checks:
+  `POST /auth/login`
 
 Web frontend:
 

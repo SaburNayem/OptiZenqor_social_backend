@@ -18,12 +18,7 @@ export class EventsController {
   @ApiQuery({ name: 'status', required: false, enum: ['Featured', 'Approved', 'Review'] })
   async getEvents(@Query() query: EventsQueryDto) {
     const payload = await this.experienceDatabase.getEvents(query);
-    return {
-      ...successResponse('Events fetched successfully.', payload, payload.pagination),
-      items: payload.items,
-      results: payload.results,
-      events: payload.events,
-    };
+    return successResponse('Events fetched successfully.', payload, payload.pagination);
   }
 
   @Get('create')
@@ -63,10 +58,10 @@ export class EventsController {
   @Post('pool/create')
   async createEventFromPool(@Body() body: CreateEventDto & { pollTemplate?: string }) {
     const event = await this.createEvent(body);
-    return {
-      ...event,
+    return successResponse('Event created successfully.', {
+      ...event.data,
       pollTemplate: body.pollTemplate ?? null,
-    };
+    });
   }
 
   @UseGuards(SessionAuthGuard)

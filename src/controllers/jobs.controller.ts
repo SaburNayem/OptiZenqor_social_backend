@@ -25,51 +25,25 @@ export class JobsController {
   @Get('jobs')
   async getJobs(@Query() query: JobsQueryDto) {
     const payload = await this.experienceDatabase.getJobs(query);
-    return {
-      ...successResponse('Jobs fetched successfully.', payload, payload.pagination),
-      items: payload.items,
-      results: payload.results,
-      jobs: payload.jobs,
-    };
+    return successResponse('Jobs fetched successfully.', payload, payload.pagination);
   }
 
   @Get('jobs-networking')
   async getJobsNetworking(@Headers('authorization') authorization?: string) {
     const viewer = await this.resolveViewer(authorization);
     const payload = await this.experienceDatabase.getJobsNetworkingOverview(viewer?.id);
-    return {
-      ...successResponse('Jobs networking overview fetched successfully.', payload),
-      totalJobs: payload.totalJobs,
-      openJobs: payload.openJobs,
-      jobs: payload.jobs,
-      myJobs: payload.myJobs,
-      applications: payload.applications,
-      alerts: payload.alerts,
-      companies: payload.companies,
-      profile: payload.profile,
-      employerStats: payload.employerStats,
-      employerProfile: payload.employerProfile,
-      applicants: payload.applicants,
-    };
+    return successResponse('Jobs networking overview fetched successfully.', payload);
   }
 
   @Get('jobs/create')
   async getJobCreateOptions() {
     const jobs = (await this.experienceDatabase.getJobs()).jobs;
-    return {
-      success: true,
-      message: 'Job creation options fetched successfully.',
+    return successResponse('Job creation options fetched successfully.', {
       requiredProfileType: 'business',
       typeOptions: [...new Set(jobs.map((job) => job.type))],
       experienceLevels: [...new Set(jobs.map((job) => job.experienceLevel))],
       suggestedCompanies: [...new Set(jobs.map((job) => job.company))],
-      data: {
-        requiredProfileType: 'business',
-        typeOptions: [...new Set(jobs.map((job) => job.type))],
-        experienceLevels: [...new Set(jobs.map((job) => job.experienceLevel))],
-        suggestedCompanies: [...new Set(jobs.map((job) => job.company))],
-      },
-    };
+    });
   }
 
   @Get('jobs/detail')
