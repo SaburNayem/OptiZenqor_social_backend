@@ -166,6 +166,33 @@ export class AdminController {
     return successResponse('Admin content fetched successfully.', payload, payload.pagination);
   }
 
+  @Get('posts')
+  @ApiOperation({ summary: 'List posts for admin management' })
+  getPosts(@Query() query: AdminContentQueryDto) {
+    return this.getContent({
+      ...query,
+      targetType: 'post',
+    });
+  }
+
+  @Get('stories')
+  @ApiOperation({ summary: 'List stories for admin management' })
+  getStories(@Query() query: AdminContentQueryDto) {
+    return this.getContent({
+      ...query,
+      targetType: 'story',
+    });
+  }
+
+  @Get('reels')
+  @ApiOperation({ summary: 'List reels for admin management' })
+  getReels(@Query() query: AdminContentQueryDto) {
+    return this.getContent({
+      ...query,
+      targetType: 'reel',
+    });
+  }
+
   @Patch('content/:type/:id/moderate')
   @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
   @ApiOperation({ summary: 'Moderate a post, reel, or story' })
@@ -180,6 +207,39 @@ export class AdminController {
       'Admin content moderation applied successfully.',
       await this.adminDatabase.moderateContent(type, id, body, admin.adminId),
     );
+  }
+
+  @Patch('posts/:id/moderation')
+  @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
+  @ApiOperation({ summary: 'Moderate a post through the admin posts module' })
+  moderatePost(
+    @Param('id') id: string,
+    @Body() body: AdminModerateContentDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.moderateContent('post', id, body, authorization);
+  }
+
+  @Patch('stories/:id/moderation')
+  @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
+  @ApiOperation({ summary: 'Moderate a story through the admin stories module' })
+  moderateStory(
+    @Param('id') id: string,
+    @Body() body: AdminModerateContentDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.moderateContent('story', id, body, authorization);
+  }
+
+  @Patch('reels/:id/moderation')
+  @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
+  @ApiOperation({ summary: 'Moderate a reel through the admin reels module' })
+  moderateReel(
+    @Param('id') id: string,
+    @Body() body: AdminModerateContentDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.moderateContent('reel', id, body, authorization);
   }
 
   @Patch('content/:id/moderation')
