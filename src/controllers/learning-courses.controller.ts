@@ -11,11 +11,6 @@ export class LearningCoursesController {
   @Get()
   async getCourses() {
     const payload = await this.experienceDatabase.getLearningCourses();
-    return {
-      ...successResponse('Learning courses fetched successfully.', payload),
-      courses: payload.courses,
-      items: payload.items,
-      results: payload.results,
-    };
+    return successResponse('Learning courses fetched successfully.', payload);
   }
 }

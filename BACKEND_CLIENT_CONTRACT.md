@@ -1,6 +1,6 @@
 # BACKEND_CLIENT_CONTRACT
 
-Last updated: 2026-05-08
+Last updated: 2026-05-09
 
 ## Contract Rules
 
@@ -31,6 +31,7 @@ Normalized error target shape:
 Current backend status:
 
 - success responses are largely standardized through `successResponse(...)`
+- error responses now pass through the global HTTP exception filter using `success`, `message`, and structured `error` payloads
 - several legacy compatibility payloads still remain in some controllers/services
 - frontend/mobile clients still contain permissive parsing that should be reduced as backend normalization continues
 
@@ -127,6 +128,24 @@ User tokens must never access admin routes.
   - `/jobs`
   - `/live-streams`
 - web still contains non-contract-safe optimistic/local UI behaviors that need further cleanup
+
+## Environment Contract
+
+Backend:
+
+- `.env.example` documents `CORS_ORIGIN`, `CORS_ORIGINS`, `FRONTEND_URL`, `CLIENT_URL`, `DASHBOARD_URL`, and `WEB_FRONTEND_URL`
+
+Dashboard:
+
+- `.env.example` requires `VITE_API_BASE_URL`
+
+Web frontend:
+
+- `.env.example` requires `VITE_API_BASE_URL`
+
+Flutter:
+
+- `.env.example` now documents `API_BASE_URL`, `DEBUG_SHARED_API_BASE_URL`, `LOCAL_LAN_API_BASE_URL`, `LOCAL_ANDROID_DEBUG_API_BASE_URL`, `SOCKET_BASE_URL`, and `ALLOW_OFFLINE_FALLBACK`
 
 ## Highest-Priority Remaining Contract Gaps
 

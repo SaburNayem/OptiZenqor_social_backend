@@ -24,6 +24,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     let message = 'Request failed';
     let error = 'Request failed';
+    let details: unknown;
 
     if (typeof exceptionResponse === 'string') {
       message = exceptionResponse;
@@ -40,6 +41,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       if (Array.isArray(responseObject.message)) {
         message = responseObject.message[0] ?? 'Validation failed';
         error = responseObject.error ?? 'Validation failed';
+        details = responseObject.message;
       } else if (typeof responseObject.message === 'string') {
         message = responseObject.message;
         error = responseObject.error ?? responseObject.message;
@@ -49,7 +51,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
     response.status(status).json({
       success: false,
       message,
-      error,
+      error: {
+        code: error,
+        details,
+      },
       statusCode: status,
       path: request.url,
       timestamp: new Date().toISOString(),

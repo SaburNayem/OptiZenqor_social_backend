@@ -1,6 +1,6 @@
 # FULL_PLATFORM_BACKEND_FRONTEND_DASHBOARD_WEB_AUDIT
 
-Last updated: 2026-05-08
+Last updated: 2026-05-09
 
 ## Repo Paths Audited
 
@@ -22,6 +22,9 @@ Last updated: 2026-05-08
   - `events`
   - `uploads`
   - `realtime`
+- normalized additional alias-heavy controllers in this pass:
+  - `learning-courses`
+  - `polls-surveys`
 - added compatibility aliases that reuse existing backend service flows:
   - `/live-streams`
   - `/live-streams/:id`
@@ -30,6 +33,8 @@ Last updated: 2026-05-08
   - `/admin/marketplace/products`
   - `/admin/moderation/cases`
   - `/admin/support/tickets`
+- hardened error and rate-limit responses to use a structured `error` payload
+- updated backend `.env.example` to document dashboard/web origins more clearly
 
 ### Web frontend
 
@@ -42,6 +47,15 @@ Last updated: 2026-05-08
   - `/live-streams`
 - removed fake password-reset success when backend fails
 - reduced fabricated user/story fallback identity data in `src/lib/api.ts`
+- updated `.env.example` to document the required `VITE_API_BASE_URL`
+
+### Flutter
+
+- added `.env.example` documenting supported `--dart-define` values for API and socket configuration
+
+### Dashboard
+
+- updated `.env.example` to document the required `VITE_API_BASE_URL`
 
 ### Documentation
 
@@ -67,13 +81,27 @@ Backend:
 - `src/controllers/realtime.controller.ts`
 - `src/controllers/admin.controller.ts`
 - `src/controllers/admin-ops.controller.ts`
+- `src/controllers/learning-courses.controller.ts`
+- `src/controllers/polls-surveys.controller.ts`
+- `src/filters/http-exception.filter.ts`
+- `src/main.ts`
+- `.env.example`
 - `BACKEND_CLIENT_CONTRACT.md`
 - `FULL_PLATFORM_BACKEND_FRONTEND_DASHBOARD_WEB_AUDIT.md`
+
+Flutter:
+
+- `.env.example`
+
+Dashboard:
+
+- `.env.example`
 
 Web frontend:
 
 - `src/lib/api.ts`
 - `src/hooks/useSocialApp.ts`
+- `.env.example`
 
 ## Current Mismatch Summary
 
@@ -111,7 +139,6 @@ Still open:
 
 ### Backend
 
-- consistent error shape still needs a dedicated global exception strategy
 - Prisma persistence gaps remain for support/moderation/history/media ownership models
 - some controllers/services still emit compatibility-oriented nested payloads
 - DTO validation coverage still needs another audit pass on admin and support/moderation actions
@@ -190,11 +217,14 @@ Flutter:
 
 - Backend `typecheck`: passed
 - Backend `build`: passed
+- Backend `prisma:generate`: passed
+- Backend `prisma:migrate`: passed with no pending migrations
 - Backend smoke subset: passed
-- Dashboard `lint`: passed
+- Dashboard `install`: passed
 - Dashboard `build`: passed
-- Web frontend `lint`: passed
+- Web frontend `install`: passed with 2 moderate vulnerability notices
 - Web frontend `build`: passed
+- Flutter `pub get`: passed
 - Flutter `analyze`: passed
 - Flutter `test`: passed
 

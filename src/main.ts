@@ -102,6 +102,13 @@ async function bootstrap() {
       res.status(429).json({
         success: false,
         message: 'Too many requests. Please try again later.',
+        error: {
+          code: 'RATE_LIMIT_EXCEEDED',
+          details: {
+            windowMs: rateLimitWindowMs,
+            max: rateLimitMax,
+          },
+        },
       });
       return;
     }
