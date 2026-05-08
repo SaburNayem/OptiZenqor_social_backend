@@ -71,6 +71,14 @@ export class AdminOpsController {
     );
   }
 
+  @Get('me')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard)
+  @ApiOperation({ summary: 'Backward-compatible admin me route' })
+  meAlias(@Headers('authorization') authorization?: string) {
+    return this.me(authorization);
+  }
+
   @Get('auth/sessions')
   @ApiBearerAuth('admin-bearer')
   @UseGuards(AdminSessionGuard)
@@ -132,6 +140,14 @@ export class AdminOpsController {
     );
   }
 
+  @Get('moderation/cases')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard)
+  @ApiOperation({ summary: 'Backward-compatible nested moderation cases route' })
+  getModerationCasesAlias() {
+    return this.getModerationCases();
+  }
+
   @Patch('moderation-cases/:id')
   @ApiBearerAuth('admin-bearer')
   @UseGuards(AdminSessionGuard, RolesGuard)
@@ -146,6 +162,19 @@ export class AdminOpsController {
       'Moderation case updated successfully.',
       await this.adminDatabase.updateModerationCase(id, body.action, admin.adminId),
     );
+  }
+
+  @Patch('moderation/cases/:id')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard, RolesGuard)
+  @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
+  @ApiOperation({ summary: 'Backward-compatible nested moderation case update route' })
+  updateModerationCaseAlias(
+    @Param('id') id: string,
+    @Body() body: { action: string },
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.updateModerationCase(id, body, authorization);
   }
 
   @Get('chat-control')
@@ -318,6 +347,14 @@ export class AdminOpsController {
     );
   }
 
+  @Get('support/tickets')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard)
+  @ApiOperation({ summary: 'Backward-compatible admin support tickets route' })
+  getSupportTickets(@Query() query: AdminSupportOperationsQueryDto) {
+    return this.getSupportOperations(query);
+  }
+
   @Get('support-operations/:id')
   @ApiBearerAuth('admin-bearer')
   @UseGuards(AdminSessionGuard)
@@ -326,6 +363,14 @@ export class AdminOpsController {
       'Support ticket fetched successfully.',
       await this.adminDatabase.getSupportOperationDetail(id),
     );
+  }
+
+  @Get('support/tickets/:id')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard)
+  @ApiOperation({ summary: 'Backward-compatible admin support ticket detail route' })
+  getSupportTicketDetail(@Param('id') id: string) {
+    return this.getSupportOperationDetail(id);
   }
 
   @Patch('support-operations/:id')
@@ -342,5 +387,18 @@ export class AdminOpsController {
       'Support ticket updated successfully.',
       await this.adminDatabase.updateSupportTicket(id, body, admin.adminId),
     );
+  }
+
+  @Patch('support/tickets/:id')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard, RolesGuard)
+  @Roles('Super Admin', 'Operations Admin', 'Support Admin')
+  @ApiOperation({ summary: 'Backward-compatible admin support ticket update route' })
+  updateSupportTicketAlias(
+    @Param('id') id: string,
+    @Body() body: AdminSupportTicketUpdateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.updateSupportOperation(id, body, authorization);
   }
 }

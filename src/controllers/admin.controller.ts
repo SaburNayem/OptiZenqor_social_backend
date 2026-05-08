@@ -71,6 +71,12 @@ export class AdminController {
     );
   }
 
+  @Get('overview')
+  @ApiOperation({ summary: 'Backward-compatible admin overview route' })
+  getOverview() {
+    return this.getDashboardOverview();
+  }
+
   @Get('dashboard/users')
   @ApiOperation({ summary: 'Get dashboard user analytics block' })
   async getDashboardUsers() {
@@ -254,6 +260,12 @@ export class AdminController {
     );
   }
 
+  @Get('marketplace/products')
+  @ApiOperation({ summary: 'Backward-compatible admin marketplace products route' })
+  getMarketplaceProducts(@Query() query: AdminEntityListQueryDto) {
+    return this.getMarketplace(query);
+  }
+
   @Post('marketplace')
   @Roles('Super Admin', 'Operations Admin')
   @ApiOperation({ summary: 'Create a marketplace item from the admin surface' })
@@ -268,6 +280,16 @@ export class AdminController {
     );
   }
 
+  @Post('marketplace/products')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Backward-compatible admin marketplace product create route' })
+  createMarketplaceProduct(
+    @Body() body: AdminMarketplaceUpsertDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.createMarketplace(body, authorization);
+  }
+
   @Get('marketplace/:id')
   @ApiOperation({ summary: 'Get marketplace item detail for admin review' })
   async getMarketplaceDetail(@Param('id') id: string) {
@@ -275,6 +297,12 @@ export class AdminController {
       'Admin marketplace item fetched successfully.',
       await this.adminDatabase.getAdminMarketplace(id),
     );
+  }
+
+  @Get('marketplace/products/:id')
+  @ApiOperation({ summary: 'Backward-compatible admin marketplace product detail route' })
+  getMarketplaceProductDetail(@Param('id') id: string) {
+    return this.getMarketplaceDetail(id);
   }
 
   @Patch('marketplace/:id')
@@ -292,6 +320,17 @@ export class AdminController {
     );
   }
 
+  @Patch('marketplace/products/:id')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Backward-compatible admin marketplace product update route' })
+  updateMarketplaceProduct(
+    @Param('id') id: string,
+    @Body() body: AdminMarketplaceUpdateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.updateMarketplace(id, body, authorization);
+  }
+
   @Delete('marketplace/:id')
   @Roles('Super Admin', 'Operations Admin')
   @ApiOperation({ summary: 'Delete a marketplace item from the admin surface' })
@@ -304,6 +343,16 @@ export class AdminController {
       'Admin marketplace item deleted successfully.',
       await this.adminDatabase.deleteAdminMarketplace(id, admin.adminId),
     );
+  }
+
+  @Delete('marketplace/products/:id')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Backward-compatible admin marketplace product delete route' })
+  deleteMarketplaceProduct(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.deleteMarketplace(id, authorization);
   }
 
   @Get('jobs')

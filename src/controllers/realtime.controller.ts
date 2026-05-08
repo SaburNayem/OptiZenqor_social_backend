@@ -228,6 +228,15 @@ export class RealtimeController {
     return successResponse('Live streams fetched successfully.', payload, payload.pagination);
   }
 
+  @Get('live-streams')
+  async getLiveStreamsAlias(
+    @Query() query: PaginationQueryDto,
+    @Query('status') status?: string,
+    @Query('userId') userId?: string,
+  ) {
+    return this.getLiveStreams(query, status, userId);
+  }
+
   @UseGuards(SessionAuthGuard)
   @Get('live-stream/setup')
   async getLiveStreamSetup(@CurrentUser() user: { id: string }) {
@@ -364,6 +373,11 @@ export class RealtimeController {
   async getLiveStream(@Param('id') id: string) {
     const stream = await this.socialStateDatabase.getLiveStream(id);
     return successResponse('Live stream fetched successfully.', stream);
+  }
+
+  @Get('live-streams/:id')
+  async getLiveStreamAlias(@Param('id') id: string) {
+    return this.getLiveStream(id);
   }
 
   @Get('socket/contract')
