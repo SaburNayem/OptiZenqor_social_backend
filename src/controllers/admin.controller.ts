@@ -21,6 +21,8 @@ import { RolesGuard } from '../auth/roles.guard';
 import {
   AdminAuditLogsQueryDto,
   AdminContentQueryDto,
+  AdminCreateLiveStreamDto,
+  AdminCommunityCreateDto,
   AdminEntityListQueryDto,
   AdminEventUpdateDto,
   AdminEventUpsertDto,
@@ -33,6 +35,7 @@ import {
   AdminNotificationCampaignCreateDto,
   AdminNotificationCampaignUpdateDto,
   AdminNotificationDeviceUpdateDto,
+  AdminPageCreateDto,
   AdminPageUpdateDto,
   AdminPremiumPlanCreateDto,
   AdminPremiumPlanUpdateDto,
@@ -193,6 +196,13 @@ export class AdminController {
     });
   }
 
+  @Get('comments')
+  @ApiOperation({ summary: 'List comments for admin management' })
+  async getComments(@Query() query: AdminEntityListQueryDto) {
+    const payload = await this.adminDatabase.queryAdminComments(query);
+    return successResponse('Admin comments fetched successfully.', payload, payload.pagination);
+  }
+
   @Patch('content/:type/:id/moderate')
   @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
   @ApiOperation({ summary: 'Moderate a post, reel, or story' })
@@ -240,6 +250,21 @@ export class AdminController {
     @Headers('authorization') authorization?: string,
   ) {
     return this.moderateContent('reel', id, body, authorization);
+  }
+
+  @Patch('comments/:id/moderation')
+  @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
+  @ApiOperation({ summary: 'Moderate a comment through the admin comments module' })
+  async moderateComment(
+    @Param('id') id: string,
+    @Body() body: { reported?: boolean; remove?: boolean; note?: string },
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin comment moderation applied successfully.',
+      await this.adminDatabase.moderateComment(id, body, admin.adminId),
+    );
   }
 
   @Patch('content/:id/moderation')
@@ -544,6 +569,20 @@ export class AdminController {
     );
   }
 
+  @Post('communities')
+  @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
+  @ApiOperation({ summary: 'Create a community from the admin surface' })
+  async createCommunity(
+    @Body() body: AdminCommunityCreateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin community created successfully.',
+      await this.adminDatabase.createAdminCommunity(body, admin.adminId),
+    );
+  }
+
   @Get('communities/:id')
   @ApiOperation({ summary: 'Get community detail for admin review' })
   async getCommunityDetail(@Param('id') id: string) {
@@ -568,11 +607,39 @@ export class AdminController {
     );
   }
 
+  @Delete('communities/:id')
+  @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
+  @ApiOperation({ summary: 'Delete a community from the admin surface' })
+  async deleteCommunity(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin community deleted successfully.',
+      await this.adminDatabase.deleteAdminCommunity(id, admin.adminId),
+    );
+  }
+
   @Get('pages')
   @ApiOperation({ summary: 'List pages for admin review' })
   async getPages(@Query() query: AdminEntityListQueryDto) {
     const payload = await this.adminDatabase.queryAdminPages(query);
     return successResponse('Admin pages fetched successfully.', payload, payload.pagination);
+  }
+
+  @Post('pages')
+  @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
+  @ApiOperation({ summary: 'Create a page from the admin surface' })
+  async createPage(
+    @Body() body: AdminPageCreateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin page created successfully.',
+      await this.adminDatabase.createAdminPage(body, admin.adminId),
+    );
   }
 
   @Get('pages/:id')
@@ -599,6 +666,20 @@ export class AdminController {
     );
   }
 
+  @Delete('pages/:id')
+  @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
+  @ApiOperation({ summary: 'Delete a page from the admin surface' })
+  async deletePage(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin page deleted successfully.',
+      await this.adminDatabase.deleteAdminPage(id, admin.adminId),
+    );
+  }
+
   @Get('live-streams')
   @ApiOperation({ summary: 'List live streams for admin review' })
   async getLiveStreams(@Query() query: AdminEntityListQueryDto) {
@@ -607,6 +688,20 @@ export class AdminController {
       'Admin live streams fetched successfully.',
       payload,
       payload.pagination,
+    );
+  }
+
+  @Post('live-streams')
+  @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
+  @ApiOperation({ summary: 'Create a live stream from the admin surface' })
+  async createLiveStream(
+    @Body() body: AdminCreateLiveStreamDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin live stream created successfully.',
+      await this.adminDatabase.createAdminLiveStream(body, admin.adminId),
     );
   }
 
@@ -631,6 +726,20 @@ export class AdminController {
     return successResponse(
       'Admin live stream updated successfully.',
       await this.adminDatabase.updateAdminLiveStream(id, body, admin.adminId),
+    );
+  }
+
+  @Delete('live-streams/:id')
+  @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
+  @ApiOperation({ summary: 'Delete a live stream from the admin surface' })
+  async deleteLiveStream(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin live stream deleted successfully.',
+      await this.adminDatabase.deleteAdminLiveStream(id, admin.adminId),
     );
   }
 

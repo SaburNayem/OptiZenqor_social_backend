@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Headers, Param, Patch, Post } from '@nes
 import { ApiTags } from '@nestjs/swagger';
 import { CreateCommentDto, ReactToCommentDto } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('comments')
 @Controller('posts/:id/comments')
@@ -11,7 +12,7 @@ export class CommentsController {
   @Get()
   async getPostComments(@Param('id') id: string) {
     const comments = await this.coreDatabase.getPostComments(id);
-    return this.wrapListResponse('Comments fetched successfully.', comments);
+    return successResponse('Comments fetched successfully.', { items: comments, comments });
   }
 
   @Post()
@@ -29,17 +30,13 @@ export class CommentsController {
       replyTo: body.replyTo,
       mentions: body.mentions,
     });
-    return {
-      success: true,
-      ...comment,
-      data: comment,
-    };
+    return successResponse('Comment created successfully.', comment);
   }
 
   @Get(':commentId/replies')
   async getReplies(@Param('id') id: string, @Param('commentId') commentId: string) {
     const replies = await this.coreDatabase.getPostCommentReplies(id, commentId);
-    return this.wrapListResponse('Replies fetched successfully.', replies);
+    return successResponse('Replies fetched successfully.', { items: replies, replies });
   }
 
   @Post(':commentId/replies')
@@ -58,11 +55,7 @@ export class CommentsController {
       replyTo: commentId,
       mentions: body.mentions,
     });
-    return {
-      success: true,
-      ...comment,
-      data: comment,
-    };
+    return successResponse('Reply created successfully.', comment);
   }
 
   @Patch(':commentId/react')
@@ -82,30 +75,12 @@ export class CommentsController {
       actor.id,
       body.reaction,
     );
-    return {
-      success: true,
-      ...comment,
-      data: comment,
-    };
+    return successResponse('Comment reaction updated successfully.', comment);
   }
 
   @Delete(':commentId')
   async deleteComment(@Param('id') id: string, @Param('commentId') commentId: string) {
     const result = await this.coreDatabase.deletePostComment(id, commentId);
-    return {
-      ...result,
-      data: result.removed,
-    };
-  }
-
-  private wrapListResponse(message: string, items: unknown[]) {
-    return {
-      success: true,
-      message,
-      data: items,
-      items,
-      results: items,
-      count: items.length,
-    };
+    return successResponse('Comment deleted successfully.', result);
   }
 }

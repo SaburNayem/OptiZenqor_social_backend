@@ -836,6 +836,70 @@ export class AdminEventUpdateDto {
   status?: string;
 }
 
+export class AdminCommunityCreateDto {
+  @ApiProperty()
+  @IsString()
+  ownerId!: string;
+
+  @ApiProperty()
+  @IsString()
+  name!: string;
+
+  @ApiProperty()
+  @IsString()
+  description!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  privacy?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  approvalRequired?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  allowEvents?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  allowLive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  allowPolls?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  allowMarketplace?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  allowChatRoom?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notificationLevel?: string;
+}
+
 export class AdminCommunityUpdateDto {
   @ApiPropertyOptional()
   @IsOptional()
@@ -903,6 +967,34 @@ export class AdminCommunityUpdateDto {
   status?: string;
 }
 
+export class AdminPageCreateDto {
+  @ApiProperty()
+  @IsString()
+  ownerId!: string;
+
+  @ApiProperty()
+  @IsString()
+  name!: string;
+
+  @ApiProperty()
+  @IsString()
+  about!: string;
+
+  @ApiProperty()
+  @IsString()
+  category!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  contactLabel?: string;
+}
+
 export class AdminPageUpdateDto {
   @ApiPropertyOptional()
   @IsOptional()
@@ -949,6 +1041,58 @@ export class RegisterPushDeviceDto {
   @IsOptional()
   @IsString()
   appVersion?: string;
+}
+
+export class AdminCreateLiveStreamDto {
+  @ApiProperty()
+  @IsString()
+  hostId!: string;
+
+  @ApiProperty()
+  @IsString()
+  title!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  audience?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  commentsEnabled?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  slowModeSeconds?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  previewImageUrl?: string;
 }
 
 export class AdminUpdateLiveStreamDto {

@@ -325,7 +325,23 @@ export class AdminDatabaseService implements OnModuleInit {
   async getModerationCases(targetType?: string) {
     const items = await this.prisma.moderationCase.findMany({
       where: targetType ? { targetType } : undefined,
-      include: { assignedAdmin: true },
+      include: {
+        assignedAdmin: true,
+        actionHistory: {
+          include: { actorAdmin: true },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
+        assignmentHistory: {
+          include: {
+            actorAdmin: true,
+            previousAdmin: true,
+            nextAdmin: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
+      },
       orderBy: { updatedAt: 'desc' },
       take: 200,
     });
@@ -335,6 +351,7 @@ export class AdminDatabaseService implements OnModuleInit {
   async updateModerationCase(id: string, action: string, actorAdminId?: string) {
     const existing = await this.prisma.moderationCase.findUnique({
       where: { id },
+      include: { assignedAdmin: true },
     });
     if (!existing) {
       throw new NotFoundException(`Moderation case ${id} not found`);
@@ -343,19 +360,80 @@ export class AdminDatabaseService implements OnModuleInit {
     const history = this.readStringArray(existing.history);
     const enforcementActions = this.readStringArray(existing.enforcementActions);
     const status = action === 'close' ? 'resolved' : action === 'escalate' ? 'escalated' : 'updated';
+    const timestamp = new Date();
 
-    const updated = await this.prisma.moderationCase.update({
-      where: { id },
-      data: {
-        status,
-        history: [
-          ...history,
-          `Action applied: ${action} at ${new Date().toISOString()}`,
-        ] as Prisma.InputJsonValue,
-        enforcementActions: [...enforcementActions, action] as Prisma.InputJsonValue,
-        updatedAt: new Date(),
-      },
-      include: { assignedAdmin: true },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const nextItem = await tx.moderationCase.update({
+        where: { id },
+        data: {
+          status,
+          history: [
+            ...history,
+            `Action applied: ${action} at ${timestamp.toISOString()}`,
+          ] as Prisma.InputJsonValue,
+          enforcementActions: [...enforcementActions, action] as Prisma.InputJsonValue,
+          updatedAt: timestamp,
+        },
+      });
+
+      await tx.moderationCaseActionHistory.create({
+        data: {
+          id: makeId('mod_case_action'),
+          caseId: nextItem.id,
+          actorAdminId: actorAdminId ?? null,
+          action,
+          note: `Action applied: ${action}`,
+          fromStatus: existing.status,
+          toStatus: nextItem.status,
+          payload: {
+            targetType: nextItem.targetType,
+            targetId: nextItem.targetId,
+            severity: nextItem.severity,
+          } as Prisma.InputJsonValue,
+          createdAt: timestamp,
+        },
+      });
+
+      if (action === 'escalate') {
+        await tx.moderationCaseAssignmentHistory.create({
+          data: {
+            id: makeId('mod_case_assignment'),
+            caseId: nextItem.id,
+            actorAdminId: actorAdminId ?? null,
+            previousAdminId: existing.assignedToAdminId,
+            nextAdminId: nextItem.assignedToAdminId,
+            previousSeverity: existing.severity,
+            nextSeverity: nextItem.severity,
+            note: 'Case escalated',
+            payload: {
+              action,
+              status: nextItem.status,
+            } as Prisma.InputJsonValue,
+            createdAt: timestamp,
+          },
+        });
+      }
+
+      return tx.moderationCase.findUniqueOrThrow({
+        where: { id },
+        include: {
+          assignedAdmin: true,
+          actionHistory: {
+            include: { actorAdmin: true },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+          },
+          assignmentHistory: {
+            include: {
+              actorAdmin: true,
+              previousAdmin: true,
+              nextAdmin: true,
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+          },
+        },
+      });
     });
 
     await this.createAuditLog({
@@ -376,6 +454,7 @@ export class AdminDatabaseService implements OnModuleInit {
   ) {
     const existing = await this.prisma.moderationCase.findUnique({
       where: { id },
+      include: { assignedAdmin: true },
     });
     if (!existing || existing.targetType !== 'chat_thread') {
       throw new NotFoundException(`Chat moderation case ${id} not found`);
@@ -383,19 +462,56 @@ export class AdminDatabaseService implements OnModuleInit {
 
     const metadata = this.readObject(existing.metadata);
     const restrictedParticipants = this.readStringArray(metadata.restrictedParticipants);
-    const updated = await this.prisma.moderationCase.update({
-      where: { id },
-      data: {
-        metadata: {
-          ...metadata,
-          frozen: typeof patch.freeze === 'boolean' ? patch.freeze : metadata.frozen ?? false,
-          restrictedParticipants: patch.restrictParticipant
-            ? [...new Set([...restrictedParticipants, patch.restrictParticipant])]
-            : restrictedParticipants,
-        } as Prisma.InputJsonValue,
-        updatedAt: new Date(),
-      },
-      include: { assignedAdmin: true },
+    const timestamp = new Date();
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const nextItem = await tx.moderationCase.update({
+        where: { id },
+        data: {
+          metadata: {
+            ...metadata,
+            frozen: typeof patch.freeze === 'boolean' ? patch.freeze : metadata.frozen ?? false,
+            restrictedParticipants: patch.restrictParticipant
+              ? [...new Set([...restrictedParticipants, patch.restrictParticipant])]
+              : restrictedParticipants,
+          } as Prisma.InputJsonValue,
+          updatedAt: timestamp,
+        },
+      });
+
+      await tx.moderationCaseActionHistory.create({
+        data: {
+          id: makeId('mod_case_action'),
+          caseId: nextItem.id,
+          actorAdminId: actorAdminId ?? null,
+          action: 'chat_update',
+          note: 'Updated chat moderation controls',
+          fromStatus: existing.status,
+          toStatus: nextItem.status,
+          payload: patch as Prisma.InputJsonValue,
+          createdAt: timestamp,
+        },
+      });
+
+      return tx.moderationCase.findUniqueOrThrow({
+        where: { id },
+        include: {
+          assignedAdmin: true,
+          actionHistory: {
+            include: { actorAdmin: true },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+          },
+          assignmentHistory: {
+            include: {
+              actorAdmin: true,
+              previousAdmin: true,
+              nextAdmin: true,
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+          },
+        },
+      });
     });
 
     await this.createAuditLog({
@@ -757,6 +873,13 @@ export class AdminDatabaseService implements OnModuleInit {
     const nextStatus = patch.status?.trim().toLowerCase();
     const nextPriority = patch.priority?.trim().toLowerCase();
     const assignedAdminId = patch.assignedAdminId?.trim() || null;
+    const previousAssignedAdminId = this.readNullableString(metadata.assignedAdminId);
+    const previousSlaHours = this.readNumber(metadata.slaHours);
+    const previousSlaDueAt = this.readDate(metadata.slaDueAt);
+    const nextSlaHours = patch.slaHours ?? previousSlaHours;
+    const nextSlaDueAt =
+      patch.slaHours === undefined ? previousSlaDueAt : new Date(Date.now() + patch.slaHours * 60 * 60 * 1000);
+    const timestamp = new Date();
 
     if (assignedAdminId) {
       await this.getAdminUserById(assignedAdminId);
@@ -778,12 +901,10 @@ export class AdminDatabaseService implements OnModuleInit {
       assignedAt:
         assignedAdminId === null
           ? (metadata.assignedAt ?? null)
-          : new Date().toISOString(),
-      slaHours: patch.slaHours ?? metadata.slaHours ?? null,
+          : timestamp.toISOString(),
+      slaHours: nextSlaHours,
       slaDueAt:
-        patch.slaHours === undefined
-          ? (metadata.slaDueAt ?? null)
-          : new Date(Date.now() + patch.slaHours * 60 * 60 * 1000).toISOString(),
+        nextSlaDueAt?.toISOString() ?? null,
     };
 
     const [ticket] = await this.prisma.$transaction(async (tx) => {
@@ -818,6 +939,21 @@ export class AdminDatabaseService implements OnModuleInit {
               },
             },
           },
+          actionHistory: {
+            include: { actorAdmin: true, actorUser: true },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+          },
+          assignmentHistory: {
+            include: {
+              actorAdmin: true,
+              actorUser: true,
+              previousAdmin: true,
+              nextAdmin: true,
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+          },
         },
       });
 
@@ -835,6 +971,55 @@ export class AdminDatabaseService implements OnModuleInit {
           updatedAt: new Date(),
         },
       });
+
+      await tx.supportTicketActionHistory.create({
+        data: {
+          id: makeId('support_action'),
+          ticketId: updatedTicket.id,
+          actorAdminId: actorAdminId ?? null,
+          actorUserId: null,
+          action: replyMessage ? 'reply' : 'update',
+          note: note ?? replyMessage ?? 'Support ticket updated',
+          fromStatus: existing.status,
+          toStatus: nextStatus ?? existing.status,
+          fromPriority: existing.priority,
+          toPriority: nextPriority ?? existing.priority,
+          payload: {
+            replied: Boolean(replyMessage),
+            assignedAdminId,
+            slaHours: nextSlaHours,
+          } as Prisma.InputJsonValue,
+          createdAt: timestamp,
+        },
+      });
+
+      const assignmentChanged =
+        assignedAdminId !== null && assignedAdminId !== previousAssignedAdminId;
+      const slaChanged =
+        patch.slaHours !== undefined &&
+        (previousSlaHours ?? null) !== (patch.slaHours ?? null);
+
+      if (assignmentChanged || slaChanged) {
+        await tx.supportTicketAssignmentHistory.create({
+          data: {
+            id: makeId('support_assignment'),
+            ticketId: updatedTicket.id,
+            actorAdminId: actorAdminId ?? null,
+            actorUserId: null,
+            previousAdminId: previousAssignedAdminId,
+            nextAdminId: assignmentChanged ? assignedAdminId : previousAssignedAdminId,
+            previousSlaHours,
+            nextSlaHours,
+            previousSlaDueAt,
+            nextSlaDueAt,
+            note: note ?? (assignmentChanged ? 'Support assignment updated' : 'Support SLA updated'),
+            payload: {
+              replyMessage: Boolean(replyMessage),
+            } as Prisma.InputJsonValue,
+            createdAt: timestamp,
+          },
+        });
+      }
 
       return [updatedTicket];
     });
@@ -869,6 +1054,21 @@ export class AdminDatabaseService implements OnModuleInit {
             },
           },
         },
+        actionHistory: {
+          include: { actorAdmin: true, actorUser: true },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        },
+        assignmentHistory: {
+          include: {
+            actorAdmin: true,
+            actorUser: true,
+            previousAdmin: true,
+            nextAdmin: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        },
       },
     });
     if (!ticket) {
@@ -887,6 +1087,8 @@ export class AdminDatabaseService implements OnModuleInit {
           attachments: this.readStringArray(message.attachments),
           createdAt: message.createdAt.toISOString(),
         })) ?? [],
+      actionHistory: this.mapSupportActionHistoryList(ticket.actionHistory),
+      assignmentHistory: this.mapSupportAssignmentHistoryList(ticket.assignmentHistory),
     };
   }
 
@@ -1420,6 +1622,135 @@ export class AdminDatabaseService implements OnModuleInit {
   ) {
     const targetType = patch.targetType ?? (await this.resolveModerationTargetType(id));
     return this.moderateContent(targetType, id, patch, actorAdminId);
+  }
+
+  async queryAdminComments(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const status = query.status?.trim().toLowerCase();
+    const search = query.search?.trim();
+    const where: Prisma.AppPostCommentWhereInput = {
+      ...(status === 'reported' ? { isReported: true } : {}),
+      ...(search
+        ? {
+            OR: [
+              { message: { contains: search, mode: 'insensitive' } },
+              { authorName: { contains: search, mode: 'insensitive' } },
+              { postId: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, items] = await Promise.all([
+      this.prisma.appPostComment.count({ where }),
+      this.prisma.appPostComment.findMany({
+        where,
+        include: {
+          author: true,
+          post: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return this.wrapPaginated(
+      items.map((item) => ({
+        id: item.id,
+        postId: item.postId,
+        postCaption: item.post.caption,
+        authorId: item.authorId,
+        authorName: item.author?.name ?? item.authorName,
+        authorUsername: item.author?.username ?? null,
+        message: item.message,
+        replyTo: item.replyTo,
+        likeCount: item.likeCount,
+        isLikedByMe: item.isLikedByMe,
+        isReported: item.isReported,
+        isEdited: item.isEdited,
+        mentions: this.readStringArray(item.mentions),
+        status: item.isReported ? 'reported' : 'visible',
+        createdAt: item.createdAt.toISOString(),
+      })),
+      page,
+      limit,
+      total,
+    );
+  }
+
+  async moderateComment(
+    id: string,
+    patch: {
+      reported?: boolean;
+      remove?: boolean;
+      note?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    const existing = await this.prisma.appPostComment.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Comment ${id} not found.`);
+    }
+
+    if (patch.remove) {
+      await this.prisma.appPostComment.delete({
+        where: { id },
+      });
+
+      await this.createAuditLog({
+        actorAdminId,
+        action: 'admin.comment.delete',
+        entityType: 'post_comment',
+        entityId: id,
+        metadata: patch,
+      });
+
+      return {
+        id,
+        deleted: true,
+      };
+    }
+
+    const updated = await this.prisma.appPostComment.update({
+      where: { id },
+      data: {
+        ...(patch.reported === undefined ? {} : { isReported: patch.reported }),
+      },
+      include: {
+        author: true,
+        post: true,
+      },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'admin.comment.moderate',
+      entityType: 'post_comment',
+      entityId: id,
+      metadata: patch,
+    });
+
+    return {
+      id: updated.id,
+      postId: updated.postId,
+      postCaption: updated.post.caption,
+      authorId: updated.authorId,
+      authorName: updated.author?.name ?? updated.authorName,
+      message: updated.message,
+      isReported: updated.isReported,
+      status: updated.isReported ? 'reported' : 'visible',
+      createdAt: updated.createdAt.toISOString(),
+    };
   }
 
   async queryReports(query: {
@@ -2258,6 +2589,11 @@ export class AdminDatabaseService implements OnModuleInit {
     const limit = this.resolveLimit(query.limit);
     const skip = (page - 1) * limit;
     const where: Prisma.CommunityWhereInput = {
+      ...(query.status?.trim().toLowerCase() === 'active'
+        ? { deletedAt: null }
+        : query.status?.trim().toLowerCase() === 'deleted'
+          ? { deletedAt: { not: null } }
+          : {}),
       ...(query.search?.trim()
         ? {
             OR: [
@@ -2295,6 +2631,71 @@ export class AdminDatabaseService implements OnModuleInit {
       limit,
       total,
     );
+  }
+
+  async createAdminCommunity(
+    input: {
+      ownerId: string;
+      name: string;
+      description: string;
+      privacy?: string;
+      category?: string;
+      location?: string;
+      approvalRequired?: boolean;
+      allowEvents?: boolean;
+      allowLive?: boolean;
+      allowPolls?: boolean;
+      allowMarketplace?: boolean;
+      allowChatRoom?: boolean;
+      notificationLevel?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    const owner = await this.prisma.appUser.findUnique({
+      where: { id: input.ownerId },
+    });
+    if (!owner) {
+      throw new NotFoundException(`Community owner ${input.ownerId} not found.`);
+    }
+
+    const created = await this.prisma.community.create({
+      data: {
+        id: makeId('community'),
+        ownerId: owner.id,
+        ownerName: owner.name,
+        name: input.name.trim(),
+        description: input.description.trim(),
+        privacy: input.privacy?.trim() || 'public',
+        category: input.category?.trim() || null,
+        location: input.location?.trim() || null,
+        approvalRequired: input.approvalRequired ?? false,
+        allowEvents: input.allowEvents ?? true,
+        allowLive: input.allowLive ?? false,
+        allowPolls: input.allowPolls ?? true,
+        allowMarketplace: input.allowMarketplace ?? false,
+        allowChatRoom: input.allowChatRoom ?? true,
+        notificationLevel: input.notificationLevel?.trim() || 'all',
+        memberCount: 1,
+        members: {
+          create: {
+            userId: owner.id,
+            role: 'admin',
+            status: 'active',
+          },
+        },
+      },
+      include: { owner: true, members: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'community.create',
+      entityType: 'community',
+      entityId: created.id,
+      metadata: input,
+    });
+
+    return this.mapAdminCommunityRow(created);
   }
 
   async updateAdminCommunity(
@@ -2362,6 +2763,39 @@ export class AdminDatabaseService implements OnModuleInit {
     return this.mapAdminCommunityRow(updated);
   }
 
+  async deleteAdminCommunity(id: string, actorAdminId?: string) {
+    const existing = await this.prisma.community.findUnique({
+      where: { id },
+      include: { owner: true, members: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Community ${id} not found.`);
+    }
+
+    const deleted = await this.prisma.community.update({
+      where: { id },
+      data: {
+        deletedAt: new Date(),
+        updatedAt: new Date(),
+      },
+      include: { owner: true, members: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'community.delete',
+      entityType: 'community',
+      entityId: deleted.id,
+      metadata: { deletedAt: deleted.deletedAt?.toISOString() ?? null },
+    });
+
+    return {
+      id: deleted.id,
+      deleted: true,
+      status: 'deleted',
+    };
+  }
+
   async getAdminCommunity(id: string) {
     const item = await this.prisma.community.findUnique({
       where: { id },
@@ -2422,6 +2856,48 @@ export class AdminDatabaseService implements OnModuleInit {
     );
   }
 
+  async createAdminPage(
+    input: {
+      ownerId: string;
+      name: string;
+      about: string;
+      category: string;
+      location?: string;
+      contactLabel?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    const owner = await this.prisma.appUser.findUnique({
+      where: { id: input.ownerId },
+    });
+    if (!owner) {
+      throw new NotFoundException(`Page owner ${input.ownerId} not found.`);
+    }
+
+    const created = await this.prisma.page.create({
+      data: {
+        id: makeId('page'),
+        ownerId: owner.id,
+        name: input.name.trim(),
+        about: input.about.trim(),
+        category: input.category.trim(),
+        location: input.location?.trim() || null,
+        contactLabel: input.contactLabel?.trim() || null,
+      },
+      include: { owner: true, followers: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'page.create',
+      entityType: 'page',
+      entityId: created.id,
+      metadata: input,
+    });
+
+    return this.mapAdminPageRow(created);
+  }
+
   async updateAdminPage(
     id: string,
     patch: {
@@ -2464,6 +2940,33 @@ export class AdminDatabaseService implements OnModuleInit {
     });
 
     return this.mapAdminPageRow(updated);
+  }
+
+  async deleteAdminPage(id: string, actorAdminId?: string) {
+    const existing = await this.prisma.page.findUnique({
+      where: { id },
+      include: { owner: true, followers: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Page ${id} not found.`);
+    }
+
+    await this.prisma.page.delete({
+      where: { id },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'page.delete',
+      entityType: 'page',
+      entityId: id,
+      metadata: { name: existing.name, ownerId: existing.ownerId },
+    });
+
+    return {
+      id,
+      deleted: true,
+    };
   }
 
   async getAdminPage(id: string) {
@@ -2526,6 +3029,78 @@ export class AdminDatabaseService implements OnModuleInit {
       limit,
       total,
     );
+  }
+
+  async createAdminLiveStream(
+    input: {
+      hostId: string;
+      title: string;
+      description?: string;
+      category?: string;
+      audience?: string;
+      location?: string;
+      status?: string;
+      commentsEnabled?: boolean;
+      slowModeSeconds?: number;
+      previewImageUrl?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    const host = await this.prisma.appUser.findUnique({
+      where: { id: input.hostId },
+    });
+    if (!host) {
+      throw new NotFoundException(`Live stream host ${input.hostId} not found.`);
+    }
+
+    const status = input.status?.trim() || 'scheduled';
+    const now = new Date();
+    const created = await this.prisma.liveStreamSession.create({
+      data: {
+        id: makeId('live_stream'),
+        hostId: host.id,
+        title: input.title.trim(),
+        description: input.description?.trim() || '',
+        category: input.category?.trim() || 'Live',
+        audience: input.audience?.trim() || 'public',
+        location: input.location?.trim() || null,
+        status,
+        previewImageUrl: input.previewImageUrl?.trim() || null,
+        metadata: {
+          moderation: {
+            commentsEnabled: input.commentsEnabled ?? true,
+            slowModeSeconds: input.slowModeSeconds ?? 0,
+          },
+        } as Prisma.InputJsonValue,
+        ...(status.toLowerCase() === 'live' ? { startedAt: now } : {}),
+        ...(status.toLowerCase() === 'ended' ? { endedAt: now } : {}),
+      },
+      include: { host: true, comments: true, reactions: true },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'live_stream.create',
+      entityType: 'live_stream',
+      entityId: created.id,
+      metadata: input,
+    });
+
+    return {
+      id: created.id,
+      title: created.title,
+      description: created.description,
+      hostName: created.host.name,
+      hostId: created.hostId,
+      category: created.category,
+      status: created.status,
+      audience: created.audience,
+      viewerCount: created.viewerCount,
+      comments: created.comments.length,
+      reactions: created.reactions.length,
+      createdAt: created.createdAt.toISOString(),
+      updatedAt: created.updatedAt.toISOString(),
+    };
   }
 
   async updateAdminLiveStream(
@@ -2604,6 +3179,33 @@ export class AdminDatabaseService implements OnModuleInit {
       reactions: updated.reactions.length,
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),
+    };
+  }
+
+  async deleteAdminLiveStream(id: string, actorAdminId?: string) {
+    const existing = await this.prisma.liveStreamSession.findUnique({
+      where: { id },
+      include: { host: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Live stream ${id} not found.`);
+    }
+
+    await this.prisma.liveStreamSession.delete({
+      where: { id },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'live_stream.delete',
+      entityType: 'live_stream',
+      entityId: id,
+      metadata: { title: existing.title, hostId: existing.hostId },
+    });
+
+    return {
+      id,
+      deleted: true,
     };
   }
 
@@ -4494,6 +5096,27 @@ export class AdminDatabaseService implements OnModuleInit {
     enforcementActions: Prisma.JsonValue;
     metadata: Prisma.JsonValue;
     assignedAdmin?: { id: string; name: string } | null;
+    actionHistory?: Array<{
+      id: string;
+      action: string;
+      note: string | null;
+      fromStatus: string | null;
+      toStatus: string | null;
+      payload: Prisma.JsonValue;
+      createdAt: Date;
+      actorAdmin?: { id: string; name: string; email: string } | null;
+    }>;
+    assignmentHistory?: Array<{
+      id: string;
+      note: string | null;
+      previousSeverity: string | null;
+      nextSeverity: string | null;
+      payload: Prisma.JsonValue;
+      createdAt: Date;
+      actorAdmin?: { id: string; name: string; email: string } | null;
+      previousAdmin?: { id: string; name: string; email: string } | null;
+      nextAdmin?: { id: string; name: string; email: string } | null;
+    }>;
   }) {
     const metadata = this.readObject(item.metadata);
     return {
@@ -4513,6 +5136,8 @@ export class AdminDatabaseService implements OnModuleInit {
       enforcementActions: this.readStringArray(item.enforcementActions),
       frozen: Boolean(metadata.frozen),
       restrictedParticipants: this.readStringArray(metadata.restrictedParticipants),
+      actionHistory: this.mapModerationActionHistoryList(item.actionHistory),
+      assignmentHistory: this.mapModerationAssignmentHistoryList(item.assignmentHistory),
     };
   }
 
@@ -4533,6 +5158,33 @@ export class AdminDatabaseService implements OnModuleInit {
       channel: string;
       messages?: Array<{ id: string; body: string; createdAt: Date }>;
     } | null;
+    actionHistory?: Array<{
+      id: string;
+      action: string;
+      note: string | null;
+      fromStatus: string | null;
+      toStatus: string | null;
+      fromPriority: string | null;
+      toPriority: string | null;
+      payload: Prisma.JsonValue;
+      createdAt: Date;
+      actorAdmin?: { id: string; name: string; email: string } | null;
+      actorUser?: { id: string; name: string; email: string } | null;
+    }>;
+    assignmentHistory?: Array<{
+      id: string;
+      note: string | null;
+      previousSlaHours: number | null;
+      nextSlaHours: number | null;
+      previousSlaDueAt: Date | null;
+      nextSlaDueAt: Date | null;
+      payload: Prisma.JsonValue;
+      createdAt: Date;
+      actorAdmin?: { id: string; name: string; email: string } | null;
+      actorUser?: { id: string; name: string; email: string } | null;
+      previousAdmin?: { id: string; name: string; email: string } | null;
+      nextAdmin?: { id: string; name: string; email: string } | null;
+    }>;
   }) {
     const metadata = this.readObject(item.metadata);
     const adminNotes = this.readStringArray(metadata.adminNotes);
@@ -4559,9 +5211,151 @@ export class AdminDatabaseService implements OnModuleInit {
       latestMessageAt: latestMessage?.createdAt?.toISOString() ?? null,
       adminNotes,
       metadata,
+      actionHistory: this.mapSupportActionHistoryList(item.actionHistory),
+      assignmentHistory: this.mapSupportAssignmentHistoryList(item.assignmentHistory),
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),
     };
+  }
+
+  private mapSupportActionHistoryList(
+    items?:
+      | Array<{
+          id: string;
+          action: string;
+          note: string | null;
+          fromStatus: string | null;
+          toStatus: string | null;
+          fromPriority: string | null;
+          toPriority: string | null;
+          payload: Prisma.JsonValue;
+          createdAt: Date;
+          actorAdmin?: { id: string; name: string; email: string } | null;
+          actorUser?: { id: string; name: string; email: string } | null;
+        }>
+      | null,
+  ) {
+    return (items ?? []).map((item) => ({
+      id: item.id,
+      action: item.action,
+      note: item.note,
+      fromStatus: item.fromStatus,
+      toStatus: item.toStatus,
+      fromPriority: item.fromPriority,
+      toPriority: item.toPriority,
+      payload: this.readObject(item.payload),
+      actorAdmin: item.actorAdmin
+        ? { id: item.actorAdmin.id, name: item.actorAdmin.name, email: item.actorAdmin.email }
+        : null,
+      actorUser: item.actorUser
+        ? { id: item.actorUser.id, name: item.actorUser.name, email: item.actorUser.email }
+        : null,
+      createdAt: item.createdAt.toISOString(),
+    }));
+  }
+
+  private mapSupportAssignmentHistoryList(
+    items?:
+      | Array<{
+          id: string;
+          note: string | null;
+          previousSlaHours: number | null;
+          nextSlaHours: number | null;
+          previousSlaDueAt: Date | null;
+          nextSlaDueAt: Date | null;
+          payload: Prisma.JsonValue;
+          createdAt: Date;
+          actorAdmin?: { id: string; name: string; email: string } | null;
+          actorUser?: { id: string; name: string; email: string } | null;
+          previousAdmin?: { id: string; name: string; email: string } | null;
+          nextAdmin?: { id: string; name: string; email: string } | null;
+        }>
+      | null,
+  ) {
+    return (items ?? []).map((item) => ({
+      id: item.id,
+      note: item.note,
+      previousSlaHours: item.previousSlaHours,
+      nextSlaHours: item.nextSlaHours,
+      previousSlaDueAt: item.previousSlaDueAt?.toISOString() ?? null,
+      nextSlaDueAt: item.nextSlaDueAt?.toISOString() ?? null,
+      payload: this.readObject(item.payload),
+      actorAdmin: item.actorAdmin
+        ? { id: item.actorAdmin.id, name: item.actorAdmin.name, email: item.actorAdmin.email }
+        : null,
+      actorUser: item.actorUser
+        ? { id: item.actorUser.id, name: item.actorUser.name, email: item.actorUser.email }
+        : null,
+      previousAdmin: item.previousAdmin
+        ? { id: item.previousAdmin.id, name: item.previousAdmin.name, email: item.previousAdmin.email }
+        : null,
+      nextAdmin: item.nextAdmin
+        ? { id: item.nextAdmin.id, name: item.nextAdmin.name, email: item.nextAdmin.email }
+        : null,
+      createdAt: item.createdAt.toISOString(),
+    }));
+  }
+
+  private mapModerationActionHistoryList(
+    items?:
+      | Array<{
+          id: string;
+          action: string;
+          note: string | null;
+          fromStatus: string | null;
+          toStatus: string | null;
+          payload: Prisma.JsonValue;
+          createdAt: Date;
+          actorAdmin?: { id: string; name: string; email: string } | null;
+        }>
+      | null,
+  ) {
+    return (items ?? []).map((item) => ({
+      id: item.id,
+      action: item.action,
+      note: item.note,
+      fromStatus: item.fromStatus,
+      toStatus: item.toStatus,
+      payload: this.readObject(item.payload),
+      actorAdmin: item.actorAdmin
+        ? { id: item.actorAdmin.id, name: item.actorAdmin.name, email: item.actorAdmin.email }
+        : null,
+      createdAt: item.createdAt.toISOString(),
+    }));
+  }
+
+  private mapModerationAssignmentHistoryList(
+    items?:
+      | Array<{
+          id: string;
+          note: string | null;
+          previousSeverity: string | null;
+          nextSeverity: string | null;
+          payload: Prisma.JsonValue;
+          createdAt: Date;
+          actorAdmin?: { id: string; name: string; email: string } | null;
+          previousAdmin?: { id: string; name: string; email: string } | null;
+          nextAdmin?: { id: string; name: string; email: string } | null;
+        }>
+      | null,
+  ) {
+    return (items ?? []).map((item) => ({
+      id: item.id,
+      note: item.note,
+      previousSeverity: item.previousSeverity,
+      nextSeverity: item.nextSeverity,
+      payload: this.readObject(item.payload),
+      actorAdmin: item.actorAdmin
+        ? { id: item.actorAdmin.id, name: item.actorAdmin.name, email: item.actorAdmin.email }
+        : null,
+      previousAdmin: item.previousAdmin
+        ? { id: item.previousAdmin.id, name: item.previousAdmin.name, email: item.previousAdmin.email }
+        : null,
+      nextAdmin: item.nextAdmin
+        ? { id: item.nextAdmin.id, name: item.nextAdmin.name, email: item.nextAdmin.email }
+        : null,
+      createdAt: item.createdAt.toISOString(),
+    }));
   }
 
   private normalizeVerificationStatus(value?: string) {
@@ -4583,6 +5377,22 @@ export class AdminDatabaseService implements OnModuleInit {
 
   private readString(value: unknown) {
     return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  }
+
+  private readNullableString(value: unknown) {
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+  }
+
+  private readNumber(value: unknown) {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+
+  private readDate(value: unknown) {
+    if (typeof value !== 'string' || !value.trim()) {
+      return null;
+    }
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
   private readStringArray(value: unknown) {
