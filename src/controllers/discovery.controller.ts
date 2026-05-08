@@ -49,20 +49,18 @@ export class DiscoveryController {
   @ApiQuery({ name: 'limit', required: false })
   async search(@Query('q') q?: string, @Query('limit') limit?: string) {
     const result = await this.discoveryDatabase.buildGlobalSearch(q, limit);
-    return {
-      ...successResponse('Search results fetched successfully.', result.data, {
-        total: result.count,
-        page: 1,
-        limit: result.items.length,
-        hasNextPage: false,
-        hasPreviousPage: false,
-      }),
+    return successResponse('Search results fetched successfully.', {
       query: result.query,
       count: result.count,
       sections: result.sections,
-      results: result.results,
       items: result.items,
-    };
+    }, {
+      total: result.count,
+      page: 1,
+      limit: result.items.length,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    });
   }
 
   @Get('global-search')
@@ -70,20 +68,18 @@ export class DiscoveryController {
   @ApiQuery({ name: 'limit', required: false })
   async getGlobalSearch(@Query('q') q?: string, @Query('limit') limit?: string) {
     const result = await this.discoveryDatabase.buildGlobalSearch(q, limit);
-    return {
-      ...successResponse('Search results fetched successfully.', result.data, {
-        total: result.count,
-        page: 1,
-        limit: result.items.length,
-        hasNextPage: false,
-        hasPreviousPage: false,
-      }),
+    return successResponse('Search results fetched successfully.', {
       query: result.query,
       count: result.count,
       sections: result.sections,
-      results: result.results,
       items: result.items,
-    };
+    }, {
+      total: result.count,
+      page: 1,
+      limit: result.items.length,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    });
   }
 
   @Get('search-discovery')
@@ -91,21 +87,20 @@ export class DiscoveryController {
   @ApiQuery({ name: 'limit', required: false })
   async getSearchDiscovery(@Query('q') q?: string, @Query('limit') limit?: string) {
     const result = await this.discoveryDatabase.getSearchDiscovery(q, limit);
-    return {
-      ...successResponse('Search discovery fetched successfully.', result, {
-        total: result.count,
-        page: 1,
-        limit: result.count,
-        hasNextPage: false,
-        hasPreviousPage: false,
-      }),
+    return successResponse('Search discovery fetched successfully.', {
       query: result.query,
       count: result.count,
       sections: result.sections,
-      results: result.results,
+      items: result.results,
       trending: result.trending,
       hashtags: result.hashtags,
-    };
+    }, {
+      total: result.count,
+      page: 1,
+      limit: result.count,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    });
   }
 
   @Post('trending/refresh')

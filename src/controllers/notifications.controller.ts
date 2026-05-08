@@ -12,7 +12,7 @@ import { AccountStateDatabaseService } from '../services/account-state-database.
 import { AdminDatabaseService } from '../services/admin-database.service';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { MonetizationDatabaseService } from '../services/monetization-database.service';
-import { compatibilityListResponse, compatibilityResponse, successResponse } from '../utils/api-response.util';
+import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('notifications')
 @Controller('notifications')
@@ -41,19 +41,10 @@ export class NotificationsController {
     const preferences = resolvedUser
       ? await this.accountStateDatabase.getSettingsState(resolvedUser)
       : {};
-    return compatibilityResponse('Notifications fetched successfully.', {
+    return successResponse('Notifications fetched successfully.', {
       notifications,
       campaigns,
       preferences,
-    }, {
-      aliases: {
-        notifications,
-        items: notifications,
-        results: notifications,
-        inbox: notifications,
-        campaigns,
-        preferences,
-      },
     });
   }
 
@@ -61,14 +52,7 @@ export class NotificationsController {
   @ApiQuery({ name: 'userId', required: false })
   async getInbox(@Query('userId') userId?: string) {
     const notifications = await this.coreDatabase.getNotificationInbox(userId);
-    return compatibilityListResponse('Notification inbox fetched successfully.', notifications, {
-      aliases: {
-        notifications,
-        items: notifications,
-        results: notifications,
-        inbox: notifications,
-      },
-    });
+    return successResponse('Notification inbox fetched successfully.', notifications);
   }
 
   @UseGuards(SessionAuthGuard)
@@ -176,11 +160,6 @@ export class NotificationsController {
       body.userId,
     );
     const notification = await this.coreDatabase.markNotificationRead(id, actor.id);
-    return compatibilityResponse('Notification marked as read successfully.', notification, {
-      aliases: {
-        ...notification,
-        notification,
-      },
-    });
+    return successResponse('Notification marked as read successfully.', notification);
   }
 }
