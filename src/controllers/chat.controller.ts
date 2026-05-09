@@ -10,6 +10,7 @@ import {
 import { CoreDatabaseService } from '../services/core-database.service';
 import { RealtimeStateService } from '../services/realtime-state.service';
 import { SocialStateDatabaseService } from '../services/social-state-database.service';
+import { listResponse, successResponse } from '../utils/api-response.util';
 
 @ApiTags('chat')
 @Controller('chat')
@@ -32,18 +33,15 @@ export class ChatController {
     const visibleThreads = actor
       ? threads.filter((thread) => (thread.participantIds ?? []).includes(actor.id))
       : threads;
-    return {
-      success: true,
-      message: 'Chat overview fetched successfully.',
+    return successResponse('Chat overview fetched successfully.', {
       threads: visibleThreads,
-      data: visibleThreads,
       unreadCount: visibleThreads.reduce(
         (count, thread) => count + thread.unreadCount,
         0,
       ),
       presence: this.realtimeState.getPresenceSnapshot(),
       inboxFilters: ['all', 'unread', 'groups', 'marketplace', 'support'],
-    };
+    });
   }
 
   @Get('detail')
@@ -64,22 +62,13 @@ export class ChatController {
           safetyConfig: {},
           preferences: {},
         };
-    return {
-      success: true,
-      message: 'Chat detail fetched successfully.',
+    return successResponse('Chat detail fetched successfully.', {
       thread,
       presence: this.realtimeState.getPresenceSnapshot(),
       preferences:
         preferences.conversationPreferences.find((item) => item.threadId === id) ??
         null,
-      data: {
-        thread,
-        presence: this.realtimeState.getPresenceSnapshot(),
-        preferences:
-          preferences.conversationPreferences.find((item) => item.threadId === id) ??
-          null,
-      },
-    };
+    });
   }
 
   @Get('detail/:id')
@@ -97,12 +86,7 @@ export class ChatController {
       userId,
     );
     const preferences = await this.socialStateDatabase.getChatPreferences(actor.id);
-    return {
-      success: true,
-      message: 'Chat settings fetched successfully.',
-      ...preferences,
-      data: preferences,
-    };
+    return successResponse('Chat settings fetched successfully.', preferences);
   }
 
   @Get('threads')
@@ -117,14 +101,7 @@ export class ChatController {
     const visibleThreads = actor
       ? threads.filter((thread) => (thread.participantIds ?? []).includes(actor.id))
       : threads;
-    return {
-      success: true,
-      message: 'Threads fetched successfully.',
-      data: visibleThreads,
-      items: visibleThreads,
-      results: visibleThreads,
-      threads: visibleThreads,
-    };
+    return listResponse('Threads fetched successfully.', visibleThreads);
   }
 
   @Post('threads')
@@ -142,38 +119,19 @@ export class ChatController {
         ? [body.targetUserId]
         : [];
     const thread = await this.coreDatabase.createOrOpenThread(actor.id, participantIds);
-    return {
-      success: true,
-      message: 'Thread created successfully.',
-      ...thread,
-      thread,
-      data: thread,
-    };
+    return successResponse('Thread created successfully.', thread);
   }
 
   @Get('threads/:id')
   async getThread(@Param('id') id: string) {
     const thread = await this.coreDatabase.getThread(id);
-    return {
-      success: true,
-      message: 'Thread fetched successfully.',
-      ...thread,
-      thread,
-      data: thread,
-    };
+    return successResponse('Thread fetched successfully.', thread);
   }
 
   @Get('threads/:id/messages')
   async getThreadMessages(@Param('id') id: string) {
     const messages = await this.coreDatabase.getThreadMessages(id);
-    return {
-      success: true,
-      message: 'Thread messages fetched successfully.',
-      data: messages,
-      items: messages,
-      results: messages,
-      messages,
-    };
+    return listResponse('Thread messages fetched successfully.', messages);
   }
 
   @Post('threads/:id/messages')
@@ -192,12 +150,7 @@ export class ChatController {
       kind: body.kind,
       mediaPath: body.mediaPath,
     });
-    return {
-      success: true,
-      message: 'Message sent successfully.',
-      ...message,
-      data: message,
-    };
+    return successResponse('Message sent successfully.', message);
   }
 
   @Patch('threads/:id/read')
@@ -212,12 +165,7 @@ export class ChatController {
       body.userId,
     );
     const result = await this.coreDatabase.markThreadMessagesRead(id, actor.id);
-    return {
-      success: true,
-      message: 'Thread marked as read successfully.',
-      ...result,
-      data: result,
-    };
+    return successResponse('Thread marked as read successfully.', result);
   }
 
   @Patch('threads/:id/archive')
@@ -236,12 +184,7 @@ export class ChatController {
       id,
       { archived: body.value ?? true },
     );
-    return {
-      success: true,
-      message: 'Thread archive preference updated successfully.',
-      data: preference,
-      preference,
-    };
+    return successResponse('Thread archive preference updated successfully.', preference);
   }
 
   @Patch('threads/:id/mute')
@@ -260,12 +203,7 @@ export class ChatController {
       id,
       { muted: body.value ?? true },
     );
-    return {
-      success: true,
-      message: 'Thread mute preference updated successfully.',
-      data: preference,
-      preference,
-    };
+    return successResponse('Thread mute preference updated successfully.', preference);
   }
 
   @Patch('threads/:id/pin')
@@ -284,12 +222,7 @@ export class ChatController {
       id,
       { pinned: body.value ?? true },
     );
-    return {
-      success: true,
-      message: 'Thread pin preference updated successfully.',
-      data: preference,
-      preference,
-    };
+    return successResponse('Thread pin preference updated successfully.', preference);
   }
 
   @Patch('threads/:id/unread')
@@ -307,12 +240,7 @@ export class ChatController {
       id,
       { unread: body.value ?? true },
     );
-    return {
-      success: true,
-      message: 'Thread unread preference updated successfully.',
-      data: preference,
-      preference,
-    };
+    return successResponse('Thread unread preference updated successfully.', preference);
   }
 
   @Delete('threads/:id/clear')
@@ -330,23 +258,13 @@ export class ChatController {
       id,
       { clearedAt: new Date() },
     );
-    return {
-      success: true,
-      message: 'Thread cleared successfully.',
-      data: preference,
-      preference,
-    };
+    return successResponse('Thread cleared successfully.', preference);
   }
 
   @Get('presence')
   getPresence() {
     const snapshot = this.realtimeState.getPresenceSnapshot();
-    return {
-      success: true,
-      message: 'Chat presence fetched successfully.',
-      data: snapshot,
-      presence: snapshot,
-    };
+    return successResponse('Chat presence fetched successfully.', snapshot);
   }
 
   @Post('presence')
@@ -365,12 +283,7 @@ export class ChatController {
           body.online ?? true,
         )
       : this.realtimeState.getPresenceSnapshot();
-    return {
-      success: true,
-      message: 'Chat presence updated successfully.',
-      data: presence,
-      presence,
-    };
+    return successResponse('Chat presence updated successfully.', presence);
   }
 
   @Get('preferences')
@@ -383,12 +296,7 @@ export class ChatController {
       userId,
     );
     const preferences = await this.socialStateDatabase.getChatPreferences(actor.id);
-    return {
-      success: true,
-      message: 'Chat preferences fetched successfully.',
-      data: preferences,
-      preferences,
-    };
+    return successResponse('Chat preferences fetched successfully.', preferences);
   }
 
   @Put('preferences')
@@ -405,11 +313,6 @@ export class ChatController {
       actor.id,
       body.patch,
     );
-    return {
-      success: true,
-      message: 'Chat preferences updated successfully.',
-      data: preferences,
-      preferences,
-    };
+    return successResponse('Chat preferences updated successfully.', preferences);
   }
 }

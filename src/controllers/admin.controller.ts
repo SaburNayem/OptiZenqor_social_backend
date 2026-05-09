@@ -19,6 +19,9 @@ import { AdminSessionGuard } from '../auth/admin-session.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import {
+  AdminAppConfigCreateDto,
+  AdminAppConfigQueryDto,
+  AdminAppConfigUpdateDto,
   AdminAuditLogsQueryDto,
   AdminContentQueryDto,
   AdminCreateLiveStreamDto,
@@ -26,6 +29,9 @@ import {
   AdminEntityListQueryDto,
   AdminEventUpdateDto,
   AdminEventUpsertDto,
+  AdminFeatureFlagCreateDto,
+  AdminFeatureFlagQueryDto,
+  AdminFeatureFlagUpdateDto,
   AdminJobUpdateDto,
   AdminJobUpsertDto,
   AdminMarketplaceUpdateDto,
@@ -324,6 +330,78 @@ export class AdminController {
     return successResponse(
       'Admin settings updated successfully.',
       await this.adminDatabase.updateOperationalSettings(body.patch, admin.adminId),
+    );
+  }
+
+  @Get('app-config')
+  @ApiOperation({ summary: 'List backend-backed app configuration entries' })
+  async getAppConfig(@Query() query: AdminAppConfigQueryDto) {
+    const payload = await this.adminDatabase.queryAppConfig(query);
+    return successResponse('Admin app configuration fetched successfully.', payload, payload.pagination);
+  }
+
+  @Post('app-config')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Create a backend-backed app configuration entry' })
+  async createAppConfig(
+    @Body() body: AdminAppConfigCreateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin app configuration created successfully.',
+      await this.adminDatabase.createAppConfig(body, admin.adminId),
+    );
+  }
+
+  @Patch('app-config/:key')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Update a backend-backed app configuration entry' })
+  async updateAppConfig(
+    @Param('key') key: string,
+    @Body() body: AdminAppConfigUpdateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin app configuration updated successfully.',
+      await this.adminDatabase.updateAppConfig(key, body, admin.adminId),
+    );
+  }
+
+  @Get('feature-flags')
+  @ApiOperation({ summary: 'List backend-backed feature flags' })
+  async getFeatureFlags(@Query() query: AdminFeatureFlagQueryDto) {
+    const payload = await this.adminDatabase.queryFeatureFlags(query);
+    return successResponse('Admin feature flags fetched successfully.', payload, payload.pagination);
+  }
+
+  @Post('feature-flags')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Create a backend-backed feature flag' })
+  async createFeatureFlag(
+    @Body() body: AdminFeatureFlagCreateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin feature flag created successfully.',
+      await this.adminDatabase.createFeatureFlag(body, admin.adminId),
+    );
+  }
+
+  @Patch('feature-flags/:key')
+  @Roles('Super Admin', 'Operations Admin')
+  @ApiOperation({ summary: 'Update a backend-backed feature flag' })
+  async updateFeatureFlag(
+    @Param('key') key: string,
+    @Body() body: AdminFeatureFlagUpdateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin feature flag updated successfully.',
+      await this.adminDatabase.updateFeatureFlag(key, body, admin.adminId),
     );
   }
 

@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, Forb
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CreatePostDto, UpdatePostDto } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { listResponse, successResponse } from '../utils/api-response.util';
 
 @ApiTags('posts')
 @Controller('posts')
@@ -23,7 +24,7 @@ export class PostsController {
         author: await this.coreDatabase.getUser(post.authorId),
       })),
     );
-    return this.wrapListResponse('Posts fetched successfully.', posts);
+    return listResponse('Posts fetched successfully.', posts);
   }
 
   @Get(':id')
@@ -40,13 +41,7 @@ export class PostsController {
       reactions,
     };
 
-    return {
-      success: true,
-      message: 'Post fetched successfully.',
-      ...payload,
-      post: payload,
-      data: payload,
-    };
+    return successResponse('Post fetched successfully.', payload);
   }
 
   @Post()
@@ -68,13 +63,7 @@ export class PostsController {
       ...created,
       author: await this.coreDatabase.getUser(created.authorId),
     };
-    return {
-      success: true,
-      message: 'Post created successfully.',
-      ...post,
-      post,
-      data: post,
-    };
+    return successResponse('Post created successfully.', post);
   }
 
   @Post('create')
@@ -101,13 +90,7 @@ export class PostsController {
       ...updated,
       author: await this.coreDatabase.getUser(updated.authorId),
     };
-    return {
-      success: true,
-      message: 'Post updated successfully.',
-      ...post,
-      post,
-      data: post,
-    };
+    return successResponse('Post updated successfully.', post);
   }
 
   @Delete(':id')
@@ -120,17 +103,6 @@ export class PostsController {
     if (existing.authorId !== actor.id) {
       throw new ForbiddenException('You can only delete your own post.');
     }
-    return this.coreDatabase.deletePost(id);
-  }
-
-  private wrapListResponse(message: string, items: unknown[]) {
-    return {
-      success: true,
-      message,
-      data: items,
-      items,
-      results: items,
-      count: items.length,
-    };
+    return successResponse('Post deleted successfully.', await this.coreDatabase.deletePost(id));
   }
 }

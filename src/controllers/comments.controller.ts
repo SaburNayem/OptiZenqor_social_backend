@@ -12,7 +12,7 @@ export class CommentsController {
   @Get()
   async getPostComments(@Param('id') id: string) {
     const comments = await this.coreDatabase.getPostComments(id);
-    return successResponse('Comments fetched successfully.', { items: comments, comments });
+    return successResponse('Comments fetched successfully.', comments);
   }
 
   @Post()
@@ -36,7 +36,7 @@ export class CommentsController {
   @Get(':commentId/replies')
   async getReplies(@Param('id') id: string, @Param('commentId') commentId: string) {
     const replies = await this.coreDatabase.getPostCommentReplies(id, commentId);
-    return successResponse('Replies fetched successfully.', { items: replies, replies });
+    return successResponse('Replies fetched successfully.', replies);
   }
 
   @Post(':commentId/replies')

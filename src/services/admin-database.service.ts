@@ -688,6 +688,392 @@ export class AdminDatabaseService implements OnModuleInit {
     return this.getOperationalSettings();
   }
 
+  async queryAppConfig(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    category?: string;
+    isPublic?: boolean;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const where: Prisma.AdminAppConfigEntryWhereInput = {
+      ...(query.category?.trim() ? { category: query.category.trim() } : {}),
+      ...(typeof query.isPublic === 'boolean' ? { isPublic: query.isPublic } : {}),
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { key: { contains: query.search.trim(), mode: 'insensitive' } },
+              { title: { contains: query.search.trim(), mode: 'insensitive' } },
+              { description: { contains: query.search.trim(), mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, items] = await Promise.all([
+      this.prisma.adminAppConfigEntry.count({ where }),
+      this.prisma.adminAppConfigEntry.findMany({
+        where,
+        orderBy: [{ category: 'asc' }, { key: 'asc' }],
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return {
+      ...this.wrapPaginated(
+        items.map((item) => ({
+          key: item.key,
+          category: item.category,
+          title: item.title,
+          description: item.description,
+          value: item.value,
+          isPublic: item.isPublic,
+          metadata: this.readObject(item.metadata),
+          updatedAt: item.updatedAt.toISOString(),
+        })),
+        page,
+        limit,
+        total,
+      ),
+    };
+  }
+
+  async createAppConfig(
+    input: {
+      key?: string;
+      title: string;
+      category?: string;
+      description?: string;
+      value?: unknown;
+      isPublic?: boolean;
+      metadata?: Record<string, unknown>;
+    },
+    actorAdminId?: string,
+  ) {
+    const key = (input.key ?? input.title)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    if (!key) {
+      throw new ConflictException('A valid app config key is required.');
+    }
+
+    const existing = await this.prisma.adminAppConfigEntry.findUnique({ where: { key } });
+    if (existing) {
+      throw new ConflictException(`App config ${key} already exists.`);
+    }
+
+    const created = await this.prisma.adminAppConfigEntry.create({
+      data: {
+        key,
+        title: input.title.trim(),
+        category: input.category?.trim() || 'general',
+        description: input.description?.trim() || null,
+        value: this.normalizeJsonValue(input.value ?? {}),
+        isPublic: Boolean(input.isPublic),
+        metadata: this.normalizeJsonValue(input.metadata ?? {}),
+        updatedAt: new Date(),
+      },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'app_config.create',
+      entityType: 'admin_app_config_entry',
+      entityId: created.key,
+      metadata: {
+        key: created.key,
+        category: created.category,
+        isPublic: created.isPublic,
+      },
+    });
+
+    return {
+      key: created.key,
+      category: created.category,
+      title: created.title,
+      description: created.description,
+      value: created.value,
+      isPublic: created.isPublic,
+      metadata: this.readObject(created.metadata),
+      updatedAt: created.updatedAt.toISOString(),
+    };
+  }
+
+  async updateAppConfig(
+    key: string,
+    input: {
+      title?: string;
+      category?: string;
+      description?: string;
+      value?: unknown;
+      isPublic?: boolean;
+      metadata?: Record<string, unknown>;
+    },
+    actorAdminId?: string,
+  ) {
+    const existing = await this.prisma.adminAppConfigEntry.findUnique({
+      where: { key: key.trim() },
+    });
+    if (!existing) {
+      throw new NotFoundException(`App config ${key} not found.`);
+    }
+
+    const updated = await this.prisma.adminAppConfigEntry.update({
+      where: { key: key.trim() },
+      data: {
+        ...(typeof input.title === 'string' ? { title: input.title.trim() } : {}),
+        ...(typeof input.category === 'string'
+          ? { category: input.category.trim() || 'general' }
+          : {}),
+        ...(typeof input.description === 'string' ? { description: input.description.trim() } : {}),
+        ...(Object.prototype.hasOwnProperty.call(input, 'value')
+          ? { value: this.normalizeJsonValue(input.value) }
+          : {}),
+        ...(typeof input.isPublic === 'boolean' ? { isPublic: input.isPublic } : {}),
+        ...(input.metadata ? { metadata: this.normalizeJsonValue(input.metadata) } : {}),
+        updatedAt: new Date(),
+      },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'app_config.update',
+      entityType: 'admin_app_config_entry',
+      entityId: updated.key,
+      metadata: {
+        before: {
+          category: existing.category,
+          title: existing.title,
+          description: existing.description,
+          isPublic: existing.isPublic,
+        },
+        after: {
+          category: updated.category,
+          title: updated.title,
+          description: updated.description,
+          isPublic: updated.isPublic,
+        },
+      },
+    });
+
+    return {
+      key: updated.key,
+      category: updated.category,
+      title: updated.title,
+      description: updated.description,
+      value: updated.value,
+      isPublic: updated.isPublic,
+      metadata: this.readObject(updated.metadata),
+      updatedAt: updated.updatedAt.toISOString(),
+    };
+  }
+
+  async queryFeatureFlags(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    category?: string;
+    isEnabled?: boolean;
+  }) {
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const skip = (page - 1) * limit;
+    const where: Prisma.AdminFeatureFlagWhereInput = {
+      ...(query.category?.trim() ? { category: query.category.trim() } : {}),
+      ...(typeof query.isEnabled === 'boolean' ? { isEnabled: query.isEnabled } : {}),
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { key: { contains: query.search.trim(), mode: 'insensitive' } },
+              { title: { contains: query.search.trim(), mode: 'insensitive' } },
+              { description: { contains: query.search.trim(), mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, items] = await Promise.all([
+      this.prisma.adminFeatureFlag.count({ where }),
+      this.prisma.adminFeatureFlag.findMany({
+        where,
+        orderBy: [{ category: 'asc' }, { key: 'asc' }],
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return {
+      ...this.wrapPaginated(
+        items.map((item) => ({
+          key: item.key,
+          category: item.category,
+          title: item.title,
+          description: item.description,
+          isEnabled: item.isEnabled,
+          rolloutPercentage: item.rolloutPercentage,
+          audience: this.readObject(item.audience),
+          metadata: this.readObject(item.metadata),
+          updatedAt: item.updatedAt.toISOString(),
+        })),
+        page,
+        limit,
+        total,
+      ),
+    };
+  }
+
+  async createFeatureFlag(
+    input: {
+      key?: string;
+      title: string;
+      category?: string;
+      description?: string;
+      isEnabled?: boolean;
+      rolloutPercentage?: number;
+      audience?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+    },
+    actorAdminId?: string,
+  ) {
+    const key = (input.key ?? input.title)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    if (!key) {
+      throw new ConflictException('A valid feature flag key is required.');
+    }
+
+    const existing = await this.prisma.adminFeatureFlag.findUnique({ where: { key } });
+    if (existing) {
+      throw new ConflictException(`Feature flag ${key} already exists.`);
+    }
+
+    const created = await this.prisma.adminFeatureFlag.create({
+      data: {
+        key,
+        title: input.title.trim(),
+        category: input.category?.trim() || 'general',
+        description: input.description?.trim() || null,
+        isEnabled: Boolean(input.isEnabled),
+        rolloutPercentage:
+          typeof input.rolloutPercentage === 'number'
+            ? Math.max(0, Math.min(100, Math.trunc(input.rolloutPercentage)))
+            : 100,
+        audience: this.normalizeJsonValue(input.audience ?? {}),
+        metadata: this.normalizeJsonValue(input.metadata ?? {}),
+        updatedAt: new Date(),
+      },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'feature_flag.create',
+      entityType: 'admin_feature_flag',
+      entityId: created.key,
+      metadata: {
+        key: created.key,
+        category: created.category,
+        isEnabled: created.isEnabled,
+        rolloutPercentage: created.rolloutPercentage,
+      },
+    });
+
+    return {
+      key: created.key,
+      category: created.category,
+      title: created.title,
+      description: created.description,
+      isEnabled: created.isEnabled,
+      rolloutPercentage: created.rolloutPercentage,
+      audience: this.readObject(created.audience),
+      metadata: this.readObject(created.metadata),
+      updatedAt: created.updatedAt.toISOString(),
+    };
+  }
+
+  async updateFeatureFlag(
+    key: string,
+    input: {
+      title?: string;
+      category?: string;
+      description?: string;
+      isEnabled?: boolean;
+      rolloutPercentage?: number;
+      audience?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+    },
+    actorAdminId?: string,
+  ) {
+    const existing = await this.prisma.adminFeatureFlag.findUnique({
+      where: { key: key.trim() },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Feature flag ${key} not found.`);
+    }
+
+    const updated = await this.prisma.adminFeatureFlag.update({
+      where: { key: key.trim() },
+      data: {
+        ...(typeof input.title === 'string' ? { title: input.title.trim() } : {}),
+        ...(typeof input.category === 'string'
+          ? { category: input.category.trim() || 'general' }
+          : {}),
+        ...(typeof input.description === 'string' ? { description: input.description.trim() } : {}),
+        ...(typeof input.isEnabled === 'boolean' ? { isEnabled: input.isEnabled } : {}),
+        ...(typeof input.rolloutPercentage === 'number'
+          ? {
+              rolloutPercentage: Math.max(
+                0,
+                Math.min(100, Math.trunc(input.rolloutPercentage)),
+              ),
+            }
+          : {}),
+        ...(input.audience ? { audience: this.normalizeJsonValue(input.audience) } : {}),
+        ...(input.metadata ? { metadata: this.normalizeJsonValue(input.metadata) } : {}),
+        updatedAt: new Date(),
+      },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'feature_flag.update',
+      entityType: 'admin_feature_flag',
+      entityId: updated.key,
+      metadata: {
+        before: {
+          category: existing.category,
+          title: existing.title,
+          isEnabled: existing.isEnabled,
+          rolloutPercentage: existing.rolloutPercentage,
+        },
+        after: {
+          category: updated.category,
+          title: updated.title,
+          isEnabled: updated.isEnabled,
+          rolloutPercentage: updated.rolloutPercentage,
+        },
+      },
+    });
+
+    return {
+      key: updated.key,
+      category: updated.category,
+      title: updated.title,
+      description: updated.description,
+      isEnabled: updated.isEnabled,
+      rolloutPercentage: updated.rolloutPercentage,
+      audience: this.readObject(updated.audience),
+      metadata: this.readObject(updated.metadata),
+      updatedAt: updated.updatedAt.toISOString(),
+    };
+  }
+
   async getAuditLogs() {
     const rows = await this.prisma.adminAuditLog.findMany({
       include: { actorAdmin: true },
@@ -786,6 +1172,7 @@ export class AdminDatabaseService implements OnModuleInit {
         where,
         include: {
           user: true,
+          assignedAdmin: true,
           conversation: {
             include: {
               messages: {
@@ -793,6 +1180,11 @@ export class AdminDatabaseService implements OnModuleInit {
                 take: 1,
               },
             },
+          },
+          internalNotes: {
+            include: { actorAdmin: true },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
           },
         },
         orderBy: { updatedAt: 'desc' },
@@ -852,6 +1244,7 @@ export class AdminDatabaseService implements OnModuleInit {
       where: { id },
       include: {
         user: true,
+        assignedAdmin: true,
         conversation: {
           include: {
             messages: {
@@ -860,6 +1253,11 @@ export class AdminDatabaseService implements OnModuleInit {
             },
           },
         },
+        internalNotes: {
+          include: { actorAdmin: true },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
       },
     });
     if (!existing) {
@@ -867,15 +1265,15 @@ export class AdminDatabaseService implements OnModuleInit {
     }
 
     const metadata = this.readObject(existing.metadata);
-    const adminNotes = this.readStringArray(metadata.adminNotes);
     const note = patch.adminNote?.trim();
     const replyMessage = patch.replyMessage?.trim();
     const nextStatus = patch.status?.trim().toLowerCase();
     const nextPriority = patch.priority?.trim().toLowerCase();
-    const assignedAdminId = patch.assignedAdminId?.trim() || null;
-    const previousAssignedAdminId = this.readNullableString(metadata.assignedAdminId);
-    const previousSlaHours = this.readNumber(metadata.slaHours);
-    const previousSlaDueAt = this.readDate(metadata.slaDueAt);
+    const hasAssignedAdminPatch = patch.assignedAdminId !== undefined;
+    const assignedAdminId = hasAssignedAdminPatch ? patch.assignedAdminId?.trim() || null : existing.assignedToAdminId;
+    const previousAssignedAdminId = existing.assignedToAdminId ?? null;
+    const previousSlaHours = existing.slaHours ?? null;
+    const previousSlaDueAt = existing.slaDueAt ?? null;
     const nextSlaHours = patch.slaHours ?? previousSlaHours;
     const nextSlaDueAt =
       patch.slaHours === undefined ? previousSlaDueAt : new Date(Date.now() + patch.slaHours * 60 * 60 * 1000);
@@ -887,21 +1285,14 @@ export class AdminDatabaseService implements OnModuleInit {
 
     const nextMetadata = {
       ...metadata,
-      adminNotes: note
-        ? [
-            ...adminNotes,
-            `${new Date().toISOString()} ${note}`,
-          ]
-        : adminNotes,
       lastAdminActionAt: new Date().toISOString(),
-      assignedAdminId:
-        assignedAdminId === null
-          ? (metadata.assignedAdminId ?? null)
-          : assignedAdminId,
+      assignedAdminId: assignedAdminId,
       assignedAt:
-        assignedAdminId === null
-          ? (metadata.assignedAt ?? null)
-          : timestamp.toISOString(),
+        assignedAdminId === previousAssignedAdminId
+          ? (existing.assignedAt?.toISOString() ?? null)
+          : assignedAdminId
+            ? timestamp.toISOString()
+            : null,
       slaHours: nextSlaHours,
       slaDueAt:
         nextSlaDueAt?.toISOString() ?? null,
@@ -926,11 +1317,21 @@ export class AdminDatabaseService implements OnModuleInit {
         data: {
           status: nextStatus ?? undefined,
           priority: nextPriority ?? undefined,
+          assignedToAdminId: assignedAdminId,
+          assignedAt:
+            assignedAdminId === previousAssignedAdminId
+              ? existing.assignedAt ?? undefined
+              : assignedAdminId
+                ? timestamp
+                : null,
+          slaHours: nextSlaHours,
+          slaDueAt: nextSlaDueAt,
           metadata: nextMetadata as Prisma.InputJsonValue,
           updatedAt: new Date(),
         },
         include: {
           user: true,
+          assignedAdmin: true,
           conversation: {
             include: {
               messages: {
@@ -938,6 +1339,11 @@ export class AdminDatabaseService implements OnModuleInit {
                 take: 1,
               },
             },
+          },
+          internalNotes: {
+            include: { actorAdmin: true },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
           },
           actionHistory: {
             include: { actorAdmin: true, actorUser: true },
@@ -1021,6 +1427,19 @@ export class AdminDatabaseService implements OnModuleInit {
         });
       }
 
+      if (note) {
+        await tx.supportTicketInternalNote.create({
+          data: {
+            id: makeId('support_note'),
+            ticketId: updatedTicket.id,
+            actorAdminId: actorAdminId ?? null,
+            note,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          },
+        });
+      }
+
       return [updatedTicket];
     });
 
@@ -1047,12 +1466,18 @@ export class AdminDatabaseService implements OnModuleInit {
       where: { id },
       include: {
         user: true,
+        assignedAdmin: true,
         conversation: {
           include: {
             messages: {
               orderBy: { createdAt: 'asc' },
             },
           },
+        },
+        internalNotes: {
+          include: { actorAdmin: true },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
         },
         actionHistory: {
           include: { actorAdmin: true, actorUser: true },
@@ -5129,7 +5554,11 @@ export class AdminDatabaseService implements OnModuleInit {
       targetId: item.targetId,
       reason: item.reason,
       evidence: this.readStringArray(item.evidence),
-      history: this.readStringArray(item.history),
+      history: this.buildModerationTimeline(
+        item.actionHistory,
+        item.assignmentHistory,
+        item.history,
+      ),
       assignedTo: item.assignedAdmin?.name ?? '',
       assignedToAdminId: item.assignedAdmin?.id ?? null,
       status: item.status,
@@ -5139,6 +5568,67 @@ export class AdminDatabaseService implements OnModuleInit {
       actionHistory: this.mapModerationActionHistoryList(item.actionHistory),
       assignmentHistory: this.mapModerationAssignmentHistoryList(item.assignmentHistory),
     };
+  }
+
+  private buildModerationTimeline(
+    actionHistory:
+      | Array<{
+          action: string;
+          note: string | null;
+          createdAt: Date;
+          actorAdmin?: { name: string; email: string } | null;
+        }>
+      | null
+      | undefined,
+    assignmentHistory:
+      | Array<{
+          note: string | null;
+          previousSeverity: string | null;
+          nextSeverity: string | null;
+          createdAt: Date;
+          actorAdmin?: { name: string; email: string } | null;
+          previousAdmin?: { name: string; email: string } | null;
+          nextAdmin?: { name: string; email: string } | null;
+        }>
+      | null
+      | undefined,
+    legacyHistory: Prisma.JsonValue,
+  ) {
+    const events: Array<{ createdAt: Date; message: string }> = [];
+
+    for (const item of actionHistory ?? []) {
+      const actor = item.actorAdmin?.name ?? item.actorAdmin?.email ?? 'System';
+      const note = item.note?.trim() || `Action applied: ${item.action}`;
+      events.push({
+        createdAt: item.createdAt,
+        message: `${item.createdAt.toISOString()}: ${note} by ${actor}`,
+      });
+    }
+
+    for (const item of assignmentHistory ?? []) {
+      const actor = item.actorAdmin?.name ?? item.actorAdmin?.email ?? 'System';
+      const reassignment =
+        item.previousAdmin?.name || item.nextAdmin?.name
+          ? `assignment ${item.previousAdmin?.name ?? 'unassigned'} -> ${item.nextAdmin?.name ?? 'unassigned'}`
+          : 'assignment updated';
+      const severity =
+        item.previousSeverity || item.nextSeverity
+          ? ` severity ${item.previousSeverity ?? 'n/a'} -> ${item.nextSeverity ?? 'n/a'}`
+          : '';
+      const note = item.note?.trim() || `${reassignment}${severity}`;
+      events.push({
+        createdAt: item.createdAt,
+        message: `${item.createdAt.toISOString()}: ${note} by ${actor}`,
+      });
+    }
+
+    if (events.length > 0) {
+      return events
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+        .map((item) => item.message);
+    }
+
+    return this.readStringArray(legacyHistory);
   }
 
   private mapSupportTicket(item: {
@@ -5185,9 +5675,25 @@ export class AdminDatabaseService implements OnModuleInit {
       previousAdmin?: { id: string; name: string; email: string } | null;
       nextAdmin?: { id: string; name: string; email: string } | null;
     }>;
+    assignedToAdminId?: string | null;
+    assignedAt?: Date | null;
+    slaHours?: number | null;
+    slaDueAt?: Date | null;
+    assignedAdmin?: { id: string; name: string; email: string } | null;
+    internalNotes?: Array<{
+      id: string;
+      note: string;
+      createdAt: Date;
+      updatedAt: Date;
+      actorAdmin?: { id: string; name: string; email: string } | null;
+    }>;
   }) {
     const metadata = this.readObject(item.metadata);
-    const adminNotes = this.readStringArray(metadata.adminNotes);
+    const internalNotes = this.mapSupportInternalNotes(item.internalNotes);
+    const adminNotes =
+      internalNotes.length > 0
+        ? internalNotes.map((entry) => entry.note)
+        : this.readStringArray(metadata.adminNotes);
     const latestMessage = item.conversation?.messages?.[0];
     return {
       id: item.id,
@@ -5209,7 +5715,24 @@ export class AdminDatabaseService implements OnModuleInit {
       channel: item.conversation?.channel ?? null,
       latestMessage: latestMessage?.body ?? null,
       latestMessageAt: latestMessage?.createdAt?.toISOString() ?? null,
+      assignedAdminId:
+        item.assignedToAdminId ?? this.readNullableString(metadata.assignedAdminId),
+      assignedAdmin:
+        item.assignedAdmin
+          ? {
+              id: item.assignedAdmin.id,
+              name: item.assignedAdmin.name,
+              email: item.assignedAdmin.email,
+            }
+          : null,
+      assignedAt:
+        item.assignedAt?.toISOString() ?? this.readNullableString(metadata.assignedAt),
+      slaHours: item.slaHours ?? this.readNumber(metadata.slaHours),
+      slaDueAt:
+        item.slaDueAt?.toISOString() ??
+        this.readNullableString(metadata.slaDueAt),
       adminNotes,
+      internalNotes,
       metadata,
       actionHistory: this.mapSupportActionHistoryList(item.actionHistory),
       assignmentHistory: this.mapSupportAssignmentHistoryList(item.assignmentHistory),
@@ -5293,6 +5816,28 @@ export class AdminDatabaseService implements OnModuleInit {
         ? { id: item.nextAdmin.id, name: item.nextAdmin.name, email: item.nextAdmin.email }
         : null,
       createdAt: item.createdAt.toISOString(),
+    }));
+  }
+
+  private mapSupportInternalNotes(
+    items?:
+      | Array<{
+          id: string;
+          note: string;
+          createdAt: Date;
+          updatedAt: Date;
+          actorAdmin?: { id: string; name: string; email: string } | null;
+        }>
+      | null,
+  ) {
+    return (items ?? []).map((item) => ({
+      id: item.id,
+      note: item.note,
+      actorAdmin: item.actorAdmin
+        ? { id: item.actorAdmin.id, name: item.actorAdmin.name, email: item.actorAdmin.email }
+        : null,
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString(),
     }));
   }
 

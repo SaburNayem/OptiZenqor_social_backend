@@ -1066,16 +1066,24 @@ model SupportTicket {
   category          String                           @map("category")
   status            String                           @default("open") @map("status")
   priority          String                           @default("normal") @map("priority")
+  assignedToAdminId String?                          @map("assigned_to_admin_id")
+  assignedAt        DateTime?                        @map("assigned_at") @db.Timestamptz(6)
+  slaHours          Int?                             @map("sla_hours")
+  slaDueAt          DateTime?                        @map("sla_due_at") @db.Timestamptz(6)
   createdAt         DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime                         @default(now()) @map("updated_at") @db.Timestamptz(6)
   metadata          Json                             @default("{}") @map("metadata")
   user              AppUser?                         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  assignedAdmin     AdminUser?                       @relation("SupportTicketAssignedAdmin", fields: [assignedToAdminId], references: [id], onDelete: SetNull)
   conversation      SupportConversation?
   actionHistory     SupportTicketActionHistory[]
   assignmentHistory SupportTicketAssignmentHistory[]
+  internalNotes     SupportTicketInternalNote[]
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([status, updatedAt(sort: Desc)])
+  @@index([assignedToAdminId, updatedAt(sort: Desc)])
+  @@index([slaDueAt, status])
   @@map("support_tickets")
 }
 
@@ -1157,6 +1165,21 @@ model SupportTicketAssignmentHistory {
   @@index([actorAdminId, createdAt(sort: Desc)])
   @@index([nextAdminId, createdAt(sort: Desc)])
   @@map("support_ticket_assignment_history")
+}
+
+model SupportTicketInternalNote {
+  id           String        @id @map("id")
+  ticketId     String        @map("ticket_id")
+  actorAdminId String?       @map("actor_admin_id")
+  note         String        @map("note")
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime      @default(now()) @map("updated_at") @db.Timestamptz(6)
+  ticket       SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actorAdmin   AdminUser?    @relation("SupportTicketInternalNoteActor", fields: [actorAdminId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt(sort: Desc)])
+  @@index([actorAdminId, createdAt(sort: Desc)])
+  @@map("support_ticket_internal_notes")
 }
 
 model Subscription {
@@ -1378,10 +1401,12 @@ model AdminUser {
   auditLogs                   AdminAuditLog[]                     @relation("AdminAuditActor")
   assignedCases               ModerationCase[]                    @relation("ModerationAssignedAdmin")
   notificationCampaignActions NotificationCampaignActionHistory[]
+  assignedSupportTickets      SupportTicket[]                     @relation("SupportTicketAssignedAdmin")
   supportActionHistory        SupportTicketActionHistory[]        @relation("SupportActionActorAdmin")
   supportAssignmentHistory    SupportTicketAssignmentHistory[]    @relation("SupportAssignmentActorAdmin")
   supportAssignmentsFrom      SupportTicketAssignmentHistory[]    @relation("SupportAssignmentPreviousAdmin")
   supportAssignmentsTo        SupportTicketAssignmentHistory[]    @relation("SupportAssignmentNextAdmin")
+  supportInternalNotes        SupportTicketInternalNote[]         @relation("SupportTicketInternalNoteActor")
   moderationActionHistory     ModerationCaseActionHistory[]       @relation("ModerationActionActorAdmin")
   moderationAssignmentHistory ModerationCaseAssignmentHistory[]   @relation("ModerationAssignmentActorAdmin")
   moderationAssignmentsFrom   ModerationCaseAssignmentHistory[]   @relation("ModerationAssignmentPreviousAdmin")
@@ -1447,6 +1472,7 @@ model ModerationCase {
 
   @@index([status, updatedAt(sort: Desc)])
   @@index([targetType, updatedAt(sort: Desc)])
+  @@index([assignedToAdminId, status, updatedAt(sort: Desc)])
   @@map("admin_moderation_cases")
 }
 
@@ -1496,6 +1522,37 @@ model AdminOperationalSetting {
   updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 
   @@map("admin_operational_settings")
+}
+
+model AdminAppConfigEntry {
+  key         String   @id @map("key")
+  category    String   @default("general") @map("category")
+  title       String   @map("title")
+  description String?  @map("description")
+  value       Json     @default("{}") @map("value")
+  isPublic    Boolean  @default(false) @map("is_public")
+  metadata    Json     @default("{}") @map("metadata")
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([category, key])
+  @@index([isPublic, category])
+  @@map("admin_app_config_entries")
+}
+
+model AdminFeatureFlag {
+  key               String   @id @map("key")
+  category          String   @default("general") @map("category")
+  title             String   @map("title")
+  description       String?  @map("description")
+  isEnabled         Boolean  @default(false) @map("is_enabled")
+  rolloutPercentage Int      @default(100) @map("rollout_percentage")
+  audience          Json     @default("{}") @map("audience")
+  metadata          Json     @default("{}") @map("metadata")
+  updatedAt         DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([category, key])
+  @@index([isEnabled, category])
+  @@map("admin_feature_flags")
 }
 
 model SettingsSectionCatalog {

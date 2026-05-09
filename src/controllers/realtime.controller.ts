@@ -68,7 +68,7 @@ export class RealtimeController {
         activeForUser: (thread.participantIds ?? []).includes(user.id),
       }));
 
-    return successResponse('Group chats fetched successfully.', { items: groups, groups });
+    return successResponse('Group chats fetched successfully.', groups);
   }
 
   @UseGuards(SessionAuthGuard)
@@ -204,7 +204,7 @@ export class RealtimeController {
       }),
     );
 
-    return successResponse('Calls fetched successfully.', { items: calls, calls });
+    return successResponse('Calls fetched successfully.', calls);
   }
 
   @UseGuards(SessionAuthGuard)
@@ -396,10 +396,7 @@ export class RealtimeController {
   @Get('calls/sessions')
   getCallSessions() {
     const sessions = this.realtimeState.getCallSessions();
-    return successResponse('Call sessions fetched successfully.', {
-      items: sessions,
-      sessions,
-    });
+    return successResponse('Call sessions fetched successfully.', sessions);
   }
 
   @Get('calls/sessions/:id')

@@ -49,6 +49,7 @@ export type IdPrefix =
   | 'support_message'
   | 'support_action'
   | 'support_assignment'
+  | 'support_note'
   | 'offer'
   | 'admin'
   | 'push_device'

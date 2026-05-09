@@ -2,6 +2,7 @@ import { Body, Controller, Get, Headers, Param, Patch, Post } from '@nestjs/comm
 import { ApiTags } from '@nestjs/swagger';
 import { PostReactionDto, UserActorDto } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
+import { listResponse, successResponse } from '../utils/api-response.util';
 
 @ApiTags('likes')
 @Controller('posts')
@@ -11,7 +12,7 @@ export class LikesController {
   @Get(':id/reactions')
   async getPostReactions(@Param('id') id: string) {
     const reactions = await this.coreDatabase.getPostReactions(id);
-    return this.wrapListResponse('Post reactions fetched successfully.', reactions);
+    return listResponse('Post reactions fetched successfully.', reactions);
   }
 
   @Post(':id/reactions')
@@ -25,7 +26,7 @@ export class LikesController {
       body.userId,
     );
     const result = await this.coreDatabase.reactToPost(id, actor.id, body.reaction);
-    return this.wrapMutationResponse('Post reaction updated successfully.', result);
+    return successResponse('Post reaction updated successfully.', result);
   }
 
   @Patch(':id/like')
@@ -39,7 +40,7 @@ export class LikesController {
       body.userId,
     );
     const result = await this.coreDatabase.reactToPost(id, actor.id, 'like');
-    return this.wrapMutationResponse('Post liked successfully.', result);
+    return successResponse('Post liked successfully.', result);
   }
 
   @Patch(':id/unlike')
@@ -53,26 +54,6 @@ export class LikesController {
       body.userId,
     );
     const result = await this.coreDatabase.unlikePost(id, actor.id);
-    return this.wrapMutationResponse('Post unliked successfully.', result);
-  }
-
-  private wrapListResponse(message: string, items: unknown[]) {
-    return {
-      success: true,
-      message,
-      data: items,
-      items,
-      results: items,
-      count: items.length,
-    };
-  }
-
-  private wrapMutationResponse(message: string, payload: Record<string, unknown>) {
-    return {
-      success: true,
-      message,
-      ...payload,
-      data: payload,
-    };
+    return successResponse('Post unliked successfully.', result);
   }
 }

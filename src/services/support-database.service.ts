@@ -148,6 +148,10 @@ export class SupportDatabaseService {
       where: userId?.trim() ? { userId: userId.trim() } : undefined,
       orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
       include: {
+        internalNotes: {
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
         conversation: {
           include: {
             messages: {
@@ -232,6 +236,10 @@ export class SupportDatabaseService {
       },
       include: {
         user: true,
+        internalNotes: {
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
         conversation: {
           include: {
             messages: {
@@ -273,11 +281,13 @@ export class SupportDatabaseService {
         ticket.user?.username?.trim() ||
         ticket.user?.email?.trim() ||
         null,
-      adminNotes: this.readStringArray(metadata.adminNotes),
+      adminNotes:
+        ticket.internalNotes?.map((note) => note.note) ?? this.readStringArray(metadata.adminNotes),
       assignedAdminId:
-        typeof metadata.assignedAdminId === 'string' ? metadata.assignedAdminId : null,
-      slaHours: typeof metadata.slaHours === 'number' ? metadata.slaHours : null,
-      slaDueAt: this.readMetadataString(ticket.metadata, 'slaDueAt') ?? null,
+        ticket.assignedToAdminId ??
+        (typeof metadata.assignedAdminId === 'string' ? metadata.assignedAdminId : null),
+      slaHours: ticket.slaHours ?? (typeof metadata.slaHours === 'number' ? metadata.slaHours : null),
+      slaDueAt: ticket.slaDueAt?.toISOString() ?? this.readMetadataString(ticket.metadata, 'slaDueAt') ?? null,
       messages,
     };
   }
@@ -480,9 +490,14 @@ export class SupportDatabaseService {
     category: string;
     status: string;
     priority: string;
+    assignedToAdminId?: string | null;
+    assignedAt?: Date | null;
+    slaHours?: number | null;
+    slaDueAt?: Date | null;
     createdAt: Date;
     updatedAt: Date;
     metadata: Prisma.JsonValue;
+    internalNotes?: Array<{ note: string }> | null;
     conversation?: {
       id: string;
       status: string;
@@ -502,6 +517,21 @@ export class SupportDatabaseService {
       conversationId: ticket.conversation?.id ?? null,
       conversationStatus: ticket.conversation?.status ?? null,
       channel: ticket.conversation?.channel ?? 'in_app',
+      assignedAdminId:
+        ticket.assignedToAdminId ??
+        this.readMetadataString(ticket.metadata, 'assignedAdminId'),
+      assignedAt:
+        ticket.assignedAt?.toISOString() ?? this.readMetadataString(ticket.metadata, 'assignedAt'),
+      slaHours:
+        ticket.slaHours ??
+        (() => {
+          const metadata = this.readMetadataObject(ticket.metadata);
+          return typeof metadata.slaHours === 'number' ? metadata.slaHours : null;
+        })(),
+      slaDueAt:
+        ticket.slaDueAt?.toISOString() ?? this.readMetadataString(ticket.metadata, 'slaDueAt'),
+      adminNotes:
+        ticket.internalNotes?.map((note) => note.note) ?? this.readStringArray(this.readMetadataObject(ticket.metadata).adminNotes),
       latestMessage:
         ticket.conversation?.messages?.[0]?.body?.trim() ||
         this.readMetadataString(ticket.metadata, 'latestMessage'),
