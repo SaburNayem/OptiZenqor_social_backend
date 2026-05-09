@@ -1,6 +1,6 @@
 # FULL_PLATFORM_CURRENT_MISMATCH_REPORT
 
-Audit date: 2026-05-08
+Audit date: 2026-05-09
 
 ## Local + GitHub Scope
 
@@ -65,12 +65,9 @@ Flutter references backend APIs for:
 
 Flutter-specific mismatches still active:
 
-- `lib/core/data/api/api_payload_reader.dart` still tolerates many legacy alias shapes
-- `lib/feature/stories/screen/story_text_composer_screen.dart` creates `local_story_*`
-- `lib/feature/stories/screen/story_preview_screen.dart` creates `local_story_*`
-- `lib/feature/stories/screen/story_view_screen.dart` contains local story special handling
-- `lib/feature/communities/service/community_local_data_source.dart` persists full community payload cache
-- `lib/feature/posts/repository/posts_repository.dart` persists local drafts
+- a smaller set of repositories still tolerate legacy alias-heavy list shapes outside the latest cleanup pass
+- `lib/feature/stories/screen/story_view_screen.dart` still contains local story special handling
+- community/local-cache and local draft persistence flows still need a stricter production-vs-offline boundary review
 - admin endpoints remain present in mobile endpoint constants and should be isolated from normal app runtime
 
 ## Dashboard Endpoint Inventory Summary
@@ -101,10 +98,9 @@ Dashboard currently calls real admin APIs for:
 
 Dashboard-specific mismatches still active:
 
-- many modules remain list/detail/export only
-- mutations are missing for marketplace, jobs, events, communities, pages, live streams, wallet/subscription actions
-- confirm dialog and generalized detail drawer patterns are still missing
-- `src/components/AdminViews.jsx` is still too large and central
+- confirm dialog and generalized detail primitives are still missing as shared building blocks
+- `src/components/AdminViews.jsx` is smaller than before but still retains some central orchestration and unextracted slices
+- a few reporting/admin surfaces still need the same richer control treatment as the newly extracted modules
 
 ## Web Endpoint Inventory Summary
 
@@ -130,11 +126,9 @@ Web frontend currently calls:
 
 Web-specific mismatches still active:
 
-- `src/data/mockSocialData.ts` still exists with production-like demo data
-- `src/lib/api.ts` still falls back to `http://localhost:3000`
-- `src/lib/api.ts` still synthesizes IDs, avatar URLs, fallback copy, and display labels
-- `src/hooks/useSocialApp.ts` still creates optimistic-only local posts/comments/messages
-- UI still uses direct avatar fallbacks in multiple components
+- some public web slices still rely on optimistic/local UX patterns even after the recent cleanup
+- remaining unreviewed API normalizers still shape partial backend data into user-facing labels
+- UI still uses direct avatar/media fallbacks in some components
 
 ## Missing Route Mismatches
 
@@ -153,8 +147,6 @@ Known route/integration mismatches still active:
 
 Still active in backend:
 
-- `src/controllers/learning-courses.controller.ts`
-- `src/controllers/polls-surveys.controller.ts`
 - remaining alias-heavy routes in `src/controllers/jobs.controller.ts`
 - parts of `src/services/admin-database.service.ts`
 - parts of `src/services/experience-database.service.ts`
@@ -201,16 +193,11 @@ Still active:
 
 ## Persistence Gaps Still Open
 
-Needed relational history models still missing:
+Needed relational history or ownership coverage still missing or incomplete:
 
-- support assignment history
-- support SLA history
-- support action history
-- moderation action history
-- moderation escalation history
-- moderation assignee history
 - report escalation/assignment history
-- media asset ownership/entity mapping
+- deeper media asset ownership/entity mapping
+- fuller support/moderation workflow coverage where current persistence is still shallow or partially wired
 
 ## Validation Snapshot
 
@@ -327,7 +314,7 @@ Current status:
 - compatibility aliases still remain on some controllers for Flutter/dashboard transition safety
 
 Known remaining mismatches:
-- list endpoints such as communities/pages/groups still emit aliases like `items`, `results`, `communities`, `pages`, or `groups`
+- list endpoints still expose named collections like `communities`, `pages`, or `groups`, but the larger `items` / `results` duplication set has been reduced materially
 - some legacy settings/support-style responses still expose convenience fields outside `data`
 - Flutter and dashboard parsers still tolerate multiple shapes, which shows contract instability
 
@@ -336,7 +323,7 @@ Known remaining mismatches:
 Current risks:
 - user auth and admin auth remain separate, which is correct, but both surfaces need continued guardrails to prevent token mix-ups
 - Flutter endpoint constants still include admin paths that should not be part of normal mobile app runtime behavior
-- Flutter still contains guest-user fallback state in places where unauthenticated behavior should be explicit instead of synthetic
+- Flutter still contains some guest-user fallback state where unauthenticated behavior should be explicit instead of synthetic
 
 Admin auth status from source and smoke checks:
 - `POST /admin/auth/login`, `GET /admin/auth/me`, `POST /admin/auth/refresh`, `POST /admin/auth/logout`, `GET /admin/auth/sessions`, `PATCH /admin/auth/sessions/:id/revoke` are present
@@ -374,7 +361,7 @@ Backend:
 - `npm run prisma:migrate` passed
 - `npm run seed:dev` passed for local dev validation
 - backend smoke endpoints `GET /health`, `GET /health/database`, and `GET /docs-json` passed
-- `npm run prisma:generate` still fails on local Windows Prisma engine file lock
+- repeated `npm run prisma:generate` succeeded during this pass
 
 Flutter:
 - `flutter pub get` passed
@@ -391,17 +378,18 @@ Dashboard:
 ## Completion percentages
 
 Current-source estimate after the latest pass:
-- Backend: 86%
-- Flutter: 70%
-- Dashboard: 79%
-- Database coverage: 85%
-- Full platform: 80%
+- Backend: 91%
+- Flutter: 90%
+- Dashboard: 90%
+- Web frontend: 89%
+- Database coverage: 88%
+- Full platform: 90%
 
 ## Priority queue from current source
 
 1. Finish removing the remaining operational-setting and fallback shaping around settings/localization/accessibility/legal responses now that section/item catalog authority is in PostgreSQL.
-2. Normalize remaining mixed-shape responses, especially settings/support/community/page compatibility responses.
-3. Remove Flutter fake guest/local runtime behavior in home feed and remaining authenticated surfaces.
+2. Trim the remaining mixed-shape compatibility responses, especially settings/community/page/group edges that still expose extra convenience fields.
+3. Remove the last Flutter guest/local runtime behavior in authenticated surfaces and tighten story/local-cache boundaries.
 4. Finish backend payload completeness so Flutter no longer derives share labels, lifecycle labels, or media URL behavior locally.
-5. Expand dashboard sections from thin list views into full detail/action modules across all navigation sections.
+5. Add shared confirm/detail primitives across the dashboard and continue shrinking the remaining central orchestration view.
 6. Continue deeper support/moderation/call/live persistence where dashboards and mobile flows still rely on shallow state.

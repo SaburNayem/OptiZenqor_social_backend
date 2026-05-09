@@ -206,6 +206,48 @@ export class AdminSupportOperationsQueryDto {
   priority?: 'low' | 'normal' | 'high' | 'urgent';
 }
 
+export class AdminModerationCasesQueryDto {
+  @ApiPropertyOptional({ minimum: 1, default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 100, default: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  severity?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  targetType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  assignedAdminId?: string;
+}
+
 export class AdminPremiumPlanCreateDto {
   @ApiProperty()
   @IsString()
@@ -616,6 +658,41 @@ export class AdminSupportTicketUpdateDto {
   @IsInt()
   @Min(1)
   slaHours?: number;
+}
+
+export class AdminModerationCaseUpdateDto {
+  @ApiPropertyOptional({
+    description:
+      'Backward-compatible action keyword. Supported examples: review, close, resolve, reopen, escalate, freeze.',
+  })
+  @IsOptional()
+  @IsString()
+  action?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  severity?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  assignedAdminId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  note?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  enforcementAction?: string;
 }
 
 export class AdminNotificationDeviceUpdateDto {

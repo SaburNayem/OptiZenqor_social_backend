@@ -186,8 +186,6 @@ export class ExperienceDatabaseService {
     return {
       totalProducts,
       products: mappedProducts,
-      items: mappedProducts,
-      results: mappedProducts,
       categories,
       sellers,
       orders: orders.map((row) => this.mapMarketplaceOrder(row)),
@@ -745,8 +743,6 @@ export class ExperienceDatabaseService {
     const items = await Promise.all(jobs.map((row) => this.mapJob(row)));
     return {
       jobs: items,
-      items,
-      results: items,
       pagination: this.buildPagination(total, paging.page, paging.limit),
       filters: {
         status: query.status?.trim() || null,
@@ -1373,15 +1369,17 @@ export class ExperienceDatabaseService {
         this.mapPollSurvey(entry),
       ),
     );
+    const activeEntries = items.filter(
+      (item) => item.status === 'active' && (!status || status === 'active'),
+    );
+    const draftEntries = items.filter(
+      (item) => item.status === 'draft' && (!status || status === 'draft'),
+    );
+
     return {
-      activeEntries: items.filter(
-        (item) => item.status === 'active' && (!status || status === 'active'),
-      ),
-      draftEntries: items.filter(
-        (item) => item.status === 'draft' && (!status || status === 'draft'),
-      ),
-      items,
-      results: items,
+      entries: status === 'active' ? activeEntries : status === 'draft' ? draftEntries : items,
+      activeEntries,
+      draftEntries,
       quickTemplates: items.map((item) => item.title).filter(Boolean).slice(0, 8),
     };
   }
@@ -1456,8 +1454,6 @@ export class ExperienceDatabaseService {
     );
     return {
       courses: items,
-      items,
-      results: items,
     };
   }
 
@@ -1498,8 +1494,6 @@ export class ExperienceDatabaseService {
     const items = events.map((row) => this.mapEvent(row));
     return {
       events: items,
-      items,
-      results: items,
       pagination: this.buildPagination(total, paging.page, paging.limit),
       filters: {
         status: queryObject.status?.trim() || null,
@@ -1641,8 +1635,6 @@ export class ExperienceDatabaseService {
     const items = communities.map((row) => this.mapCommunity(row));
     return {
       communities: items,
-      items,
-      results: items,
       pagination: this.buildPagination(total, paging.page, paging.limit),
       filters: {
         category: query.category?.trim() || null,
@@ -1884,8 +1876,6 @@ export class ExperienceDatabaseService {
     const items = pages.map((row) => this.mapPage(row));
     return {
       pages: items,
-      items,
-      results: items,
       pagination: this.buildPagination(total, paging.page, paging.limit),
       filters: {
         category: query.category?.trim() || null,

@@ -54,6 +54,7 @@ export type IdPrefix =
   | 'admin'
   | 'push_device'
   | 'audit'
+  | 'moderation_case'
   | 'mod_case_action'
   | 'mod_case_assignment'
   | 'campaign_action'

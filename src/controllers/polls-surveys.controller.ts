@@ -19,7 +19,7 @@ export class PollsSurveysController {
   async getActiveEntries() {
     const payload = await this.experienceDatabase.getPollsAndSurveys('active');
     return successResponse('Active polls and surveys fetched successfully.', {
-      items: payload.activeEntries,
+      entries: payload.activeEntries,
       activeEntries: payload.activeEntries,
     });
   }
@@ -28,7 +28,7 @@ export class PollsSurveysController {
   async getDraftEntries() {
     const payload = await this.experienceDatabase.getPollsAndSurveys('draft');
     return successResponse('Draft polls and surveys fetched successfully.', {
-      items: payload.draftEntries,
+      entries: payload.draftEntries,
       draftEntries: payload.draftEntries,
     });
   }

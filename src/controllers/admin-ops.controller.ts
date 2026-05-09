@@ -21,6 +21,8 @@ import { AdminSessionGuard } from '../auth/admin-session.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import {
+  AdminModerationCasesQueryDto,
+  AdminModerationCaseUpdateDto,
   AdminSessionRefreshDto,
   AdminSupportOperationsQueryDto,
   AdminSupportTicketUpdateDto,
@@ -133,10 +135,10 @@ export class AdminOpsController {
   @Get('moderation-cases')
   @ApiBearerAuth('admin-bearer')
   @UseGuards(AdminSessionGuard)
-  async getModerationCases() {
+  async getModerationCases(@Query() query: AdminModerationCasesQueryDto) {
     return successResponse(
       'Moderation cases fetched successfully.',
-      await this.adminDatabase.getModerationCases(),
+      await this.adminDatabase.getModerationCases(query),
     );
   }
 
@@ -144,8 +146,27 @@ export class AdminOpsController {
   @ApiBearerAuth('admin-bearer')
   @UseGuards(AdminSessionGuard)
   @ApiOperation({ summary: 'Backward-compatible nested moderation cases route' })
-  getModerationCasesAlias() {
-    return this.getModerationCases();
+  getModerationCasesAlias(@Query() query: AdminModerationCasesQueryDto) {
+    return this.getModerationCases(query);
+  }
+
+  @Get('moderation-cases/:id')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard)
+  @ApiOperation({ summary: 'Get moderation case detail with action and assignment history' })
+  async getModerationCaseDetail(@Param('id') id: string) {
+    return successResponse(
+      'Moderation case fetched successfully.',
+      await this.adminDatabase.getModerationCaseDetail(id),
+    );
+  }
+
+  @Get('moderation/cases/:id')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard)
+  @ApiOperation({ summary: 'Backward-compatible nested moderation case detail route' })
+  getModerationCaseDetailAlias(@Param('id') id: string) {
+    return this.getModerationCaseDetail(id);
   }
 
   @Patch('moderation-cases/:id')
@@ -154,13 +175,13 @@ export class AdminOpsController {
   @Roles('Super Admin', 'Operations Admin', 'Content Moderator')
   async updateModerationCase(
     @Param('id') id: string,
-    @Body() body: { action: string },
+    @Body() body: AdminModerationCaseUpdateDto,
     @Headers('authorization') authorization?: string,
   ) {
     const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
     return successResponse(
       'Moderation case updated successfully.',
-      await this.adminDatabase.updateModerationCase(id, body.action, admin.adminId),
+      await this.adminDatabase.updateModerationCase(id, body, admin.adminId),
     );
   }
 
@@ -171,7 +192,7 @@ export class AdminOpsController {
   @ApiOperation({ summary: 'Backward-compatible nested moderation case update route' })
   updateModerationCaseAlias(
     @Param('id') id: string,
-    @Body() body: { action: string },
+    @Body() body: AdminModerationCaseUpdateDto,
     @Headers('authorization') authorization?: string,
   ) {
     return this.updateModerationCase(id, body, authorization);
@@ -183,7 +204,7 @@ export class AdminOpsController {
   async getChatControl() {
     return successResponse(
       'Chat moderation cases fetched successfully.',
-      await this.adminDatabase.getModerationCases('chat_thread'),
+      await this.adminDatabase.getModerationCases({ targetType: 'chat_thread' }),
     );
   }
 

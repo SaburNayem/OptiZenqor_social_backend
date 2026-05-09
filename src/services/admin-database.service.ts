@@ -322,9 +322,137 @@ export class AdminDatabaseService implements OnModuleInit {
     };
   }
 
-  async getModerationCases(targetType?: string) {
-    const items = await this.prisma.moderationCase.findMany({
-      where: targetType ? { targetType } : undefined,
+  async getModerationCases(
+    input?:
+      | string
+      | {
+          page?: number;
+          limit?: number;
+          search?: string;
+          status?: string;
+          severity?: string;
+          targetType?: string;
+          assignedAdminId?: string;
+        },
+  ) {
+    const query = typeof input === 'string' ? { targetType: input } : (input ?? {});
+    const page = this.resolvePage(query.page);
+    const limit = this.resolveLimit(query.limit);
+    const search = query.search?.trim();
+    const targetType = query.targetType?.trim();
+    const status = query.status?.trim();
+    const severity = query.severity?.trim();
+    const assignedAdminId = query.assignedAdminId?.trim();
+    const where: Prisma.ModerationCaseWhereInput = {
+      ...(targetType ? { targetType } : {}),
+      ...(status ? { status } : {}),
+      ...(severity ? { severity } : {}),
+      ...(assignedAdminId ? { assignedToAdminId: assignedAdminId } : {}),
+      ...(search
+        ? {
+            OR: [
+              { title: { contains: search, mode: 'insensitive' } },
+              { reason: { contains: search, mode: 'insensitive' } },
+              { targetLabel: { contains: search, mode: 'insensitive' } },
+              { targetId: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      this.prisma.moderationCase.findMany({
+        where,
+        include: {
+          assignedAdmin: true,
+          actionHistory: {
+            include: { actorAdmin: true },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+          },
+          assignmentHistory: {
+            include: {
+              actorAdmin: true,
+              previousAdmin: true,
+              nextAdmin: true,
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+          },
+        },
+        orderBy: { updatedAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.moderationCase.count({ where }),
+    ]);
+
+    const paginated = this.wrapPaginated(
+      items.map((item) => this.mapModerationCase(item)),
+      page,
+      limit,
+      total,
+    );
+
+    return {
+      cases: paginated.items,
+      total: paginated.total,
+      count: paginated.count,
+      pagination: paginated.pagination,
+      filters: {
+        search: search ?? '',
+        status: status ?? '',
+        severity: severity ?? '',
+        targetType: targetType ?? '',
+        assignedAdminId: assignedAdminId ?? '',
+      },
+    };
+  }
+
+  async getModerationCaseDetail(id: string) {
+    const existing = await this.prisma.moderationCase.findUnique({
+      where: { id },
+      include: {
+        assignedAdmin: true,
+        actionHistory: {
+          include: { actorAdmin: true },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        },
+        assignmentHistory: {
+          include: {
+            actorAdmin: true,
+            previousAdmin: true,
+            nextAdmin: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        },
+      },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Moderation case ${id} not found`);
+    }
+
+    return this.mapModerationCase(existing);
+  }
+
+  async updateModerationCase(
+    id: string,
+    patch:
+      | string
+      | {
+          action?: string;
+          status?: string;
+          severity?: string;
+          assignedAdminId?: string;
+          note?: string;
+          enforcementAction?: string;
+        },
+    actorAdminId?: string,
+  ) {
+    const existing = await this.prisma.moderationCase.findUnique({
+      where: { id },
       include: {
         assignedAdmin: true,
         actionHistory: {
@@ -342,36 +470,63 @@ export class AdminDatabaseService implements OnModuleInit {
           take: 20,
         },
       },
-      orderBy: { updatedAt: 'desc' },
-      take: 200,
-    });
-    return items.map((item) => this.mapModerationCase(item));
-  }
-
-  async updateModerationCase(id: string, action: string, actorAdminId?: string) {
-    const existing = await this.prisma.moderationCase.findUnique({
-      where: { id },
-      include: { assignedAdmin: true },
     });
     if (!existing) {
       throw new NotFoundException(`Moderation case ${id} not found`);
     }
 
-    const history = this.readStringArray(existing.history);
-    const enforcementActions = this.readStringArray(existing.enforcementActions);
-    const status = action === 'close' ? 'resolved' : action === 'escalate' ? 'escalated' : 'updated';
+    const normalizedPatch =
+      typeof patch === 'string'
+        ? { action: patch }
+        : patch;
+    const action = normalizedPatch.action?.trim().toLowerCase() || 'update';
     const timestamp = new Date();
+    const note = normalizedPatch.note?.trim() || null;
+    const nextStatus =
+      normalizedPatch.status?.trim() ||
+      this.resolveModerationStatusFromAction(action, existing.status);
+    const nextSeverity =
+      normalizedPatch.severity?.trim() ||
+      this.resolveModerationSeverityFromAction(action, existing.severity);
+    const nextAssignedAdminId =
+      normalizedPatch.assignedAdminId === undefined
+        ? existing.assignedToAdminId
+        : normalizedPatch.assignedAdminId?.trim() || null;
+    const previousAssignedAdminId = existing.assignedToAdminId ?? null;
+    const previousSeverity = existing.severity;
+    const legacyHistory = this.readStringArray(existing.history);
+    const enforcementActions = this.readStringArray(existing.enforcementActions);
+    const metadata = this.readObject(existing.metadata);
+    const nextEnforcementAction =
+      normalizedPatch.enforcementAction?.trim() ||
+      this.resolveModerationEnforcementAction(action, nextStatus, existing.targetType);
+    const nextEnforcementActions =
+      nextEnforcementAction && !enforcementActions.includes(nextEnforcementAction)
+        ? [...enforcementActions, nextEnforcementAction]
+        : enforcementActions;
+
+    if (nextAssignedAdminId) {
+      await this.getAdminUserById(nextAssignedAdminId);
+    }
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const nextItem = await tx.moderationCase.update({
         where: { id },
         data: {
-          status,
+          status: nextStatus,
+          severity: nextSeverity,
+          assignedToAdminId: nextAssignedAdminId,
           history: [
-            ...history,
-            `Action applied: ${action} at ${timestamp.toISOString()}`,
+            ...legacyHistory,
+            `${timestamp.toISOString()}: ${note || `Action applied: ${action}`}`,
           ] as Prisma.InputJsonValue,
-          enforcementActions: [...enforcementActions, action] as Prisma.InputJsonValue,
+          enforcementActions: nextEnforcementActions as Prisma.InputJsonValue,
+          metadata: {
+            ...metadata,
+            lastAction: action,
+            lastActionAt: timestamp.toISOString(),
+            lastActorAdminId: actorAdminId ?? null,
+          } as Prisma.InputJsonValue,
           updatedAt: timestamp,
         },
       });
@@ -382,32 +537,40 @@ export class AdminDatabaseService implements OnModuleInit {
           caseId: nextItem.id,
           actorAdminId: actorAdminId ?? null,
           action,
-          note: `Action applied: ${action}`,
+          note: note ?? `Action applied: ${action}`,
           fromStatus: existing.status,
-          toStatus: nextItem.status,
+          toStatus: nextStatus,
           payload: {
             targetType: nextItem.targetType,
             targetId: nextItem.targetId,
-            severity: nextItem.severity,
+            severity: nextSeverity,
+            enforcementAction: nextEnforcementAction,
           } as Prisma.InputJsonValue,
           createdAt: timestamp,
         },
       });
 
-      if (action === 'escalate') {
+      if (
+        nextAssignedAdminId !== previousAssignedAdminId ||
+        nextSeverity !== previousSeverity
+      ) {
         await tx.moderationCaseAssignmentHistory.create({
           data: {
             id: makeId('mod_case_assignment'),
             caseId: nextItem.id,
             actorAdminId: actorAdminId ?? null,
-            previousAdminId: existing.assignedToAdminId,
-            nextAdminId: nextItem.assignedToAdminId,
-            previousSeverity: existing.severity,
-            nextSeverity: nextItem.severity,
-            note: 'Case escalated',
+            previousAdminId: previousAssignedAdminId,
+            nextAdminId: nextAssignedAdminId,
+            previousSeverity,
+            nextSeverity,
+            note:
+              note ??
+              (action === 'escalate'
+                ? 'Case escalated'
+                : 'Moderation assignment or severity updated'),
             payload: {
               action,
-              status: nextItem.status,
+              status: nextStatus,
             } as Prisma.InputJsonValue,
             createdAt: timestamp,
           },
@@ -441,7 +604,13 @@ export class AdminDatabaseService implements OnModuleInit {
       action: 'moderation.case.update',
       entityType: 'moderation_case',
       entityId: updated.id,
-      metadata: { action },
+      metadata: {
+        action,
+        status: nextStatus,
+        severity: nextSeverity,
+        assignedAdminId: nextAssignedAdminId,
+        enforcementAction: nextEnforcementAction,
+      },
     });
 
     return this.mapModerationCase(updated);
@@ -1208,8 +1377,6 @@ export class AdminDatabaseService implements OnModuleInit {
 
     return {
       tickets: paginatedTickets.items,
-      results: paginatedTickets.results,
-      items: paginatedTickets.items,
       total: paginatedTickets.total,
       count: paginatedTickets.count,
       pagination: paginatedTickets.pagination,
@@ -1992,32 +2159,83 @@ export class AdminDatabaseService implements OnModuleInit {
     const normalizedType = targetType.trim().toLowerCase() as 'post' | 'reel' | 'story';
     const status = patch.remove ? 'Removed' : patch.status?.trim() || undefined;
     const deletedAt = patch.remove ? new Date() : undefined;
+    let targetLabel = '';
 
     if (normalizedType === 'post') {
-      await this.prisma.appPost.update({
+      const updated = await this.prisma.appPost.update({
         where: { id },
         data: {
           ...(status ? { status } : {}),
           ...(deletedAt ? { deletedAt } : {}),
         },
+        select: {
+          id: true,
+          caption: true,
+        },
       });
+      targetLabel = updated.caption?.trim() || updated.id;
     } else if (normalizedType === 'reel') {
-      await this.prisma.reel.update({
+      const updated = await this.prisma.reel.update({
         where: { id },
         data: {
           ...(status ? { status } : {}),
           ...(deletedAt ? { deletedAt } : {}),
         },
+        select: {
+          id: true,
+          caption: true,
+        },
       });
+      targetLabel = updated.caption?.trim() || updated.id;
     } else {
-      await this.prisma.story.update({
+      const updated = await this.prisma.story.update({
         where: { id },
         data: {
           ...(status ? { status } : {}),
           ...(deletedAt ? { deletedAt } : {}),
         },
+        select: {
+          id: true,
+          text: true,
+        },
       });
+      targetLabel = updated.text?.trim() || updated.id;
     }
+
+    await this.upsertModerationCaseForTarget(
+      {
+        title: `Admin ${normalizedType} moderation`,
+        type: 'admin_moderation',
+        targetType: normalizedType,
+        targetId: id,
+        targetLabel,
+        reason:
+          patch.note?.trim() ||
+          (patch.remove
+            ? `Removed ${normalizedType} from admin moderation surface`
+            : `Updated ${normalizedType} moderation state`),
+        status:
+          patch.remove
+            ? 'resolved'
+            : this.resolveModerationStatusFromAction(
+                patch.status?.trim()?.toLowerCase() || 'review',
+                'open',
+              ),
+        severity: patch.remove ? 'high' : 'medium',
+        action:
+          patch.remove
+            ? 'remove'
+            : patch.status?.trim()?.toLowerCase() || 'review',
+        note: patch.note?.trim() || null,
+        enforcementAction: patch.remove
+          ? `remove_${normalizedType}`
+          : patch.status?.trim() || 'review',
+        metadata: {
+          source: 'admin.content.moderate',
+        },
+      },
+      actorAdminId,
+    );
 
     await this.createAuditLog({
       actorAdminId,
@@ -2128,6 +2346,29 @@ export class AdminDatabaseService implements OnModuleInit {
     }
 
     if (patch.remove) {
+      await this.upsertModerationCaseForTarget(
+        {
+          title: 'Admin comment moderation',
+          type: 'admin_moderation',
+          targetType: 'post_comment',
+          targetId: existing.id,
+          targetLabel: existing.message?.trim() || existing.id,
+          reason:
+            patch.note?.trim() ||
+            'Removed reported comment from admin moderation surface',
+          status: 'resolved',
+          severity: 'high',
+          action: 'remove',
+          note: patch.note?.trim() || null,
+          enforcementAction: 'remove_comment',
+          metadata: {
+            source: 'admin.comment.moderate',
+            postId: existing.postId,
+          },
+        },
+        actorAdminId,
+      );
+
       await this.prisma.appPostComment.delete({
         where: { id },
       });
@@ -2156,6 +2397,29 @@ export class AdminDatabaseService implements OnModuleInit {
         post: true,
       },
     });
+
+    await this.upsertModerationCaseForTarget(
+      {
+        title: 'Admin comment moderation',
+        type: 'admin_moderation',
+        targetType: 'post_comment',
+        targetId: updated.id,
+        targetLabel: updated.message?.trim() || updated.id,
+        reason:
+          patch.note?.trim() ||
+          (updated.isReported ? 'Comment flagged for moderation review' : 'Comment moderation state updated'),
+        status: updated.isReported ? 'reviewing' : 'open',
+        severity: updated.isReported ? 'medium' : 'low',
+        action: updated.isReported ? 'flag' : 'unflag',
+        note: patch.note?.trim() || null,
+        enforcementAction: updated.isReported ? 'flag_comment' : 'restore_comment',
+        metadata: {
+          source: 'admin.comment.moderate',
+          postId: updated.postId,
+        },
+      },
+      actorAdminId,
+    );
 
     await this.createAuditLog({
       actorAdminId,
@@ -2255,6 +2519,35 @@ export class AdminDatabaseService implements OnModuleInit {
         updatedAt: new Date(),
       },
     });
+
+    await this.upsertModerationCaseForTarget(
+      {
+        title: `Report: ${updated.reason}`,
+        type: 'user_report',
+        targetType: updated.targetEntityType || (updated.targetUserId ? 'user' : 'report'),
+        targetId: updated.targetEntityId || updated.targetUserId || updated.id,
+        targetLabel: updated.targetEntityId || updated.targetUserId || updated.id,
+        reason: updated.reason,
+        status: this.mapReportStatusToModerationStatus(updated.status),
+        severity: this.deriveModerationSeverityFromReportReason(updated.reason),
+        action: `report_${updated.status}`,
+        note: patch.note?.trim() || null,
+        enforcementAction:
+          updated.status === 'resolved'
+            ? 'report_resolved'
+            : updated.status === 'rejected'
+              ? 'report_rejected'
+              : 'report_review',
+        metadata: {
+          source: 'admin.report.update',
+          reportId: updated.id,
+          reportStatus: updated.status,
+          reporterUserId: updated.reporterUserId,
+          targetUserId: updated.targetUserId,
+        },
+      },
+      actorAdminId,
+    );
 
     await this.createAuditLog({
       actorAdminId,
@@ -5521,6 +5814,8 @@ export class AdminDatabaseService implements OnModuleInit {
     enforcementActions: Prisma.JsonValue;
     metadata: Prisma.JsonValue;
     assignedAdmin?: { id: string; name: string } | null;
+    createdAt?: Date;
+    updatedAt?: Date;
     actionHistory?: Array<{
       id: string;
       action: string;
@@ -5552,6 +5847,7 @@ export class AdminDatabaseService implements OnModuleInit {
       severity: item.severity,
       target: item.targetLabel ?? item.targetId ?? '',
       targetId: item.targetId,
+      targetLabel: item.targetLabel ?? item.targetId ?? null,
       reason: item.reason,
       evidence: this.readStringArray(item.evidence),
       history: this.buildModerationTimeline(
@@ -5561,13 +5857,359 @@ export class AdminDatabaseService implements OnModuleInit {
       ),
       assignedTo: item.assignedAdmin?.name ?? '',
       assignedToAdminId: item.assignedAdmin?.id ?? null,
+      assignedAdmin: item.assignedAdmin
+        ? {
+            id: item.assignedAdmin.id,
+            name: item.assignedAdmin.name,
+          }
+        : null,
       status: item.status,
       enforcementActions: this.readStringArray(item.enforcementActions),
       frozen: Boolean(metadata.frozen),
       restrictedParticipants: this.readStringArray(metadata.restrictedParticipants),
+      metadata,
       actionHistory: this.mapModerationActionHistoryList(item.actionHistory),
       assignmentHistory: this.mapModerationAssignmentHistoryList(item.assignmentHistory),
+      createdAt: 'createdAt' in item && item.createdAt instanceof Date ? item.createdAt.toISOString() : null,
+      updatedAt: 'updatedAt' in item && item.updatedAt instanceof Date ? item.updatedAt.toISOString() : null,
     };
+  }
+
+  private async upsertModerationCaseForTarget(
+    input: {
+      title: string;
+      type: string;
+      targetType: string;
+      targetId: string;
+      targetLabel?: string | null;
+      reason: string;
+      status: string;
+      severity: string;
+      action: string;
+      note?: string | null;
+      enforcementAction?: string | null;
+      assignedAdminId?: string | null;
+      metadata?: Record<string, unknown>;
+    },
+    actorAdminId?: string,
+  ) {
+    const targetType = input.targetType.trim();
+    const targetId = input.targetId.trim();
+    const timestamp = new Date();
+    const title = input.title.trim();
+    const reason = input.reason.trim();
+    const status = input.status.trim();
+    const severity = input.severity.trim();
+    const note = input.note?.trim() || null;
+    const enforcementAction = input.enforcementAction?.trim() || null;
+    const assignedAdminId = input.assignedAdminId?.trim() || null;
+
+    const existing = await this.prisma.moderationCase.findFirst({
+      where: {
+        targetType,
+        targetId,
+      },
+      include: {
+        assignedAdmin: true,
+        actionHistory: {
+          include: { actorAdmin: true },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
+        assignmentHistory: {
+          include: {
+            actorAdmin: true,
+            previousAdmin: true,
+            nextAdmin: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    if (assignedAdminId) {
+      await this.getAdminUserById(assignedAdminId);
+    }
+
+    const nextMetadata = {
+      ...(existing ? this.readObject(existing.metadata) : {}),
+      ...(input.metadata ?? {}),
+      lastAction: input.action,
+      lastActionAt: timestamp.toISOString(),
+      lastActorAdminId: actorAdminId ?? null,
+    };
+
+    if (!existing) {
+      const created = await this.prisma.$transaction(async (tx) => {
+        const createdCase = await tx.moderationCase.create({
+          data: {
+            id: makeId('moderation_case'),
+            title,
+            type: input.type.trim(),
+            targetType,
+            targetId,
+            targetLabel: input.targetLabel?.trim() || null,
+            reason,
+            evidence: [] as Prisma.InputJsonValue,
+            history: [`${timestamp.toISOString()}: ${note || `Case created via ${input.action}`}`] as Prisma.InputJsonValue,
+            status,
+            severity,
+            enforcementActions: enforcementAction ? [enforcementAction] as Prisma.InputJsonValue : [],
+            metadata: nextMetadata as Prisma.InputJsonValue,
+            assignedToAdminId: assignedAdminId,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          },
+        });
+
+        await tx.moderationCaseActionHistory.create({
+          data: {
+            id: makeId('mod_case_action'),
+            caseId: createdCase.id,
+            actorAdminId: actorAdminId ?? null,
+            action: input.action.trim(),
+            note: note ?? 'Moderation case created',
+            fromStatus: null,
+            toStatus: status,
+            payload: {
+              targetType,
+              targetId,
+              severity,
+              enforcementAction,
+            } as Prisma.InputJsonValue,
+            createdAt: timestamp,
+          },
+        });
+
+        if (assignedAdminId) {
+          await tx.moderationCaseAssignmentHistory.create({
+            data: {
+              id: makeId('mod_case_assignment'),
+              caseId: createdCase.id,
+              actorAdminId: actorAdminId ?? null,
+              previousAdminId: null,
+              nextAdminId: assignedAdminId,
+              previousSeverity: null,
+              nextSeverity: severity,
+              note: note ?? 'Moderation case assigned during creation',
+              payload: {
+                action: input.action.trim(),
+                status,
+              } as Prisma.InputJsonValue,
+              createdAt: timestamp,
+            },
+          });
+        }
+
+        return tx.moderationCase.findUniqueOrThrow({
+          where: { id: createdCase.id },
+          include: {
+            assignedAdmin: true,
+            actionHistory: {
+              include: { actorAdmin: true },
+              orderBy: { createdAt: 'desc' },
+              take: 20,
+            },
+            assignmentHistory: {
+              include: {
+                actorAdmin: true,
+                previousAdmin: true,
+                nextAdmin: true,
+              },
+              orderBy: { createdAt: 'desc' },
+              take: 20,
+            },
+          },
+        });
+      });
+
+      return this.mapModerationCase(created);
+    }
+
+    const previousStatus = existing.status;
+    const previousSeverity = existing.severity;
+    const previousAssignedAdminId = existing.assignedToAdminId ?? null;
+    const nextHistory = [
+      ...this.readStringArray(existing.history),
+      `${timestamp.toISOString()}: ${note || `Action applied: ${input.action}`}`,
+    ];
+    const existingEnforcementActions = this.readStringArray(existing.enforcementActions);
+    const nextEnforcementActions =
+      enforcementAction && !existingEnforcementActions.includes(enforcementAction)
+        ? [...existingEnforcementActions, enforcementAction]
+        : existingEnforcementActions;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const nextCase = await tx.moderationCase.update({
+        where: { id: existing.id },
+        data: {
+          title,
+          type: input.type.trim(),
+          targetLabel: input.targetLabel?.trim() || existing.targetLabel || null,
+          reason,
+          status,
+          severity,
+          assignedToAdminId: assignedAdminId ?? existing.assignedToAdminId,
+          enforcementActions: nextEnforcementActions as Prisma.InputJsonValue,
+          history: nextHistory as Prisma.InputJsonValue,
+          metadata: nextMetadata as Prisma.InputJsonValue,
+          updatedAt: timestamp,
+        },
+      });
+
+      await tx.moderationCaseActionHistory.create({
+        data: {
+          id: makeId('mod_case_action'),
+          caseId: nextCase.id,
+          actorAdminId: actorAdminId ?? null,
+          action: input.action.trim(),
+          note: note ?? `Action applied: ${input.action}`,
+          fromStatus: previousStatus,
+          toStatus: status,
+          payload: {
+            targetType,
+            targetId,
+            severity,
+            enforcementAction,
+          } as Prisma.InputJsonValue,
+          createdAt: timestamp,
+        },
+      });
+
+      if (previousAssignedAdminId !== (assignedAdminId ?? existing.assignedToAdminId) || previousSeverity !== severity) {
+        await tx.moderationCaseAssignmentHistory.create({
+          data: {
+            id: makeId('mod_case_assignment'),
+            caseId: nextCase.id,
+            actorAdminId: actorAdminId ?? null,
+            previousAdminId: previousAssignedAdminId,
+            nextAdminId: assignedAdminId ?? existing.assignedToAdminId,
+            previousSeverity,
+            nextSeverity: severity,
+            note: note ?? 'Moderation assignment or severity updated',
+            payload: {
+              action: input.action.trim(),
+              status,
+            } as Prisma.InputJsonValue,
+            createdAt: timestamp,
+          },
+        });
+      }
+
+      return tx.moderationCase.findUniqueOrThrow({
+        where: { id: nextCase.id },
+        include: {
+          assignedAdmin: true,
+          actionHistory: {
+            include: { actorAdmin: true },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+          },
+          assignmentHistory: {
+            include: {
+              actorAdmin: true,
+              previousAdmin: true,
+              nextAdmin: true,
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+          },
+        },
+      });
+    });
+
+    return this.mapModerationCase(updated);
+  }
+
+  private resolveModerationStatusFromAction(action: string, currentStatus: string) {
+    const normalized = action.trim().toLowerCase();
+    if (normalized === 'close' || normalized === 'resolve') {
+      return 'resolved';
+    }
+    if (normalized === 'reopen') {
+      return 'open';
+    }
+    if (normalized === 'review' || normalized === 'flag') {
+      return 'reviewing';
+    }
+    if (normalized === 'escalate') {
+      return 'escalated';
+    }
+    if (normalized === 'remove' || normalized === 'freeze') {
+      return 'resolved';
+    }
+    return currentStatus?.trim() || 'updated';
+  }
+
+  private resolveModerationSeverityFromAction(action: string, currentSeverity: string) {
+    const normalized = action.trim().toLowerCase();
+    if (normalized === 'escalate' || normalized === 'remove' || normalized === 'freeze') {
+      return 'high';
+    }
+    if (normalized === 'review' || normalized === 'flag') {
+      return 'medium';
+    }
+    return currentSeverity?.trim() || 'medium';
+  }
+
+  private resolveModerationEnforcementAction(
+    action: string,
+    status: string,
+    targetType: string,
+  ) {
+    const normalized = action.trim().toLowerCase();
+    if (normalized === 'remove') {
+      return `remove_${targetType}`;
+    }
+    if (normalized === 'freeze') {
+      return `freeze_${targetType}`;
+    }
+    if (normalized === 'flag') {
+      return `flag_${targetType}`;
+    }
+    if (normalized === 'escalate') {
+      return 'escalate_case';
+    }
+    if (status.trim().toLowerCase() === 'resolved') {
+      return 'resolve_case';
+    }
+    return normalized || null;
+  }
+
+  private mapReportStatusToModerationStatus(status: string) {
+    const normalized = status.trim().toLowerCase();
+    if (normalized === 'reviewing') {
+      return 'reviewing';
+    }
+    if (normalized === 'resolved') {
+      return 'resolved';
+    }
+    if (normalized === 'rejected') {
+      return 'closed';
+    }
+    return 'open';
+  }
+
+  private deriveModerationSeverityFromReportReason(reason: string) {
+    const normalized = reason.trim().toLowerCase();
+    if (
+      normalized.includes('violence') ||
+      normalized.includes('abuse') ||
+      normalized.includes('harassment') ||
+      normalized.includes('illegal')
+    ) {
+      return 'high';
+    }
+    if (
+      normalized.includes('spam') ||
+      normalized.includes('fake') ||
+      normalized.includes('misinformation')
+    ) {
+      return 'medium';
+    }
+    return 'low';
   }
 
   private buildModerationTimeline(
