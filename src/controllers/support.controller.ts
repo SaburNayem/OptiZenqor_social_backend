@@ -22,7 +22,7 @@ export class SupportController {
   async getFaqs() {
     return successResponse(
       'Support FAQs fetched successfully.',
-      await this.supportDatabase.getFaqs(),
+      { faqs: await this.supportDatabase.getFaqs() },
     );
   }
 
@@ -31,7 +31,7 @@ export class SupportController {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
     return successResponse(
       'Support tickets fetched successfully.',
-      await this.supportDatabase.getTickets(user.id),
+      { tickets: await this.supportDatabase.getTickets(user.id) },
     );
   }
 
@@ -73,7 +73,7 @@ export class SupportController {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization).catch(() => null);
     return successResponse(
       'Support chat fetched successfully.',
-      await this.supportDatabase.getSupportChat(user?.id ?? null),
+      { chat: await this.supportDatabase.getSupportChat(user?.id ?? null) },
     );
   }
 
@@ -98,7 +98,7 @@ export class SupportController {
   async getSupportHelpMail() {
     return successResponse(
       'Support mail settings fetched successfully.',
-      await this.supportDatabase.getSupportMail(),
+      { mail: await this.supportDatabase.getSupportMail() },
     );
   }
 

@@ -136,8 +136,6 @@ export class DiscoveryController {
     const collections = await this.accountStateDatabase.getCollections(user.id);
     return successResponse('Saved collections fetched successfully.', {
       collections,
-      items: collections,
-      results: collections,
     });
   }
 
@@ -170,8 +168,6 @@ export class DiscoveryController {
       const collections = await this.accountStateDatabase.syncCollections(user.id, body.items);
       return successResponse('Saved collections synced successfully.', {
         collections,
-        items: collections,
-        results: collections,
       });
     }
 

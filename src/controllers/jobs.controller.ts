@@ -122,16 +122,9 @@ export class JobsController {
   @Get('jobs/applications')
   async getJobApplications(@Query('applicantId') applicantId?: string) {
     const items = await this.experienceDatabase.getJobApplications(applicantId);
-    return {
-      ...successResponse('Job applications fetched successfully.', {
-        items,
-        results: items,
-        applications: items,
-      }),
-      items,
-      results: items,
+    return successResponse('Job applications fetched successfully.', {
       applications: items,
-    };
+    });
   }
 
   @Get('jobs/alerts')
@@ -141,16 +134,9 @@ export class JobsController {
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization, userId);
     const alerts = await this.experienceDatabase.getJobAlerts(user.id);
-    return {
-      ...successResponse('Job alerts fetched successfully.', {
-        items: alerts,
-        results: alerts,
-        alerts,
-      }),
-      items: alerts,
-      results: alerts,
+    return successResponse('Job alerts fetched successfully.', {
       alerts,
-    };
+    });
   }
 
   @Post('jobs/alerts')
@@ -202,16 +188,9 @@ export class JobsController {
       .requireUserFromAuthorization(authorization, userId)
       .catch(() => null);
     const companies = await this.experienceDatabase.getJobCompanies(viewer?.id);
-    return {
-      ...successResponse('Job companies fetched successfully.', {
-        items: companies,
-        results: companies,
-        companies,
-      }),
-      items: companies,
-      results: companies,
+    return successResponse('Job companies fetched successfully.', {
       companies,
-    };
+    });
   }
 
   @Patch('jobs/companies/:companyId/follow')
@@ -271,16 +250,9 @@ export class JobsController {
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization, userId);
     const applicants = await this.experienceDatabase.getApplicantsForRecruiter(user.id);
-    return {
-      ...successResponse('Job applicants fetched successfully.', {
-        items: applicants,
-        results: applicants,
-        applicants,
-      }),
-      items: applicants,
-      results: applicants,
+    return successResponse('Job applicants fetched successfully.', {
       applicants,
-    };
+    });
   }
 
   @Patch('jobs/applications/:id/withdraw')

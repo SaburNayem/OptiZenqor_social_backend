@@ -248,7 +248,7 @@ export class CommunitiesController {
       memberCount: community.memberCount,
       privacy: community.privacy,
     }));
-    return successResponse('Groups fetched successfully.', groups);
+    return successResponse('Groups fetched successfully.', { groups });
   }
 
   @Get('groups/:id')
