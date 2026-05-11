@@ -195,6 +195,7 @@ export class CoreDatabaseService implements OnModuleInit {
       return;
     }
     await this.ensureSchema();
+    await this.normalizeLegacyUserRoles();
   }
 
   async getUsers(role?: string) {
@@ -270,6 +271,8 @@ export class CoreDatabaseService implements OnModuleInit {
     const id = makeId('user');
     const passwordHash = await this.hashPassword(input.password);
     const interests = [...new Set((input.interests ?? []).map((interest) => interest.trim()).filter(Boolean))];
+    const normalizedRole = this.canonicalizeStoredAppRole(input.role);
+    const normalizedProfileType = this.normalizeProfileType(input.profileType, normalizedRole);
     await this.database.query(
       `insert into app_users (
         id, name, username, email, avatar, bio, interests, role, profile_type, profile_setup, verification, status,
@@ -288,8 +291,8 @@ export class CoreDatabaseService implements OnModuleInit {
         input.avatar?.trim() || '',
         input.bio?.trim() ?? '',
         JSON.stringify(interests),
-        input.role,
-        this.normalizeProfileType(input.profileType, input.role),
+        normalizedRole,
+        normalizedProfileType,
         JSON.stringify({}),
         'Not Requested',
         'Active',
@@ -631,6 +634,14 @@ export class CoreDatabaseService implements OnModuleInit {
     if (!this.userHasCapability(user, 'pages')) {
       throw new ForbiddenException(
         'Only creator profiles can create pages. Complete the creator form first.',
+      );
+    }
+  }
+
+  assertUserCanCreateCommunities(user: { id: string; role?: string; profileType?: string }) {
+    if (!this.userHasCapability(user, 'communities')) {
+      throw new ForbiddenException(
+        'Only creator and business profiles can create communities.',
       );
     }
   }
@@ -2563,7 +2574,7 @@ export class CoreDatabaseService implements OnModuleInit {
   }
 
   private mapUser(row: UserRow) {
-    const normalizedRole = row.role.trim().toLowerCase();
+    const normalizedRole = this.normalizeAppRole(row.role);
     const profileType = this.normalizeProfileType(row.profile_type ?? row.role, row.role);
     const verificationStatus = this.normalizeVerificationStatus(
       row.verification,
@@ -2579,6 +2590,10 @@ export class CoreDatabaseService implements OnModuleInit {
         'marketplace',
       ),
       canCreatePages: this.userHasCapability({ profileType, role: normalizedRole }, 'pages'),
+      canCreateCommunities: this.userHasCapability(
+        { profileType, role: normalizedRole },
+        'communities',
+      ),
     };
 
     return {
@@ -2703,8 +2718,8 @@ export class CoreDatabaseService implements OnModuleInit {
       return normalized;
     }
 
-    const normalizedRole = (fallbackRole ?? '').trim().toLowerCase();
-    if (['business', 'seller', 'recruiter'].includes(normalizedRole)) {
+    const normalizedRole = this.normalizeAppRole(fallbackRole);
+    if (normalizedRole === 'business') {
       return 'business';
     }
     if (normalizedRole === 'creator') {
@@ -2726,7 +2741,7 @@ export class CoreDatabaseService implements OnModuleInit {
 
   private userHasCapability(
     user: { profileType?: string | null; role?: string | null },
-    capability: 'jobs' | 'marketplace' | 'pages',
+    capability: 'jobs' | 'marketplace' | 'pages' | 'communities',
   ) {
     const profileType = this.normalizeProfileType(user.profileType, user.role);
 
@@ -2734,7 +2749,64 @@ export class CoreDatabaseService implements OnModuleInit {
       return profileType === 'creator';
     }
 
+    if (capability === 'communities') {
+      return profileType === 'creator' || profileType === 'business';
+    }
+
     return profileType === 'business';
+  }
+
+  private normalizeAppRole(role?: string | null) {
+    switch ((role ?? '').trim().toLowerCase()) {
+      case 'creator':
+        return 'creator';
+      case 'business':
+      case 'seller':
+      case 'recruiter':
+        return 'business';
+      case 'admin':
+        return 'admin';
+      case 'superadmin':
+      case 'super admin':
+        return 'superadmin';
+      default:
+        return 'user';
+    }
+  }
+
+  private canonicalizeStoredAppRole(role?: string | null) {
+    switch (this.normalizeAppRole(role)) {
+      case 'creator':
+        return 'Creator';
+      case 'business':
+        return 'Business';
+      case 'admin':
+        return 'Admin';
+      case 'superadmin':
+        return 'SuperAdmin';
+      default:
+        return 'User';
+    }
+  }
+
+  private async normalizeLegacyUserRoles() {
+    await this.database.query(
+      `update app_users
+       set role = case
+         when lower(role) in ('seller', 'recruiter', 'business') then 'Business'
+         when lower(role) = 'creator' then 'Creator'
+         when lower(role) in ('superadmin', 'super admin') then 'SuperAdmin'
+         when lower(role) = 'admin' then 'Admin'
+         else 'User'
+       end,
+       profile_type = case
+         when lower(role) in ('creator') then 'creator'
+         when lower(role) in ('business', 'seller', 'recruiter') then 'business'
+         else coalesce(nullif(lower(profile_type), ''), 'user')
+       end,
+       updated_at = now()
+       where lower(role) in ('seller', 'recruiter', 'creator', 'business', 'user', 'admin', 'superadmin', 'super admin')`,
+    );
   }
 
   private buildProfileSetup(

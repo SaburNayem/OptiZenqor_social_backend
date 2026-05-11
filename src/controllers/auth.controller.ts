@@ -96,6 +96,9 @@ export class AuthController {
       throw new BadRequestException('confirmPassword must match password.');
     }
 
+    const normalizedRole = this.normalizeSignupRole(body.role);
+    const normalizedProfileType = this.resolveSignupProfileType(body.profileType, normalizedRole);
+
     const normalizedEmail = body.email.trim().toLowerCase();
     const normalizedUsername = body.username.trim();
     const existingUser = await this.coreDatabase.findUserByEmailOptional(normalizedEmail);
@@ -142,8 +145,8 @@ export class AuthController {
       username: normalizedUsername,
       email: normalizedEmail,
       password: body.password,
-      role: body.role ?? this.mapRoleFromProfileType(body.profileType),
-      profileType: body.profileType,
+      role: normalizedRole ?? this.mapRoleFromProfileType(normalizedProfileType),
+      profileType: normalizedProfileType,
       bio: body.bio?.trim(),
       interests: this.normalizeInterests(body.interests),
       avatar: await this.resolveSignupAvatar(body),
@@ -310,6 +313,62 @@ export class AuthController {
         return 'Creator';
       default:
         return 'User';
+    }
+  }
+
+  private normalizeSignupRole(role?: string) {
+    const normalized = role?.trim().toLowerCase();
+    switch (normalized) {
+      case undefined:
+      case '':
+        return undefined;
+      case 'user':
+      case 'personal':
+      case 'member':
+        return 'User';
+      case 'creator':
+        return 'Creator';
+      case 'business':
+        return 'Business';
+      default:
+        throw new BadRequestException(
+          'role must be one of: user, creator, business',
+        );
+    }
+  }
+
+  private resolveSignupProfileType(profileType?: string, normalizedRole?: string) {
+    if (normalizedRole) {
+      return this.mapProfileTypeFromRole(normalizedRole);
+    }
+
+    const normalized = profileType?.trim().toLowerCase();
+    switch (normalized) {
+      case 'user':
+      case 'personal':
+      case 'member':
+      case undefined:
+      case '':
+        return 'user';
+      case 'creator':
+        return 'creator';
+      case 'business':
+        return 'business';
+      default:
+        throw new BadRequestException(
+          'profileType must be one of: user, creator, business',
+        );
+    }
+  }
+
+  private mapProfileTypeFromRole(role: string) {
+    switch (role) {
+      case 'Creator':
+        return 'creator';
+      case 'Business':
+        return 'business';
+      default:
+        return 'user';
     }
   }
 

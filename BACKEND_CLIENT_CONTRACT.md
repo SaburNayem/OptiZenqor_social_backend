@@ -48,7 +48,7 @@ User tokens must never access admin routes.
 | Method | Path | Auth | Query / Body | Response data shape | Pagination | Consuming clients |
 | --- | --- | --- | --- | --- | --- | --- |
 | `POST` | `/auth/login` | `public` | `{ email, password }` | `{ accessToken, refreshToken, sessionId, user }` | no | Flutter, Web |
-| `POST` | `/auth/signup` | `public` | `{ name, username, email, password, confirmPassword, profileType }` | `{ accessToken, refreshToken, sessionId, user }` | no | Flutter, Web |
+| `POST` | `/auth/signup` | `public` | `{ name, username, email, password, confirmPassword, profileType?, role? }` where `profileType/role` must resolve to `user`, `creator`, or `business` | `{ accessToken, refreshToken, sessionId, user }` | no | Flutter, Web |
 | `POST` | `/auth/refresh-token` | `public` | `{ refreshToken }` | session/token payload | no | Flutter |
 | `POST` | `/auth/logout` | `user` | optional session info | logout result | no | Flutter |
 | `GET` | `/auth/me` | `user` | none | `user` | no | Flutter, Web |
@@ -112,6 +112,11 @@ User tokens must never access admin routes.
 - endpoint constants are centralized in `lib/core/data/api/api_end_points.dart`
 - mobile still parses several legacy aliases through `ApiPayloadReader`
 - mobile still contains local draft/cache behavior that should not become production authority
+- mobile should stop sending or depending on `seller` and `recruiter`; the supported app roles are only `user`, `creator`, and `business`
+- user capability expectations:
+  - `creator`: pages, communities
+  - `business`: marketplace products, jobs, communities
+  - `user`: no elevated publishing role, but normal group chat remains available
 
 ### Admin dashboard
 

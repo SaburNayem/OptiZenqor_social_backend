@@ -59,6 +59,13 @@ Backend payloads in the touched slices now provide richer display fields so Flut
 ### `POST /auth/signup`
 - Returns: created session plus verification payload
 - Auth: none
+- Mobile request role model:
+  - send `profileType` or `role` as `user`, `creator`, or `business`
+  - do not send `seller` or `recruiter`
+  - backend capability result:
+    - `creator`: can create pages and communities
+    - `business`: can create jobs, marketplace products, and communities
+    - `user`: regular app usage, including normal group chat
 
 ### `POST /auth/refresh-token`
 - Returns: fresh access/refresh token pair

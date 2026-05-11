@@ -19,6 +19,23 @@ export class AdminSessionRefreshDto {
   refreshToken!: string;
 }
 
+export class AdminStaffUpdateDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional({ enum: ['admin', 'superadmin'] })
+  @IsOptional()
+  @IsIn(['admin', 'superadmin'])
+  role?: 'admin' | 'superadmin';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
 export class AdminUsersQueryDto {
   @ApiPropertyOptional({ minimum: 1, default: 1 })
   @IsOptional()

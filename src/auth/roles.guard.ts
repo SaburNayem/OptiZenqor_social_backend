@@ -22,13 +22,34 @@ export class RolesGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest<{ user?: { role?: string } }>();
-    const currentRole = request.user?.role?.trim().toLowerCase();
-    const allowedRoles = requiredRoles.map((role) => role.trim().toLowerCase());
+    const currentRole = this.normalizeRole(request.user?.role);
+    const allowedRoles = requiredRoles.map((role) => this.normalizeRole(role));
 
-    if (!currentRole || !allowedRoles.includes(currentRole)) {
+    if (!currentRole || (currentRole !== 'superadmin' && !allowedRoles.includes(currentRole))) {
       throw new ForbiddenException('You do not have permission to access this resource.');
     }
 
     return true;
+  }
+
+  private normalizeRole(role?: string) {
+    const normalized = role?.trim().toLowerCase();
+    if (!normalized) {
+      return '';
+    }
+    if (normalized === 'superadmin' || normalized === 'super admin') {
+      return 'superadmin';
+    }
+    if (
+      normalized === 'admin' ||
+      normalized === 'operations admin' ||
+      normalized === 'content moderator' ||
+      normalized === 'finance admin' ||
+      normalized === 'support admin' ||
+      normalized === 'analytics viewer'
+    ) {
+      return 'admin';
+    }
+    return normalized;
   }
 }
