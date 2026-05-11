@@ -21,6 +21,7 @@ import { AdminSessionGuard } from '../auth/admin-session.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import {
+  AdminStaffUpdateDto,
   AdminModerationCasesQueryDto,
   AdminModerationCaseUpdateDto,
   AdminSessionRefreshDto,
@@ -301,6 +302,51 @@ export class AdminOpsController {
   @ApiOperation({ summary: 'Backward-compatible admin roles route' })
   getRoles() {
     return this.getRbac();
+  }
+
+  @Get('staff')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard, RolesGuard)
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'List admin and superadmin accounts' })
+  async getAdminStaff() {
+    return successResponse(
+      'Admin staff fetched successfully.',
+      await this.adminDatabase.listAdminAccounts(),
+    );
+  }
+
+  @Patch('staff/:id')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard, RolesGuard)
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Update an admin or superadmin account' })
+  async updateAdminStaff(
+    @Param('id') id: string,
+    @Body() body: AdminStaffUpdateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin staff updated successfully.',
+      await this.adminDatabase.updateAdminAccount(id, body, admin.adminId),
+    );
+  }
+
+  @Post('staff/:id/remove')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard, RolesGuard)
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Remove an admin account' })
+  async removeAdminStaff(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Admin staff removed successfully.',
+      await this.adminDatabase.deleteAdminAccount(id, admin.adminId),
+    );
   }
 
   @Get('operational-settings')

@@ -140,6 +140,7 @@ export class CommunitiesController {
       authorization,
       this.readString(body.ownerId),
     );
+    this.coreDatabase.assertUserCanCreateCommunities(owner);
     const community = await this.experienceDatabase.createCommunity({
       ...this.normalizeCommunityCreateInput(body),
       ownerId: owner.id,

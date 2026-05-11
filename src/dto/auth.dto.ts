@@ -82,28 +82,22 @@ export class SignupDto {
 
   @ApiProperty({
     example: 'business',
+    required: false,
     enum: ['user', 'creator', 'business'],
     description:
-      'Profile type is required. business can create jobs and marketplace products. creator can create pages.',
-  })
-  @IsNotEmpty()
-  @IsIn(['user', 'creator', 'business'], {
-    message: 'profileType must be one of: user, creator, business',
-  })
-  @IsString()
-  profileType!: string;
-
-  @ApiPropertyOptional({
-    example: 'Business',
-    enum: ['User', 'Creator', 'Business', 'Seller', 'Recruiter'],
-    description:
-      'Legacy role alias. If omitted, it will be derived from profileType.',
+      'Optional profile type. business can create jobs, marketplace products, and communities. creator can create pages and communities.',
   })
   @IsOptional()
-  @IsIn(['User', 'Creator', 'Business', 'Seller', 'Recruiter'], {
-    message:
-      'role must be one of: User, Creator, Business, Seller, Recruiter',
+  @IsString()
+  profileType?: string;
+
+  @ApiPropertyOptional({
+    example: 'business',
+    enum: ['User', 'Creator', 'Business', 'user', 'creator', 'business'],
+    description:
+      'Optional role alias. Lowercase values are accepted. If omitted, it will be derived from profileType.',
   })
+  @IsOptional()
   @IsString()
   role?: string;
 

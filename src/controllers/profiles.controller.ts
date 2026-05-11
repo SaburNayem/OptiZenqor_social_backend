@@ -119,14 +119,14 @@ export class ProfilesController {
         {
           value: 'business',
           label: 'Business',
-          capabilities: ['create_jobs', 'create_marketplace_products'],
+          capabilities: ['create_jobs', 'create_marketplace_products', 'create_communities'],
           requiredFields: ['businessName', 'businessCategory', 'businessPhone'],
           optionalFields: ['businessAddress', 'companyWebsite'],
         },
         {
           value: 'creator',
           label: 'Creator',
-          capabilities: ['create_pages'],
+          capabilities: ['create_pages', 'create_communities'],
           requiredFields: ['pageName', 'pageCategory', 'pageAbout'],
           optionalFields: ['contactLabel', 'location'],
         },

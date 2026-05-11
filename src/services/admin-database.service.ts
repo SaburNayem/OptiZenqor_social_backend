@@ -20,6 +20,7 @@ export class AdminDatabaseService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    await this.normalizeLegacyAdminRoles();
     await this.ensureDefaultAdmin();
   }
 
@@ -158,7 +159,7 @@ export class AdminDatabaseService implements OnModuleInit {
 
   async getAdminSessions(actorAdminId: string) {
     const actor = await this.getAdminUserById(actorAdminId);
-    const canViewAllSessions = this.hasAdminRole(actor.role, ['Super Admin', 'Operations Admin']);
+    const canViewAllSessions = this.hasAdminRole(actor.role, ['admin']);
     const sessions = await this.prisma.adminSession.findMany({
       where: canViewAllSessions ? undefined : { adminId: actorAdminId },
       include: { admin: true },
@@ -208,7 +209,7 @@ export class AdminDatabaseService implements OnModuleInit {
       where: {
         OR: [
           { verification: { in: ['pending', 'rejected', 'approved'] } },
-          { role: { in: ['Creator', 'Business', 'Seller', 'Recruiter'] } },
+          { role: { in: ['Creator', 'Business'] } },
         ],
       },
       include: { settings: true },
@@ -792,22 +793,16 @@ export class AdminDatabaseService implements OnModuleInit {
 
   getPermissionMatrix() {
     return {
-      roles: [
-        'Super Admin',
-        'Operations Admin',
-        'Content Moderator',
-        'Finance Admin',
-        'Support Admin',
-        'Analytics Viewer',
-      ],
+      roles: ['superadmin', 'admin'],
       moduleScopes: {
         dashboard: ['view'],
-        users: ['view', 'verify', 'suspend'],
-        content: ['view', 'hide', 'feature'],
+        users: ['view', 'verify', 'suspend', 'update'],
+        content: ['view', 'hide', 'feature', 'delete'],
         reports: ['view', 'assign', 'resolve', 'escalate'],
-        monetization: ['view', 'hold', 'approve'],
+        monetization: ['view', 'hold', 'approve', 'update'],
         settings: ['view', 'edit'],
         audit: ['view', 'export'],
+        adminStaff: ['view', 'update', 'delete'],
       },
     };
   }
@@ -2109,7 +2104,9 @@ export class AdminDatabaseService implements OnModuleInit {
     const updated = await this.prisma.appUser.update({
       where: { id: userId },
       data: {
-        role: patch.role?.trim() || undefined,
+        role: patch.role?.trim()
+          ? this.normalizeManagedAppUserRole(patch.role)
+          : undefined,
         status: patch.status?.trim() || undefined,
         verification: patch.verification?.trim() || undefined,
         blocked: patch.blocked ?? undefined,
@@ -5182,6 +5179,101 @@ export class AdminDatabaseService implements OnModuleInit {
     return this.getPermissionMatrix();
   }
 
+  async listAdminAccounts() {
+    const admins = await this.prisma.adminUser.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return admins.map((admin) => ({
+      id: admin.id,
+      name: admin.name,
+      email: admin.email,
+      role: this.normalizeAdminRole(admin.role),
+      isActive: admin.isActive,
+      createdAt: admin.createdAt.toISOString(),
+      updatedAt: admin.updatedAt.toISOString(),
+    }));
+  }
+
+  async updateAdminAccount(
+    adminId: string,
+    patch: { name?: string; role?: string; isActive?: boolean },
+    actorAdminId: string,
+  ) {
+    const actor = await this.getAdminUserById(actorAdminId);
+    if (this.normalizeAdminRole(actor.role) !== 'superadmin') {
+      throw new UnauthorizedException('Only superadmin can manage admin accounts.');
+    }
+
+    const existing = await this.getAdminUserById(adminId);
+    const updated = await this.prisma.adminUser.update({
+      where: { id: adminId },
+      data: {
+        name: patch.name?.trim() || undefined,
+        role: patch.role?.trim() ? this.canonicalizeStoredAdminRole(patch.role) : undefined,
+        isActive: patch.isActive ?? undefined,
+      },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'admin.account.update',
+      entityType: 'admin_user',
+      entityId: adminId,
+      metadata: {
+        previousRole: this.normalizeAdminRole(existing.role),
+        nextRole: this.normalizeAdminRole(updated.role),
+        isActive: updated.isActive,
+      },
+    });
+
+    return {
+      id: updated.id,
+      name: updated.name,
+      email: updated.email,
+      role: this.normalizeAdminRole(updated.role),
+      isActive: updated.isActive,
+      createdAt: updated.createdAt.toISOString(),
+      updatedAt: updated.updatedAt.toISOString(),
+    };
+  }
+
+  async deleteAdminAccount(adminId: string, actorAdminId: string) {
+    const actor = await this.getAdminUserById(actorAdminId);
+    if (this.normalizeAdminRole(actor.role) !== 'superadmin') {
+      throw new UnauthorizedException('Only superadmin can remove admin accounts.');
+    }
+    if (adminId === actorAdminId) {
+      throw new ConflictException('Superadmin cannot remove the current signed-in account.');
+    }
+
+    const existing = await this.getAdminUserById(adminId);
+    if (this.normalizeAdminRole(existing.role) === 'superadmin') {
+      throw new ConflictException('Superadmin accounts cannot be removed from this route.');
+    }
+
+    await this.prisma.adminUser.delete({
+      where: { id: adminId },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'admin.account.delete',
+      entityType: 'admin_user',
+      entityId: adminId,
+      metadata: {
+        email: existing.email,
+        role: this.normalizeAdminRole(existing.role),
+      },
+    });
+
+    return {
+      id: existing.id,
+      email: existing.email,
+      deleted: true,
+    };
+  }
+
   async getSettings() {
     return this.getOperationalSettings();
   }
@@ -5414,7 +5506,9 @@ export class AdminDatabaseService implements OnModuleInit {
       );
     }
     const name = process.env.ADMIN_BOOTSTRAP_NAME?.trim() || 'Admin';
-    const role = process.env.ADMIN_BOOTSTRAP_ROLE?.trim() || 'Super Admin';
+    const role = this.canonicalizeStoredAdminRole(
+      process.env.ADMIN_BOOTSTRAP_ROLE?.trim() || 'superadmin',
+    );
     const forceSync =
       process.env.ADMIN_BOOTSTRAP_FORCE_SYNC?.trim().toLowerCase() === 'true';
     const existing = await this.prisma.adminUser.findUnique({
@@ -5521,7 +5615,7 @@ export class AdminDatabaseService implements OnModuleInit {
       adminId: admin.id,
       name: admin.name,
       email: admin.email,
-      role: admin.role,
+      role: this.normalizeAdminRole(admin.role),
       mfaEnabled: admin.mfaEnabled,
       device: session.device,
       ipAddress: session.ipAddress,
@@ -6681,8 +6775,73 @@ export class AdminDatabaseService implements OnModuleInit {
   }
 
   private hasAdminRole(role: string, allowedRoles: string[]) {
-    const normalizedRole = role.trim().toLowerCase();
-    return allowedRoles.some((item) => item.trim().toLowerCase() === normalizedRole);
+    const normalizedRole = this.normalizeAdminRole(role);
+    if (normalizedRole === 'superadmin') {
+      return true;
+    }
+    return allowedRoles.some((item) => this.normalizeAdminRole(item) === normalizedRole);
+  }
+
+  private normalizeAdminRole(role?: string | null) {
+    const normalized = (role ?? '').trim().toLowerCase();
+    if (normalized === 'superadmin' || normalized === 'super admin') {
+      return 'superadmin';
+    }
+    if (
+      normalized === 'admin' ||
+      normalized === 'operations admin' ||
+      normalized === 'content moderator' ||
+      normalized === 'finance admin' ||
+      normalized === 'support admin' ||
+      normalized === 'analytics viewer'
+    ) {
+      return 'admin';
+    }
+    return 'admin';
+  }
+
+  private canonicalizeStoredAdminRole(role?: string | null) {
+    return this.normalizeAdminRole(role) === 'superadmin' ? 'superadmin' : 'admin';
+  }
+
+  private normalizeManagedAppUserRole(role: string) {
+    const normalized = role.trim().toLowerCase();
+    switch (normalized) {
+      case 'creator':
+        return 'Creator';
+      case 'business':
+        return 'Business';
+      case 'admin':
+        return 'Admin';
+      case 'superadmin':
+      case 'super admin':
+        return 'SuperAdmin';
+      default:
+        return 'User';
+    }
+  }
+
+  private async normalizeLegacyAdminRoles() {
+    await this.prisma.adminUser.updateMany({
+      where: { role: 'Super Admin' },
+      data: { role: 'superadmin' },
+    });
+
+    await this.prisma.adminUser.updateMany({
+      where: {
+        role: {
+          in: [
+            'Operations Admin',
+            'Content Moderator',
+            'Finance Admin',
+            'Support Admin',
+            'Analytics Viewer',
+            'Admin',
+          ],
+        },
+      },
+      data: { role: 'admin' },
+    });
   }
 
   private mapAdminAppUser(user: Prisma.AppUserGetPayload<Record<string, never>>) {

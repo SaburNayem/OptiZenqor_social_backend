@@ -98,6 +98,44 @@ Optional but recommended:
 - `AUTH_EXPOSE_TEST_ACCOUNTS=true` only for controlled local QA if `/auth/demo-accounts` is explicitly needed
 - support contact configuration for `/support-help/mail`
 
+Role model:
+
+- app users: `user`, `creator`, `business`
+- admin panel users: `admin`, `superadmin`
+- `creator` can create pages and communities
+- `business` can create marketplace products, jobs, and communities
+- regular users can still create normal group chats
+- `superadmin` can manage and remove `admin` accounts through the admin staff routes
+
+## Vercel setup
+
+This backend repo is already linked to a Vercel project. To connect both your web app and admin dashboard to it, add the production URLs in the backend Vercel dashboard so CORS and Swagger use the right hosts.
+
+Set these environment variables in the backend Vercel project:
+
+```env
+DATABASE_URL=your_pooled_postgres_url
+DIRECT_URL=your_direct_postgres_url
+JWT_SECRET=replace_with_long_random_secret
+JWT_REFRESH_SECRET=replace_with_long_random_refresh_secret
+VERCEL_URL=your-backend-project.vercel.app
+FRONTEND_URL=https://your-web-project.vercel.app
+CLIENT_URL=https://your-dashboard-project.vercel.app
+WEB_FRONTEND_URL=https://your-web-project.vercel.app
+DASHBOARD_URL=https://your-dashboard-project.vercel.app
+CORS_ORIGIN=https://your-web-project.vercel.app
+CORS_ORIGINS=https://your-web-project.vercel.app,https://your-dashboard-project.vercel.app,https://your-backend-project.vercel.app
+```
+
+Use these values in your frontend Vercel projects:
+
+- Web app API base URL: `https://your-backend-project.vercel.app`
+- Dashboard API base URL: `https://your-backend-project.vercel.app`
+- Web Swagger/docs URL: `https://your-backend-project.vercel.app/docs`
+- Health check: `https://your-backend-project.vercel.app/health`
+
+If you deploy preview environments for web or dashboard, either add their preview domains to `CORS_ORIGINS` or keep the built-in `*.vercel.app` fallback enabled.
+
 ## Key routes
 
 System:
