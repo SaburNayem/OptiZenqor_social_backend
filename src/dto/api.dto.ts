@@ -5,12 +5,14 @@ import {
   IsBoolean,
   IsInt,
   IsIn,
+  IsNotEmpty,
   IsNumber,
   IsObject,
   IsOptional,
   Max,
   Min,
   IsString,
+  ValidateNested,
 } from 'class-validator';
 
 export class StoryMediaTransformDto {
@@ -688,16 +690,74 @@ export class ReelReactionDto {
   reaction!: string;
 }
 
+export class ChatMessageAttachmentDto {
+  @ApiProperty({ enum: ['image', 'video', 'audio', 'file'] })
+  @IsIn(['image', 'video', 'audio', 'file'])
+  type!: 'image' | 'video' | 'audio' | 'file';
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  url!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  mimeType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  uploadId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  sizeBytes?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  durationMs?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  thumbnailUrl?: string;
+}
+
 export class CreateMessageDto {
   @ApiProperty()
   @IsString()
   senderId!: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  text!: string;
+  message?: string;
 
-  @ApiPropertyOptional({ type: [String] })
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  body?: string;
+
+  @ApiPropertyOptional({
+    description: 'Required for text messages. Optional for attachment-only messages.',
+  })
+  @IsOptional()
+  @IsString()
+  text?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Legacy attachment URL array. Prefer `attachmentItems` for canonical direct-chat attachment payloads.',
+  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
@@ -708,15 +768,209 @@ export class CreateMessageDto {
   @IsString()
   replyToMessageId?: string;
 
-  @ApiPropertyOptional({ enum: ['text', 'image', 'video', 'audio', 'file'] })
+  @ApiPropertyOptional({
+    enum: [
+      'text',
+      'image',
+      'video',
+      'audio',
+      'file',
+      'location',
+      'contact',
+      'gallery',
+      'camera',
+      'photo',
+      'voice',
+      'document',
+    ],
+  })
   @IsOptional()
-  @IsIn(['text', 'image', 'video', 'audio', 'file'])
-  kind?: 'text' | 'image' | 'video' | 'audio' | 'file';
+  @IsIn([
+    'text',
+    'image',
+    'video',
+    'audio',
+    'file',
+    'location',
+    'contact',
+    'gallery',
+    'camera',
+    'photo',
+    'voice',
+    'document',
+  ])
+  kind?:
+    | 'text'
+    | 'image'
+    | 'video'
+    | 'audio'
+    | 'file'
+    | 'location'
+    | 'contact'
+    | 'gallery'
+    | 'camera'
+    | 'photo'
+    | 'voice'
+    | 'document';
+
+  @ApiPropertyOptional({
+    enum: [
+      'text',
+      'image',
+      'video',
+      'audio',
+      'file',
+      'location',
+      'contact',
+      'gallery',
+      'camera',
+      'photo',
+      'voice',
+      'document',
+    ],
+  })
+  @IsOptional()
+  @IsIn([
+    'text',
+    'image',
+    'video',
+    'audio',
+    'file',
+    'location',
+    'contact',
+    'gallery',
+    'camera',
+    'photo',
+    'voice',
+    'document',
+  ])
+  type?:
+    | 'text'
+    | 'image'
+    | 'video'
+    | 'audio'
+    | 'file'
+    | 'location'
+    | 'contact'
+    | 'gallery'
+    | 'camera'
+    | 'photo'
+    | 'voice'
+    | 'document';
+
+  @ApiPropertyOptional({
+    description:
+      'Legacy single attachment path/url field. Accepts uploaded file URLs and local-compatible media paths.',
+  })
+  @IsOptional()
+  @IsString()
+  mediaPath?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Canonical single attachment URL alias. Accepted for image, audio, video, and file messages.',
+  })
+  @IsOptional()
+  @IsString()
+  mediaUrl?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  mediaPath?: string;
+  imageUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  audioUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  videoUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  fileUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  attachmentUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Optional display filename for file attachments.',
+  })
+  @IsOptional()
+  @IsString()
+  fileName?: string;
+
+  @ApiPropertyOptional({
+    description: 'Optional MIME type for attachment messages.',
+  })
+  @IsOptional()
+  @IsString()
+  mimeType?: string;
+
+  @ApiPropertyOptional({
+    description: 'Optional upload identifier returned by the uploads endpoint.',
+  })
+  @IsOptional()
+  @IsString()
+  uploadId?: string;
+
+  @ApiPropertyOptional({
+    type: [ChatMessageAttachmentDto],
+    description:
+      'Canonical direct-chat attachment array. Use this for image, audio, video, and file messages.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ChatMessageAttachmentDto)
+  attachmentItems?: ChatMessageAttachmentDto[];
+}
+
+export class UpdateMessageDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
+  @ApiProperty()
+  @IsString()
+  text!: string;
+}
+
+export class ToggleMessagePinDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  value?: boolean;
+}
+
+export class ForwardMessageDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
+  @ApiProperty()
+  @IsString()
+  targetThreadId!: string;
+
+  @ApiPropertyOptional({
+    description: 'Optional replacement caption/text for the forwarded message.',
+  })
+  @IsOptional()
+  @IsString()
+  text?: string;
 }
 
 export class CreateChatThreadDto {
@@ -1805,6 +2059,37 @@ export class CreateCallSessionDto {
   @ApiProperty({ enum: ['voice', 'video'] })
   @IsIn(['voice', 'video'])
   mode!: 'voice' | 'video';
+}
+
+export class JoinCallSessionDto {
+  @ApiProperty()
+  @IsString()
+  userId!: string;
+}
+
+export class LeaveCallSessionDto {
+  @ApiProperty()
+  @IsString()
+  userId!: string;
+}
+
+export class CallSignalDto {
+  @ApiProperty()
+  @IsString()
+  fromUserId!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  toUserId?: string;
+
+  @ApiProperty({ enum: ['offer', 'answer', 'ice-candidate', 'renegotiate'] })
+  @IsIn(['offer', 'answer', 'ice-candidate', 'renegotiate'])
+  type!: 'offer' | 'answer' | 'ice-candidate' | 'renegotiate';
+
+  @ApiProperty({ type: Object })
+  @IsObject()
+  payload!: Record<string, unknown>;
 }
 
 export class EndCallSessionDto {

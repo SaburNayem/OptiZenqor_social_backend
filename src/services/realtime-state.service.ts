@@ -151,18 +151,36 @@ export class RealtimeStateService implements OnModuleInit {
   }
 
   getPresenceSnapshot() {
+    const capturedAt = new Date().toISOString();
+    const typingThreadIdsByUser = new Map<string, string[]>();
+    for (const [threadId, users] of this.threadTyping.entries()) {
+      for (const userId of users) {
+        const list = typingThreadIdsByUser.get(userId) ?? [];
+        if (!list.includes(threadId)) {
+          list.push(threadId);
+        }
+        typingThreadIdsByUser.set(userId, list);
+      }
+    }
+    const threadStates = [...this.threadMembers.keys(), ...this.threadTyping.keys()]
+      .filter((threadId, index, list) => list.indexOf(threadId) === index)
+      .map((threadId) => this.getThreadState(threadId));
+
     return {
+      capturedAt,
       onlineUserIds: [...this.userSockets.keys()],
       users: [...this.lastSeen.entries()].map(([userId, seenAt]) => ({
         userId,
+        isOnline: this.userSockets.has(userId),
         online: this.userSockets.has(userId),
         socketCount: this.userSockets.get(userId)?.size ?? 0,
-        lastSeen: this.userSockets.has(userId) ? 'now' : seenAt,
+        lastSeen: seenAt,
+        typingThreadIds: [...(typingThreadIdsByUser.get(userId) ?? [])],
+        activeThreadIds: threadStates
+          .filter((thread) => thread.activeUserIds.includes(userId))
+          .map((thread) => thread.threadId),
       })),
-      threadTyping: [...this.threadTyping.entries()].map(([threadId, users]) => ({
-        threadId,
-        userIds: [...users],
-      })),
+      threadStates,
     };
   }
 
@@ -315,6 +333,33 @@ export class RealtimeStateService implements OnModuleInit {
     return session;
   }
 
+  getCallContract() {
+    return {
+      rtcConfig: this.getRtcConfig(),
+      sessionLifecycle: {
+        create: 'POST /calls/sessions',
+        join: 'POST /calls/sessions/:id/join',
+        leave: 'POST /calls/sessions/:id/leave',
+        signal: 'POST /calls/sessions/:id/signal',
+        end: 'PATCH /calls/sessions/:id/end',
+      },
+      signaling: {
+        types: ['offer', 'answer', 'ice-candidate', 'renegotiate'],
+        transport: {
+          namespace: '/realtime',
+          clientEvents: ['call.create', 'call.join', 'call.leave', 'call.signal', 'call.end'],
+          serverEvents: [
+            'call.session.created',
+            'call.participant.joined',
+            'call.participant.left',
+            'call.signal',
+            'call.ended',
+          ],
+        },
+      },
+    };
+  }
+
   getCallSessions() {
     return [...this.callSessions.values()].sort((left, right) =>
       right.startedAt.localeCompare(left.startedAt),
@@ -409,6 +454,12 @@ export class RealtimeStateService implements OnModuleInit {
       auth: {
         tokenField: 'auth.token',
         fallbackUserIdField: 'auth.userId',
+      },
+      restContracts: {
+        chatMessageContract: '/chat/message-contract',
+        callContract: '/calls/contract',
+        rtcConfig: '/calls/rtc-config',
+        presence: '/chat/presence',
       },
       clientEvents: [
         'presence.subscribe',

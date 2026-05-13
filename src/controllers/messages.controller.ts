@@ -9,13 +9,22 @@ export class MessagesController {
   constructor(private readonly coreDatabase: CoreDatabaseService) {}
 
   @Get()
-  async getThreads() {
-    return this.coreDatabase.getThreads();
+  async getThreads(@Headers('authorization') authorization?: string) {
+    const actor = authorization
+      ? await this.coreDatabase.requireUserFromAuthorization(authorization).catch(() => null)
+      : null;
+    return this.coreDatabase.getThreads(actor?.id);
   }
 
   @Get(':id')
-  async getThread(@Param('id') id: string) {
-    return this.coreDatabase.getThread(id);
+  async getThread(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = authorization
+      ? await this.coreDatabase.requireUserFromAuthorization(authorization).catch(() => null)
+      : null;
+    return this.coreDatabase.getThread(id, actor?.id);
   }
 
   @Post(':id')
@@ -28,11 +37,20 @@ export class MessagesController {
       authorization,
       body.senderId,
     );
-    return this.coreDatabase.createMessage(id, actor.id, body.text, {
+    return this.coreDatabase.createMessage(id, actor.id, body.text ?? body.message ?? body.body ?? '', {
       attachments: body.attachments,
       replyToMessageId: body.replyToMessageId,
-      kind: body.kind,
-      mediaPath: body.mediaPath,
+      kind: body.kind ?? body.type,
+      mediaPath: body.mediaPath ?? body.attachmentUrl,
+      mediaUrl: body.mediaUrl ?? body.attachmentUrl,
+      imageUrl: body.imageUrl,
+      audioUrl: body.audioUrl,
+      videoUrl: body.videoUrl,
+      fileUrl: body.fileUrl,
+      fileName: body.fileName,
+      mimeType: body.mimeType,
+      uploadId: body.uploadId,
+      attachmentItems: body.attachmentItems,
     });
   }
 }

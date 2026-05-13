@@ -160,19 +160,55 @@ export class RealtimeGateway
     body: {
       threadId: string;
       text: string;
+      message?: string;
+      body?: string;
       attachments?: string[];
       replyToMessageId?: string;
-      kind?: 'text' | 'image' | 'video' | 'audio' | 'file';
+      kind?: string;
+      type?: string;
       mediaPath?: string;
+      mediaUrl?: string;
+      attachmentUrl?: string;
+      imageUrl?: string;
+      audioUrl?: string;
+      videoUrl?: string;
+      fileUrl?: string;
+      fileName?: string;
+      mimeType?: string;
+      uploadId?: string;
+      attachmentItems?: Array<{
+        type: 'image' | 'video' | 'audio' | 'file' | 'location' | 'contact';
+        url: string;
+        name?: string;
+        mimeType?: string;
+        uploadId?: string;
+        sizeBytes?: number;
+        durationMs?: number;
+        thumbnailUrl?: string;
+      }>;
     },
   ) {
     const userId = this.requireUserId(client);
-    const message = await this.coreDatabase.createMessage(body.threadId, userId, body.text, {
+    const message = await this.coreDatabase.createMessage(
+      body.threadId,
+      userId,
+      body.text ?? body.message ?? body.body ?? '',
+      {
       attachments: body.attachments,
       replyToMessageId: body.replyToMessageId,
-      kind: body.kind,
-      mediaPath: body.mediaPath,
-    });
+      kind: body.kind ?? body.type,
+      mediaPath: body.mediaPath ?? body.attachmentUrl,
+      mediaUrl: body.mediaUrl ?? body.attachmentUrl,
+      imageUrl: body.imageUrl,
+      audioUrl: body.audioUrl,
+      videoUrl: body.videoUrl,
+      fileUrl: body.fileUrl,
+      fileName: body.fileName,
+      mimeType: body.mimeType,
+      uploadId: body.uploadId,
+      attachmentItems: body.attachmentItems,
+      },
+    );
     await this.coreDatabase.updateMessageDeliveryState(body.threadId, message.id, 'delivered');
 
     const eventPayload = {

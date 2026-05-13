@@ -7,11 +7,14 @@ import {
   UpdateLiveStreamStudioDto,
 } from '../dto/admin.dto';
 import {
+  CallSignalDto,
   CreateGroupChatDto,
   CreateCallSessionDto,
   CreateLiveStreamDto,
   EndCallSessionDto,
   GroupChatMemberDto,
+  JoinCallSessionDto,
+  LeaveCallSessionDto,
   LiveCommentDto,
   LiveReactionDto,
   PaginationQueryDto,
@@ -393,6 +396,14 @@ export class RealtimeController {
     return successResponse('RTC config fetched successfully.', this.realtimeState.getRtcConfig());
   }
 
+  @Get('calls/contract')
+  getCallContract() {
+    return successResponse(
+      'Call contract fetched successfully.',
+      this.realtimeState.getCallContract(),
+    );
+  }
+
   @Get('calls/sessions')
   getCallSessions() {
     const sessions = this.realtimeState.getCallSessions();
@@ -419,7 +430,64 @@ export class RealtimeController {
       ...body,
       initiatorId: actor.id,
     });
-    return successResponse('Call session created successfully.', session);
+    return successResponse('Call session created successfully.', {
+      ...session,
+      rtcConfig: this.realtimeState.getRtcConfig(),
+    });
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Post('calls/sessions/:id/join')
+  async joinCallSession(
+    @Param('id') id: string,
+    @Body() body: JoinCallSessionDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    const session = await this.realtimeState.joinCallSession(id, actor.id);
+    return successResponse('Call session joined successfully.', {
+      ...session,
+      rtcConfig: this.realtimeState.getRtcConfig(),
+    });
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Post('calls/sessions/:id/leave')
+  async leaveCallSession(
+    @Param('id') id: string,
+    @Body() body: LeaveCallSessionDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    const session = await this.realtimeState.leaveCallSession(id, actor.id);
+    return successResponse('Call session left successfully.', session);
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Post('calls/sessions/:id/signal')
+  async createCallSignal(
+    @Param('id') id: string,
+    @Body() body: CallSignalDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.fromUserId,
+    );
+    const signal = await this.realtimeState.addCallSignal({
+      sessionId: id,
+      fromUserId: actor.id,
+      toUserId: body.toUserId,
+      type: body.type,
+      payload: body.payload,
+    });
+    return successResponse('Call signal created successfully.', signal);
   }
 
   @UseGuards(SessionAuthGuard)

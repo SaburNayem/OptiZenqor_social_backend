@@ -81,12 +81,33 @@ type MessageRow = QueryResultRow & {
   sender_id: string;
   text: string;
   read: boolean;
+  starred: boolean;
   timestamp: Date | string;
-  attachments: string[];
+  attachments: unknown;
   reply_to_message_id: string | null;
   delivery_state: 'sent' | 'delivered' | 'read';
-  kind: 'text' | 'image' | 'video' | 'audio' | 'file';
+  kind: 'text' | 'image' | 'video' | 'audio' | 'file' | 'location' | 'contact';
   media_path: string | null;
+};
+
+type ChatMessageKind =
+  | 'text'
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'file'
+  | 'location'
+  | 'contact';
+
+type ChatMessageAttachmentRecord = {
+  type: Exclude<ChatMessageKind, 'text'>;
+  url: string;
+  name?: string;
+  mimeType?: string;
+  uploadId?: string;
+  sizeBytes?: number;
+  durationMs?: number;
+  thumbnailUrl?: string;
 };
 
 type BuddyRequestRow = QueryResultRow & {
@@ -1399,7 +1420,7 @@ export class CoreDatabaseService implements OnModuleInit {
     };
   }
 
-  async getThreads() {
+  async getThreads(viewerId?: string) {
     const { rows } = await this.database.query<ThreadRow>(
       `select * from chat_threads order by created_at desc`,
     );
@@ -1408,12 +1429,13 @@ export class CoreDatabaseService implements OnModuleInit {
         this.buildThreadPayload(thread, {
           includeParticipants: true,
           includeParticipantIds: true,
+          viewerId,
         }),
       ),
     );
   }
 
-  async getThread(id: string) {
+  async getThread(id: string, viewerId?: string) {
     const { rows } = await this.database.query<ThreadRow>(
       `select * from chat_threads where id = $1 limit 1`,
       [id],
@@ -1426,6 +1448,7 @@ export class CoreDatabaseService implements OnModuleInit {
       includeParticipantIds: true,
       includeParticipants: true,
       includeMessages: true,
+      viewerId,
     });
   }
 
@@ -1435,6 +1458,20 @@ export class CoreDatabaseService implements OnModuleInit {
       [threadId],
     );
     return rows.map((row) => row.user_id);
+  }
+
+  async assertThreadParticipant(threadId: string, userId: string) {
+    const { rows } = await this.database.query<QueryResultRow & { exists: boolean }>(
+      `select exists(
+        select 1
+        from chat_thread_participants
+        where thread_id = $1 and user_id = $2
+      ) as exists`,
+      [threadId, userId],
+    );
+    if (!rows[0]?.exists) {
+      throw new ForbiddenException('You are not a participant in this thread.');
+    }
   }
 
   async getThreadMessages(threadId: string) {
@@ -1657,13 +1694,23 @@ export class CoreDatabaseService implements OnModuleInit {
     options?: {
       attachments?: string[];
       replyToMessageId?: string;
-      kind?: 'text' | 'image' | 'video' | 'audio' | 'file';
+      kind?: string;
       mediaPath?: string;
+      mediaUrl?: string;
+      imageUrl?: string;
+      audioUrl?: string;
+      videoUrl?: string;
+      fileUrl?: string;
+      fileName?: string;
+      mimeType?: string;
+      uploadId?: string;
+      attachmentItems?: ChatMessageAttachmentRecord[];
     },
   ) {
     const thread = await this.getThread(threadId);
     const participantIds = thread.participantIds ?? (await this.getThreadParticipantIds(threadId));
     await this.getUser(senderId);
+    const normalized = this.normalizeChatMessageInput(text, options);
     const id = makeId('message');
     await this.database.query(
       `insert into chat_messages (
@@ -1676,14 +1723,14 @@ export class CoreDatabaseService implements OnModuleInit {
         id,
         threadId,
         senderId,
-        text,
+        normalized.text,
         false,
         new Date().toISOString(),
-        JSON.stringify(options?.attachments ?? []),
+        JSON.stringify(normalized.attachments),
         options?.replyToMessageId ?? null,
         'sent',
-        options?.kind ?? 'text',
-        options?.mediaPath ?? null,
+        normalized.kind,
+        normalized.mediaPath,
       ],
     );
 
@@ -1692,7 +1739,7 @@ export class CoreDatabaseService implements OnModuleInit {
       await this.pushNotification({
         recipientId: participantId,
         title: `New message from ${sender.name}`,
-        body: text || `${sender.username} sent an attachment.`,
+        body: normalized.text || `${sender.username} sent an attachment.`,
         routeName: `/chat/threads/${threadId}`,
         entityId: id,
         type: 'social',
@@ -1749,6 +1796,96 @@ export class CoreDatabaseService implements OnModuleInit {
       updatedCount: updatedRows.rowCount ?? 0,
       messages: updatedRows.rows.map((row) => this.mapMessage(row)),
     };
+  }
+
+  async updateChatMessage(
+    threadId: string,
+    messageId: string,
+    actorId: string,
+    text: string,
+  ) {
+    await this.assertThreadParticipant(threadId, actorId);
+    const message = await this.getMessage(messageId);
+    if (message.threadId !== threadId) {
+      throw new NotFoundException(`Message ${messageId} does not belong to thread ${threadId}`);
+    }
+    if (message.senderId !== actorId) {
+      throw new ForbiddenException('Only the sender can edit this message.');
+    }
+    const nextText = text.trim();
+    if (!nextText) {
+      throw new ConflictException('Edited messages require non-empty text.');
+    }
+    await this.database.query(
+      `update chat_messages
+       set text = $3
+       where id = $1 and thread_id = $2`,
+      [messageId, threadId, nextText],
+    );
+    return this.getMessage(messageId);
+  }
+
+  async deleteChatMessage(threadId: string, messageId: string, actorId: string) {
+    await this.assertThreadParticipant(threadId, actorId);
+    const message = await this.getMessage(messageId);
+    if (message.threadId !== threadId) {
+      throw new NotFoundException(`Message ${messageId} does not belong to thread ${threadId}`);
+    }
+    if (message.senderId !== actorId) {
+      throw new ForbiddenException('Only the sender can delete this message.');
+    }
+    await this.database.query(
+      `delete from chat_messages where id = $1 and thread_id = $2`,
+      [messageId, threadId],
+    );
+    return { id: messageId, threadId, deleted: true };
+  }
+
+  async toggleChatMessagePin(
+    threadId: string,
+    messageId: string,
+    actorId: string,
+    value?: boolean,
+  ) {
+    await this.assertThreadParticipant(threadId, actorId);
+    const message = await this.getMessage(messageId);
+    if (message.threadId !== threadId) {
+      throw new NotFoundException(`Message ${messageId} does not belong to thread ${threadId}`);
+    }
+    const nextValue = value ?? !message.starred;
+    await this.database.query(
+      `update chat_messages
+       set starred = $3
+       where id = $1 and thread_id = $2`,
+      [messageId, threadId, nextValue],
+    );
+    return this.getMessage(messageId);
+  }
+
+  async forwardChatMessage(
+    sourceThreadId: string,
+    messageId: string,
+    targetThreadId: string,
+    actorId: string,
+    text?: string,
+  ) {
+    await this.assertThreadParticipant(sourceThreadId, actorId);
+    await this.assertThreadParticipant(targetThreadId, actorId);
+    const message = await this.getMessage(messageId);
+    if (message.threadId !== sourceThreadId) {
+      throw new NotFoundException(`Message ${messageId} does not belong to thread ${sourceThreadId}`);
+    }
+    return this.createMessage(targetThreadId, actorId, text?.trim() || message.text, {
+      attachments: Array.isArray(message.attachments) ? message.attachments : [],
+      kind: message.kind,
+      mediaPath: message.mediaPath ?? undefined,
+      mediaUrl: message.mediaUrl ?? undefined,
+      imageUrl: message.imageUrl ?? undefined,
+      audioUrl: message.audioUrl ?? undefined,
+      videoUrl: message.videoUrl ?? undefined,
+      fileUrl: message.fileUrl ?? undefined,
+      attachmentItems: Array.isArray(message.attachmentItems) ? message.attachmentItems : [],
+    });
   }
 
   async getNotificationInbox(recipientId?: string) {
@@ -2137,6 +2274,7 @@ export class CoreDatabaseService implements OnModuleInit {
         sender_id text not null references app_users(id) on delete cascade,
         text text not null,
         read boolean not null default false,
+        starred boolean not null default false,
         timestamp timestamptz not null,
         attachments jsonb not null default '[]'::jsonb,
         reply_to_message_id text null references chat_messages(id) on delete set null,
@@ -2144,6 +2282,10 @@ export class CoreDatabaseService implements OnModuleInit {
         kind text not null default 'text',
         media_path text null
       );
+    `);
+    await this.database.query(`
+      alter table chat_messages
+      add column if not exists starred boolean not null default false;
     `);
     await this.database.query(`
       do $$
@@ -2213,6 +2355,7 @@ export class CoreDatabaseService implements OnModuleInit {
       includeParticipantIds?: boolean;
       includeParticipants?: boolean;
       includeMessages?: boolean;
+      viewerId?: string;
     } = {},
   ) {
     const messages = await this.listThreadMessages(row.id);
@@ -2223,10 +2366,17 @@ export class CoreDatabaseService implements OnModuleInit {
       ? await this.getThreadParticipantIds(row.id)
       : undefined;
     const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+    const normalizedViewerId = options.viewerId?.trim() ?? '';
+    const unreadCount =
+      normalizedViewerId.length === 0
+        ? messages.filter((message) => !message.read).length
+        : messages.filter(
+            (message) => !message.read && message.senderId !== normalizedViewerId,
+          ).length;
 
     return {
       ...this.mapThread(row),
-      unreadCount: messages.filter((message) => !message.read).length,
+      unreadCount,
       lastMessage,
       roles: Array.isArray(participants)
         ? Object.fromEntries(
@@ -2967,6 +3117,8 @@ export class CoreDatabaseService implements OnModuleInit {
   }
 
   private mapMessage(row: MessageRow) {
+    const attachments = this.normalizeStoredChatAttachments(row.attachments, row.kind, row.media_path);
+    const primaryAttachment = attachments[0];
     return {
       id: row.id,
       chatId: row.thread_id,
@@ -2974,14 +3126,224 @@ export class CoreDatabaseService implements OnModuleInit {
       senderId: row.sender_id,
       text: row.text,
       read: row.read,
-      starred: false,
+      starred: row.starred ?? false,
       timestamp: this.iso(row.timestamp),
-      attachments: row.attachments ?? [],
+      attachments: attachments.map((attachment) => attachment.url),
+      attachmentItems: attachments,
       replyToMessageId: row.reply_to_message_id,
       deliveryState: row.delivery_state,
       kind: row.kind,
-      mediaPath: row.media_path,
+      mediaPath: row.media_path ?? primaryAttachment?.url ?? null,
+      mediaUrl: primaryAttachment?.url ?? null,
+      imageUrl: row.kind === 'image' ? (primaryAttachment?.url ?? row.media_path ?? null) : null,
+      audioUrl: row.kind === 'audio' ? (primaryAttachment?.url ?? row.media_path ?? null) : null,
+      videoUrl: row.kind === 'video' ? (primaryAttachment?.url ?? row.media_path ?? null) : null,
+      fileUrl: row.kind === 'file' ? (primaryAttachment?.url ?? row.media_path ?? null) : null,
     };
+  }
+
+  private normalizeChatMessageInput(
+    text: string,
+    options?: {
+      attachments?: string[];
+      kind?: string;
+      mediaPath?: string;
+      mediaUrl?: string;
+      imageUrl?: string;
+      audioUrl?: string;
+      videoUrl?: string;
+      fileUrl?: string;
+      fileName?: string;
+      mimeType?: string;
+      uploadId?: string;
+      attachmentItems?: ChatMessageAttachmentRecord[];
+    },
+  ) {
+    const trimmedText = text.trim();
+    const attachmentItems = (options?.attachmentItems ?? [])
+      .map((item) => this.normalizeAttachmentItem(item))
+      .filter((item): item is ChatMessageAttachmentRecord => Boolean(item));
+    const legacyAttachments = (options?.attachments ?? [])
+      .map((url) => this.normalizeAttachmentItem({ type: this.inferAttachmentType(options?.kind), url }))
+      .filter((item): item is ChatMessageAttachmentRecord => Boolean(item));
+
+    const aliasCandidates: Array<{ kind: Exclude<ChatMessageKind, 'text'>; url?: string }> = [
+      { kind: 'image', url: options?.imageUrl },
+      { kind: 'audio', url: options?.audioUrl },
+      { kind: 'video', url: options?.videoUrl },
+      { kind: 'file', url: options?.fileUrl },
+      {
+        kind: this.inferAttachmentType(options?.kind),
+        url: options?.mediaUrl ?? options?.mediaPath,
+      },
+    ];
+
+    const aliasAttachments = aliasCandidates
+      .map((candidate) =>
+        this.normalizeAttachmentItem({
+          type: candidate.kind,
+          url: candidate.url ?? '',
+          name: options?.fileName,
+          mimeType: options?.mimeType,
+          uploadId: options?.uploadId,
+        }),
+      )
+      .filter((item): item is ChatMessageAttachmentRecord => Boolean(item));
+
+    const attachments = [...attachmentItems, ...legacyAttachments, ...aliasAttachments].filter(
+      (item, index, list) =>
+        list.findIndex(
+          (candidate) => candidate.type === item.type && candidate.url === item.url,
+        ) === index,
+    );
+
+    const inferredKind =
+      this.normalizeChatKindAlias(options?.kind) ??
+      attachmentItems[0]?.type ??
+      aliasAttachments[0]?.type ??
+      legacyAttachments[0]?.type ??
+      'text';
+
+    if ((inferredKind === 'text' || inferredKind === 'location' || inferredKind === 'contact') && !trimmedText) {
+      throw new ConflictException('Text messages require a non-empty `text` value.');
+    }
+
+    if (
+      inferredKind !== 'text' &&
+      inferredKind !== 'location' &&
+      inferredKind !== 'contact' &&
+      attachments.length === 0
+    ) {
+      throw new ConflictException(
+        `Attachment messages require at least one uploaded media reference for kind \`${inferredKind}\`.`,
+      );
+    }
+
+    return {
+      text: trimmedText,
+      kind: inferredKind,
+      attachments,
+      mediaPath:
+        attachments[0]?.url ??
+        options?.mediaPath?.trim() ??
+        options?.mediaUrl?.trim() ??
+        null,
+    };
+  }
+
+  private normalizeAttachmentItem(input: {
+    type?: string;
+    url?: string;
+    name?: string;
+    mimeType?: string;
+    uploadId?: string;
+    sizeBytes?: number;
+    durationMs?: number;
+    thumbnailUrl?: string;
+  }): ChatMessageAttachmentRecord | null {
+    const url = input.url?.trim() ?? '';
+    if (!url) {
+      return null;
+    }
+    const normalizedType = this.inferAttachmentType(input.type);
+    return {
+      type: normalizedType,
+      url,
+      name: input.name?.trim() || undefined,
+      mimeType: input.mimeType?.trim() || undefined,
+      uploadId: input.uploadId?.trim() || undefined,
+      sizeBytes: typeof input.sizeBytes === 'number' ? input.sizeBytes : undefined,
+      durationMs: typeof input.durationMs === 'number' ? input.durationMs : undefined,
+      thumbnailUrl: input.thumbnailUrl?.trim() || undefined,
+    };
+  }
+
+  private inferAttachmentType(kind?: string): Exclude<ChatMessageKind, 'text'> {
+    switch (this.normalizeChatKindAlias(kind)) {
+      case 'image':
+        return 'image';
+      case 'audio':
+        return 'audio';
+      case 'video':
+        return 'video';
+      case 'file':
+      default:
+        return 'file';
+    }
+  }
+
+  private normalizeChatKindAlias(kind?: string): ChatMessageKind | undefined {
+    switch ((kind ?? '').trim().toLowerCase()) {
+      case 'text':
+        return 'text';
+      case 'image':
+      case 'gallery':
+      case 'camera':
+      case 'photo':
+        return 'image';
+      case 'audio':
+      case 'voice':
+        return 'audio';
+      case 'video':
+        return 'video';
+      case 'file':
+      case 'document':
+        return 'file';
+      case 'location':
+        return 'location';
+      case 'contact':
+        return 'contact';
+      default:
+        return undefined;
+    }
+  }
+
+  private normalizeStoredChatAttachments(
+    value: unknown,
+    kind: ChatMessageKind,
+    mediaPath: string | null,
+  ) {
+    const rawItems = Array.isArray(value) ? value : [];
+    const normalized = rawItems
+      .map((item) => {
+        if (typeof item === 'string') {
+          return this.normalizeAttachmentItem({
+            type: kind === 'text' ? 'file' : kind,
+            url: item,
+          });
+        }
+        if (item && typeof item === 'object') {
+          const record = item as Record<string, unknown>;
+          return this.normalizeAttachmentItem({
+            type: typeof record.type === 'string' ? record.type : kind,
+            url: typeof record.url === 'string' ? record.url : '',
+            name: typeof record.name === 'string' ? record.name : undefined,
+            mimeType: typeof record.mimeType === 'string' ? record.mimeType : undefined,
+            uploadId: typeof record.uploadId === 'string' ? record.uploadId : undefined,
+            sizeBytes: typeof record.sizeBytes === 'number' ? record.sizeBytes : undefined,
+            durationMs: typeof record.durationMs === 'number' ? record.durationMs : undefined,
+            thumbnailUrl:
+              typeof record.thumbnailUrl === 'string' ? record.thumbnailUrl : undefined,
+          });
+        }
+        return null;
+      })
+      .filter((item): item is ChatMessageAttachmentRecord => Boolean(item));
+
+    if (normalized.length > 0) {
+      return normalized;
+    }
+
+    if (mediaPath?.trim()) {
+      return [
+        {
+          type: kind === 'text' ? 'file' : this.inferAttachmentType(kind),
+          url: mediaPath.trim(),
+        },
+      ];
+    }
+
+    return [];
   }
 
   private mapNotification(row: NotificationRow) {

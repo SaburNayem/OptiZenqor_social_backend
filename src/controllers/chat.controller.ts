@@ -3,7 +3,10 @@ import { ApiTags } from '@nestjs/swagger';
 import {
   CreateChatThreadDto,
   CreateMessageDto,
+  ForwardMessageDto,
   ToggleThreadPreferenceDto,
+  ToggleMessagePinDto,
+  UpdateMessageDto,
   UpdateChatPreferencesDto,
   UpdateChatPresenceDto,
 } from '../dto/api.dto';
@@ -21,6 +24,67 @@ export class ChatController {
     private readonly socialStateDatabase: SocialStateDatabaseService,
   ) {}
 
+  @Get('message-contract')
+  getMessageContract() {
+    return successResponse('Chat message contract fetched successfully.', {
+      endpoint: 'POST /chat/threads/:id/messages',
+      supportedKinds: ['text', 'image', 'video', 'audio', 'file', 'location', 'contact'],
+      request: {
+        senderId: 'string',
+        text: 'string (required for text messages, optional for attachment-only messages)',
+        kind: 'text | image | video | audio | file | location | contact',
+        replyToMessageId: 'string?',
+        attachmentItems: [
+          {
+            type: 'image | video | audio | file',
+            url: 'string',
+            name: 'string?',
+            mimeType: 'string?',
+            uploadId: 'string?',
+            sizeBytes: 'number?',
+            durationMs: 'number?',
+            thumbnailUrl: 'string?',
+          },
+        ],
+        aliases: {
+          attachments: ['string'],
+          mediaPath: 'string',
+          mediaUrl: 'string',
+          imageUrl: 'string',
+          audioUrl: 'string',
+          videoUrl: 'string',
+          fileUrl: 'string',
+          fileName: 'string',
+          mimeType: 'string',
+          uploadId: 'string',
+        },
+      },
+      behavior: {
+        text: 'Requires non-empty text.',
+        image: 'Requires at least one attachment URL.',
+        video: 'Requires at least one attachment URL.',
+        audio: 'Requires at least one attachment URL.',
+        file: 'Requires at least one attachment URL.',
+        location: 'Stores the shared location as a text-backed message.',
+        contact: 'Stores the shared contact card as a text-backed message.',
+      },
+    });
+  }
+
+  @Get('presence-contract')
+  getPresenceContract() {
+    return successResponse('Chat presence contract fetched successfully.', {
+      endpoint: 'GET /chat/presence',
+      userFields: ['userId', 'isOnline', 'socketCount', 'lastSeen', 'typingThreadIds', 'activeThreadIds'],
+      threadFields: ['threadId', 'activeUserIds', 'typingUserIds'],
+      updateRoutes: {
+        snapshot: 'GET /chat/presence',
+        typing: 'POST /chat/presence',
+      },
+      realtimeEvents: ['presence.updated', 'presence:update', 'thread.presence.updated'],
+    });
+  }
+
   @Get()
   async getChatOverview(
     @Headers('authorization') authorization?: string,
@@ -29,7 +93,7 @@ export class ChatController {
     const actor = await this.coreDatabase
       .requireUserFromAuthorization(authorization, userId)
       .catch(() => null);
-    const threads = await this.coreDatabase.getThreads();
+    const threads = await this.coreDatabase.getThreads(actor?.id);
     const visibleThreads = actor
       ? threads.filter((thread) => (thread.participantIds ?? []).includes(actor.id))
       : threads;
@@ -50,10 +114,10 @@ export class ChatController {
     @Headers('authorization') authorization?: string,
     @Query('userId') userId?: string,
   ) {
-    const thread = await this.coreDatabase.getThread(id);
     const actor = await this.coreDatabase
       .requireUserFromAuthorization(authorization, userId)
       .catch(() => null);
+    const thread = await this.coreDatabase.getThread(id, actor?.id);
     const preferences = actor
       ? await this.socialStateDatabase.getChatPreferences(actor.id)
       : {
@@ -72,8 +136,12 @@ export class ChatController {
   }
 
   @Get('detail/:id')
-  async getChatDetailById(@Param('id') id: string) {
-    return this.getChatDetail(id);
+  async getChatDetailById(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+    @Query('userId') userId?: string,
+  ) {
+    return this.getChatDetail(id, authorization, userId);
   }
 
   @Get('settings')
@@ -97,7 +165,7 @@ export class ChatController {
     const actor = await this.coreDatabase
       .requireUserFromAuthorization(authorization, userId)
       .catch(() => null);
-    const threads = await this.coreDatabase.getThreads();
+    const threads = await this.coreDatabase.getThreads(actor?.id);
     const visibleThreads = actor
       ? threads.filter((thread) => (thread.participantIds ?? []).includes(actor.id))
       : threads;
@@ -123,8 +191,14 @@ export class ChatController {
   }
 
   @Get('threads/:id')
-  async getThread(@Param('id') id: string) {
-    const thread = await this.coreDatabase.getThread(id);
+  async getThread(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase
+      .requireUserFromAuthorization(authorization)
+      .catch(() => null);
+    const thread = await this.coreDatabase.getThread(id, actor?.id);
     return successResponse('Thread fetched successfully.', thread);
   }
 
@@ -144,13 +218,104 @@ export class ChatController {
       authorization,
       body.senderId,
     );
-    const message = await this.coreDatabase.createMessage(id, actor.id, body.text, {
+    const message = await this.coreDatabase.createMessage(
+      id,
+      actor.id,
+      body.text ?? body.message ?? body.body ?? '',
+      {
       attachments: body.attachments,
       replyToMessageId: body.replyToMessageId,
-      kind: body.kind,
-      mediaPath: body.mediaPath,
-    });
+      kind: body.kind ?? body.type,
+      mediaPath: body.mediaPath ?? body.attachmentUrl,
+      mediaUrl: body.mediaUrl ?? body.attachmentUrl,
+      imageUrl: body.imageUrl,
+      audioUrl: body.audioUrl,
+      videoUrl: body.videoUrl,
+      fileUrl: body.fileUrl,
+      fileName: body.fileName,
+      mimeType: body.mimeType,
+      uploadId: body.uploadId,
+      attachmentItems: body.attachmentItems,
+      },
+    );
     return successResponse('Message sent successfully.', message);
+  }
+
+  @Patch('threads/:id/messages/:messageId')
+  async updateMessage(
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+    @Body() body: UpdateMessageDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    const message = await this.coreDatabase.updateChatMessage(
+      id,
+      messageId,
+      actor.id,
+      body.text,
+    );
+    return successResponse('Message updated successfully.', message);
+  }
+
+  @Delete('threads/:id/messages/:messageId')
+  async deleteMessage(
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+    @Body() body: { userId?: string },
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    const result = await this.coreDatabase.deleteChatMessage(id, messageId, actor.id);
+    return successResponse('Message deleted successfully.', result);
+  }
+
+  @Patch('threads/:id/messages/:messageId/pin')
+  @Post('threads/:id/messages/:messageId/pin')
+  async pinMessage(
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+    @Body() body: ToggleMessagePinDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    const message = await this.coreDatabase.toggleChatMessagePin(
+      id,
+      messageId,
+      actor.id,
+      body.value,
+    );
+    return successResponse('Message pin state updated successfully.', message);
+  }
+
+  @Post('threads/:id/messages/:messageId/forward')
+  async forwardMessage(
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+    @Body() body: ForwardMessageDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    const message = await this.coreDatabase.forwardChatMessage(
+      id,
+      messageId,
+      body.targetThreadId,
+      actor.id,
+      body.text,
+    );
+    return successResponse('Message forwarded successfully.', message);
   }
 
   @Patch('threads/:id/read')
