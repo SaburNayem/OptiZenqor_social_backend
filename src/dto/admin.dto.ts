@@ -373,6 +373,42 @@ export class AdminUpdateUserDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @ApiPropertyOptional({
+    enum: ['suspend', 'restrict', 'clear'],
+    description: 'Apply or clear an admin enforcement state for this user.',
+  })
+  @IsOptional()
+  @IsIn(['suspend', 'restrict', 'clear'])
+  enforcementAction?: 'suspend' | 'restrict' | 'clear';
+
+  @ApiPropertyOptional({
+    description: 'ISO timestamp when a suspension should end.',
+  })
+  @IsOptional()
+  @IsString()
+  suspendedUntil?: string;
+
+  @ApiPropertyOptional({
+    description: 'ISO timestamp when feature restrictions should end.',
+  })
+  @IsOptional()
+  @IsString()
+  restrictedUntil?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Feature areas restricted for this user, such as chat, posts, marketplace, or live.',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  restrictionScope?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  restrictionReason?: string;
 }
 
 export class AdminModerateContentDto {
@@ -419,6 +455,59 @@ export class AdminUpdateUserStatusDto {
   @IsOptional()
   @IsBoolean()
   blocked?: boolean;
+
+  @ApiPropertyOptional({ enum: ['suspend', 'restrict', 'clear'] })
+  @IsOptional()
+  @IsIn(['suspend', 'restrict', 'clear'])
+  enforcementAction?: 'suspend' | 'restrict' | 'clear';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  suspendedUntil?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  restrictedUntil?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  restrictionScope?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  restrictionReason?: string;
+}
+
+export class AdminSupportHelpConfigUpdateDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  showOnLogin?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  headerText?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  bodyText?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  allowImages?: boolean;
 }
 
 export class AdminSettingsPatchDto {
@@ -669,6 +758,12 @@ export class AdminSupportTicketUpdateDto {
   @IsString()
   replyMessage?: string;
 
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  replyAttachments?: string[];
+
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -835,6 +930,34 @@ export class AdminMarketplaceUpsertDto {
   @IsString()
   location?: string;
 
+  @ApiPropertyOptional({
+    description: 'Display name for an external app connected to this listing.',
+  })
+  @IsOptional()
+  @IsString()
+  externalAppName?: string;
+
+  @ApiPropertyOptional({
+    description: 'Deep link or Android app link opened from the marketplace listing.',
+  })
+  @IsOptional()
+  @IsString()
+  externalAppLink?: string;
+
+  @ApiPropertyOptional({
+    description: 'Google Play fallback URL when the external app is not installed.',
+  })
+  @IsOptional()
+  @IsString()
+  playStoreUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Android package name used to build a Play Store fallback.',
+  })
+  @IsOptional()
+  @IsString()
+  androidPackage?: string;
+
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
@@ -900,6 +1023,26 @@ export class AdminMarketplaceUpdateDto {
   @IsOptional()
   @IsString()
   location?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  externalAppName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  externalAppLink?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  playStoreUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  androidPackage?: string;
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()

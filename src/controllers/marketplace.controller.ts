@@ -173,6 +173,7 @@ export class MarketplaceController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    this.coreDatabase.assertUserNotRestrictedFor(user, 'marketplace');
     return successResponse(
       'Marketplace draft created successfully.',
       await this.experienceDatabase.createMarketplaceDraft(user.id, body),
@@ -187,6 +188,7 @@ export class MarketplaceController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    this.coreDatabase.assertUserNotRestrictedFor(user, 'marketplace');
     return successResponse(
       'Marketplace draft updated successfully.',
       await this.experienceDatabase.updateMarketplaceDraft(id, user.id, body),
@@ -263,6 +265,7 @@ export class MarketplaceController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization, body.buyerId);
+    this.coreDatabase.assertUserNotRestrictedFor(user, 'chat');
     return successResponse(
       'Marketplace chat message created successfully.',
       await this.experienceDatabase.createMarketplaceProductMessage(id, user.id, body),
@@ -290,6 +293,7 @@ export class MarketplaceController {
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization, body.buyerId);
+    this.coreDatabase.assertUserNotRestrictedFor(user, 'marketplace');
     return successResponse(
       'Marketplace offer created successfully.',
       await this.experienceDatabase.createMarketplaceOffer(id, user.id, body),

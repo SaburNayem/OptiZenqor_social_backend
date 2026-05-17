@@ -53,6 +53,7 @@ export class PostsController {
       authorization,
       body.authorId,
     );
+    this.coreDatabase.assertUserNotRestrictedFor(actor, 'posts');
     const created = await this.coreDatabase.createPost({
       authorId: actor.id,
       caption: body.caption,
@@ -81,6 +82,7 @@ export class PostsController {
     @Headers('authorization') authorization?: string,
   ) {
     const actor = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    this.coreDatabase.assertUserNotRestrictedFor(actor, 'posts');
     const existing = await this.coreDatabase.getPost(id);
     if (existing.authorId !== actor.id) {
       throw new ForbiddenException('You can only update your own post.');
@@ -99,6 +101,7 @@ export class PostsController {
     @Headers('authorization') authorization?: string,
   ) {
     const actor = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    this.coreDatabase.assertUserNotRestrictedFor(actor, 'posts');
     const existing = await this.coreDatabase.getPost(id);
     if (existing.authorId !== actor.id) {
       throw new ForbiddenException('You can only delete your own post.');

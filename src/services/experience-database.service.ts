@@ -389,6 +389,10 @@ export class ExperienceDatabaseService {
         condition: body.condition,
         location: body.location,
         images: (body.images ?? []) as Prisma.InputJsonValue,
+        externalAppName: body.externalAppName?.trim() || null,
+        externalAppLink: body.externalAppLink?.trim() || null,
+        playStoreUrl: body.playStoreUrl?.trim() || null,
+        androidPackage: body.androidPackage?.trim() || null,
         status: 'active',
       },
       include: {
@@ -2073,6 +2077,10 @@ export class ExperienceDatabaseService {
     condition: string | null;
     location: string | null;
     images: Prisma.JsonValue;
+    externalAppName?: string | null;
+    externalAppLink?: string | null;
+    playStoreUrl?: string | null;
+    androidPackage?: string | null;
     status: string;
     stock: number;
     watchers: number;
@@ -2150,6 +2158,16 @@ export class ExperienceDatabaseService {
       condition: row.condition ?? '',
       location: row.location ?? '',
       images: Array.isArray(row.images) ? row.images : [],
+      externalAppName: row.externalAppName ?? '',
+      externalAppLink: row.externalAppLink ?? '',
+      playStoreUrl: row.playStoreUrl ?? '',
+      androidPackage: row.androidPackage ?? '',
+      externalApp: {
+        name: row.externalAppName ?? '',
+        appLink: row.externalAppLink ?? '',
+        playStoreUrl: row.playStoreUrl ?? '',
+        androidPackage: row.androidPackage ?? '',
+      },
       status: row.status,
       listingStatus: row.status,
       stock: row.stock,

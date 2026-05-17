@@ -93,6 +93,7 @@ export class JobsController {
       authorization,
       body.applicantId,
     );
+    this.coreDatabase.assertUserNotRestrictedFor(user, 'jobs');
     return successResponse(
       'Job application submitted successfully.',
       await this.experienceDatabase.applyForJob(id, user.id, body.applicantName || user.name),
@@ -109,6 +110,7 @@ export class JobsController {
       authorization,
       body.applicantId,
     );
+    this.coreDatabase.assertUserNotRestrictedFor(user, 'jobs');
     return successResponse(
       'Job application submitted successfully.',
       await this.experienceDatabase.applyForJob(

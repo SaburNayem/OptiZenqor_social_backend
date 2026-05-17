@@ -44,6 +44,24 @@ export class SupportDatabaseService {
     };
   }
 
+  async getSupportHelpConfig() {
+    const row = await this.prisma.adminAppConfigEntry.findUnique({
+      where: { key: 'support.login_help' },
+    });
+    const value = this.readRecord(row?.value);
+
+    return {
+      enabled: this.readBoolean(value.enabled, true),
+      showOnLogin: this.readBoolean(value.showOnLogin, true),
+      headerText: this.readString(value.headerText) ?? 'Need help signing in?',
+      bodyText:
+        this.readString(value.bodyText) ??
+        'Send a message with an optional screenshot and support will reply from the admin dashboard.',
+      allowImages: this.readBoolean(value.allowImages, true),
+      updatedAt: row?.updatedAt.toISOString() ?? null,
+    };
+  }
+
   private async readNormalizedSupportMail() {
     const rows = await this.prisma.$queryRaw<
       Array<{
@@ -174,12 +192,27 @@ export class SupportDatabaseService {
     priority?: string | null;
     message?: string | null;
     userId?: string | null;
+    attachments?: string[];
+    contactEmail?: string | null;
+    contactName?: string | null;
+    source?: string | null;
   }) {
     const subject = input.subject.trim();
     const category = input.category.trim();
     const userId = input.userId?.trim() || null;
     const priority = input.priority?.trim() || 'normal';
     const initialMessage = input.message?.trim() || '';
+    const attachments = this.normalizeStringList(input.attachments);
+    const contactEmail = this.readString(input.contactEmail);
+    const contactName = this.readString(input.contactName);
+    const source = this.readString(input.source) ?? (userId ? 'support_help' : 'login_help');
+    const metadata = {
+      ...(initialMessage ? { latestMessage: initialMessage } : {}),
+      ...(contactEmail ? { contactEmail } : {}),
+      ...(contactName ? { contactName } : {}),
+      source,
+      hasAttachments: attachments.length > 0,
+    };
 
     const created = await this.prisma.$transaction(async (tx) => {
       const ticket = await tx.supportTicket.create({
@@ -190,7 +223,7 @@ export class SupportDatabaseService {
           category,
           priority,
           status: 'open',
-          metadata: initialMessage ? { latestMessage: initialMessage } : {},
+          metadata,
         },
       });
 
@@ -212,7 +245,7 @@ export class SupportDatabaseService {
             senderType: userId ? 'user' : 'guest',
             senderUserId: userId,
             body: initialMessage,
-            attachments: [],
+            attachments,
           },
         });
       }
@@ -332,7 +365,7 @@ export class SupportDatabaseService {
           senderType: 'user',
           senderUserId: userId,
           body: input.message.trim(),
-          attachments: input.attachments?.filter((item) => item.trim().length > 0) ?? [],
+          attachments: this.normalizeStringList(input.attachments),
         },
       });
       await tx.supportTicket.update({
@@ -467,6 +500,16 @@ export class SupportDatabaseService {
       : [];
   }
 
+  private normalizeStringList(value: unknown) {
+    return this.readStringArray(value).map((item) => item.trim());
+  }
+
+  private readRecord(value: unknown) {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  }
+
   private readMetadataObject(value: Prisma.JsonValue) {
     return value && typeof value === 'object' && !Array.isArray(value)
       ? (value as Record<string, unknown>)
@@ -481,6 +524,10 @@ export class SupportDatabaseService {
 
   private readString(value: unknown) {
     return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+  }
+
+  private readBoolean(value: unknown, fallback = false) {
+    return typeof value === 'boolean' ? value : fallback;
   }
 
   private mapTicketSummary(ticket: {

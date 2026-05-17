@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -69,6 +70,107 @@ export class AdminDatabaseService implements OnModuleInit {
         refreshToken: session.refreshToken,
         session: this.mapAdminSession(session, admin),
       },
+    };
+  }
+
+  async requestAdminPasswordReset(email: string, code: string, expiresAt: Date) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const admin = await this.prisma.adminUser.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (!admin || !admin.isActive) {
+      return null;
+    }
+
+    await this.coreDatabase.storeAuthCode(
+      normalizedEmail,
+      'admin_reset_password',
+      code,
+      expiresAt,
+    );
+
+    await this.createAuditLog({
+      actorAdminId: admin.id,
+      action: 'admin.password_reset.request',
+      entityType: 'admin_user',
+      entityId: admin.id,
+      metadata: {
+        email: admin.email,
+      },
+    });
+
+    return {
+      id: admin.id,
+      name: admin.name,
+      email: admin.email,
+      role: this.normalizeAdminRole(admin.role),
+    };
+  }
+
+  async resetAdminPassword(email: string, otp: string, password: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const admin = await this.prisma.adminUser.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (!admin || !admin.isActive) {
+      throw new BadRequestException('No password reset request found for this admin email.');
+    }
+
+    const request = await this.coreDatabase.getAuthCode(
+      normalizedEmail,
+      'admin_reset_password',
+    );
+    if (!request) {
+      throw new BadRequestException('No password reset request found for this admin email.');
+    }
+    if (Date.now() > new Date(request.expiresAt).getTime()) {
+      throw new BadRequestException('Password reset code has expired.');
+    }
+    if (request.code !== otp.trim()) {
+      throw new BadRequestException('Invalid password reset code.');
+    }
+
+    const now = new Date();
+    const updated = await this.prisma.adminUser.update({
+      where: { id: admin.id },
+      data: {
+        passwordHash: await argon2.hash(password),
+        updatedAt: now,
+      },
+    });
+
+    await this.prisma.adminSession.updateMany({
+      where: {
+        adminId: admin.id,
+        revokedAt: null,
+      },
+      data: {
+        current: false,
+        revokedAt: now,
+        lastActive: now,
+      },
+    });
+
+    await this.coreDatabase.deleteAuthCode(normalizedEmail, 'admin_reset_password');
+
+    await this.createAuditLog({
+      actorAdminId: admin.id,
+      action: 'admin.password_reset.complete',
+      entityType: 'admin_user',
+      entityId: admin.id,
+      metadata: {
+        email: admin.email,
+      },
+    });
+
+    return {
+      id: updated.id,
+      name: updated.name,
+      email: updated.email,
+      role: this.normalizeAdminRole(updated.role),
+      passwordReset: true,
     };
   }
 
@@ -1037,6 +1139,76 @@ export class AdminDatabaseService implements OnModuleInit {
     };
   }
 
+  async getSupportHelpConfig() {
+    const row = await this.prisma.adminAppConfigEntry.findUnique({
+      where: { key: 'support.login_help' },
+    });
+
+    return this.mapSupportHelpConfig(row);
+  }
+
+  async updateSupportHelpConfig(
+    input: {
+      enabled?: boolean;
+      showOnLogin?: boolean;
+      headerText?: string;
+      bodyText?: string;
+      allowImages?: boolean;
+    },
+    actorAdminId?: string,
+  ) {
+    const existing = await this.prisma.adminAppConfigEntry.findUnique({
+      where: { key: 'support.login_help' },
+    });
+    const previousValue = this.readObject(existing?.value);
+    const nextValue = {
+      ...previousValue,
+      ...(typeof input.enabled === 'boolean' ? { enabled: input.enabled } : {}),
+      ...(typeof input.showOnLogin === 'boolean'
+        ? { showOnLogin: input.showOnLogin }
+        : {}),
+      ...(typeof input.headerText === 'string'
+        ? { headerText: input.headerText.trim() }
+        : {}),
+      ...(typeof input.bodyText === 'string' ? { bodyText: input.bodyText.trim() } : {}),
+      ...(typeof input.allowImages === 'boolean' ? { allowImages: input.allowImages } : {}),
+    };
+
+    const updated = await this.prisma.adminAppConfigEntry.upsert({
+      where: { key: 'support.login_help' },
+      create: {
+        key: 'support.login_help',
+        category: 'support',
+        title: 'Login help message',
+        description: 'Controls whether the app login screen shows a support-help entry and header copy.',
+        value: nextValue as Prisma.InputJsonValue,
+        isPublic: true,
+        metadata: {
+          source: 'admin.support_help.config',
+        } as Prisma.InputJsonValue,
+        updatedAt: new Date(),
+      },
+      update: {
+        value: nextValue as Prisma.InputJsonValue,
+        isPublic: true,
+        updatedAt: new Date(),
+      },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'support.help_config.update',
+      entityType: 'admin_app_config_entry',
+      entityId: updated.key,
+      metadata: {
+        before: previousValue,
+        after: nextValue,
+      },
+    });
+
+    return this.mapSupportHelpConfig(updated);
+  }
+
   async queryFeatureFlags(query: {
     page?: number;
     limit?: number;
@@ -1331,7 +1503,7 @@ export class AdminDatabaseService implements OnModuleInit {
         : {}),
     };
 
-    const [tickets, total, actions] = await Promise.all([
+    const [tickets, total, actions, supportHelpConfig] = await Promise.all([
       this.prisma.supportTicket.findMany({
         where,
         include: {
@@ -1361,6 +1533,7 @@ export class AdminDatabaseService implements OnModuleInit {
         orderBy: { createdAt: 'desc' },
         take: 100,
       }),
+      this.getSupportHelpConfig(),
     ]);
 
     const paginatedTickets = this.wrapPaginated(
@@ -1380,6 +1553,7 @@ export class AdminDatabaseService implements OnModuleInit {
         status: query?.status?.trim().toLowerCase() ?? '',
         priority: query?.priority?.trim().toLowerCase() ?? '',
       },
+      supportHelpConfig,
       actions: actions.map((row) => ({
         id: row.id,
         action: row.action,
@@ -1398,6 +1572,7 @@ export class AdminDatabaseService implements OnModuleInit {
       adminNote?: string;
       assignedAdminId?: string;
       replyMessage?: string;
+      replyAttachments?: string[];
       slaHours?: number;
     },
     actorAdminId?: string,
@@ -1429,6 +1604,7 @@ export class AdminDatabaseService implements OnModuleInit {
     const metadata = this.readObject(existing.metadata);
     const note = patch.adminNote?.trim();
     const replyMessage = patch.replyMessage?.trim();
+    const replyAttachments = this.readStringArray(patch.replyAttachments).map((item) => item.trim());
     const nextStatus = patch.status?.trim().toLowerCase();
     const nextPriority = patch.priority?.trim().toLowerCase();
     const hasAssignedAdminPatch = patch.assignedAdminId !== undefined;
@@ -1469,7 +1645,7 @@ export class AdminDatabaseService implements OnModuleInit {
             senderType: 'agent',
             senderUserId: null,
             body: replyMessage,
-            attachments: [],
+            attachments: replyAttachments,
           },
         });
       }
@@ -1554,6 +1730,7 @@ export class AdminDatabaseService implements OnModuleInit {
           toPriority: nextPriority ?? existing.priority,
           payload: {
             replied: Boolean(replyMessage),
+            replyAttachments,
             assignedAdminId,
             slaHours: nextSlaHours,
           } as Prisma.InputJsonValue,
@@ -2091,6 +2268,11 @@ export class AdminDatabaseService implements OnModuleInit {
       verification?: string;
       blocked?: boolean;
       note?: string;
+      enforcementAction?: 'suspend' | 'restrict' | 'clear';
+      suspendedUntil?: string;
+      restrictedUntil?: string;
+      restrictionScope?: string[];
+      restrictionReason?: string;
     },
     actorAdminId?: string,
   ) {
@@ -2101,19 +2283,51 @@ export class AdminDatabaseService implements OnModuleInit {
       throw new NotFoundException(`User ${userId} not found.`);
     }
 
+    const enforcement = this.buildUserEnforcementPatch(
+      this.readObject(existing.profileSetup),
+      patch,
+      actorAdminId,
+    );
+    const derivedStatus =
+      patch.status?.trim() ||
+      (patch.enforcementAction === 'suspend'
+        ? 'Suspended'
+        : patch.enforcementAction === 'restrict'
+          ? 'Restricted'
+          : patch.enforcementAction === 'clear'
+            ? 'Active'
+            : undefined);
+    const derivedBlocked =
+      typeof patch.blocked === 'boolean'
+        ? patch.blocked
+        : patch.enforcementAction === 'suspend'
+          ? true
+          : patch.enforcementAction === 'restrict'
+            ? false
+          : patch.enforcementAction === 'clear'
+            ? false
+            : undefined;
+
     const updated = await this.prisma.appUser.update({
       where: { id: userId },
       data: {
         role: patch.role?.trim()
           ? this.normalizeManagedAppUserRole(patch.role)
           : undefined,
-        status: patch.status?.trim() || undefined,
+        status: derivedStatus,
         verification: patch.verification?.trim() || undefined,
-        blocked: patch.blocked ?? undefined,
+        blocked: derivedBlocked,
         note: patch.note?.trim() || undefined,
+        ...(enforcement.changed
+          ? { profileSetup: enforcement.profileSetup as Prisma.InputJsonValue }
+          : {}),
         updatedAt: new Date(),
       },
     });
+
+    if (patch.enforcementAction === 'restrict') {
+      await this.sendUserRestrictionNotification(updated);
+    }
 
     await this.createAuditLog({
       actorAdminId,
@@ -2641,6 +2855,10 @@ export class AdminDatabaseService implements OnModuleInit {
         currency: item.currency,
         status: item.status,
         stock: item.stock,
+        externalAppName: item.externalAppName ?? null,
+        externalAppLink: item.externalAppLink ?? null,
+        playStoreUrl: item.playStoreUrl ?? null,
+        androidPackage: item.androidPackage ?? null,
         sellerName: item.seller.name,
         sellerId: item.sellerId,
         views: item.views,
@@ -2665,6 +2883,10 @@ export class AdminDatabaseService implements OnModuleInit {
       condition?: string;
       location?: string;
       images?: string[];
+      externalAppName?: string;
+      externalAppLink?: string;
+      playStoreUrl?: string;
+      androidPackage?: string;
       status?: string;
       stock?: number;
     },
@@ -2684,6 +2906,10 @@ export class AdminDatabaseService implements OnModuleInit {
         condition: input.condition?.trim() || null,
         location: input.location?.trim() || null,
         images: (input.images ?? []).map((entry) => entry.trim()),
+        externalAppName: input.externalAppName?.trim() || null,
+        externalAppLink: input.externalAppLink?.trim() || null,
+        playStoreUrl: input.playStoreUrl?.trim() || null,
+        androidPackage: input.androidPackage?.trim() || null,
         status: input.status?.trim() || 'active',
         stock: input.stock ?? 1,
       },
@@ -2776,6 +3002,10 @@ export class AdminDatabaseService implements OnModuleInit {
       condition?: string;
       location?: string;
       images?: string[];
+      externalAppName?: string;
+      externalAppLink?: string;
+      playStoreUrl?: string;
+      androidPackage?: string;
       status?: string;
       stock?: number;
     },
@@ -2806,6 +3036,14 @@ export class AdminDatabaseService implements OnModuleInit {
         condition: patch.condition === undefined ? undefined : patch.condition.trim() || null,
         location: patch.location === undefined ? undefined : patch.location.trim() || null,
         images: patch.images === undefined ? undefined : patch.images.map((entry) => entry.trim()),
+        externalAppName:
+          patch.externalAppName === undefined ? undefined : patch.externalAppName.trim() || null,
+        externalAppLink:
+          patch.externalAppLink === undefined ? undefined : patch.externalAppLink.trim() || null,
+        playStoreUrl:
+          patch.playStoreUrl === undefined ? undefined : patch.playStoreUrl.trim() || null,
+        androidPackage:
+          patch.androidPackage === undefined ? undefined : patch.androidPackage.trim() || null,
         status: patch.status?.trim() || undefined,
         stock: patch.stock,
         updatedAt: new Date(),
@@ -5589,6 +5827,62 @@ export class AdminDatabaseService implements OnModuleInit {
     });
   }
 
+  private async sendUserRestrictionNotification(user: {
+    id: string;
+    name: string;
+    profileSetup: Prisma.JsonValue;
+  }) {
+    const profileSetup = this.readObject(user.profileSetup);
+    const moderation = this.mapUserAdminModeration(profileSetup.adminModeration);
+    if (moderation.action !== 'restrict' || !moderation.active) {
+      return;
+    }
+
+    const scopeLabel =
+      moderation.restrictionScope.length > 0
+        ? moderation.restrictionScope.join(', ')
+        : 'selected app features';
+    const durationLabel = this.describeRestrictionDuration(moderation.restrictedUntil);
+    const reason = moderation.reason?.trim() || 'Admin moderation decision.';
+    await this.coreDatabase.pushNotification({
+      recipientId: user.id,
+      title: 'Feature restriction applied',
+      body: `Restricted: ${scopeLabel}. Duration: ${durationLabel}. Reason: ${reason}`,
+      routeName: '/notifications',
+      entityId: user.id,
+      type: 'security',
+      entityType: 'account_restriction',
+      metadata: {
+        moderationType: 'feature_restriction',
+        restrictionScope: moderation.restrictionScope,
+        restrictedUntil: moderation.restrictedUntil,
+        durationLabel,
+        reason,
+        source: 'admin_user_management',
+      },
+    });
+  }
+
+  private describeRestrictionDuration(restrictedUntil: string | null) {
+    if (!restrictedUntil) {
+      return 'until an admin clears it';
+    }
+    const until = new Date(restrictedUntil);
+    if (Number.isNaN(until.getTime())) {
+      return `until ${restrictedUntil}`;
+    }
+    const remainingMs = until.getTime() - Date.now();
+    if (remainingMs <= 0) {
+      return `until ${restrictedUntil}`;
+    }
+    const remainingHours = Math.max(1, Math.ceil(remainingMs / (60 * 60 * 1000)));
+    const amount =
+      remainingHours >= 48
+        ? `${Math.ceil(remainingHours / 24)} days`
+        : `${remainingHours} hours`;
+    return `about ${amount}, until ${restrictedUntil}`;
+  }
+
   private mapAdminSession(
     session: {
       id: string;
@@ -5643,6 +5937,10 @@ export class AdminDatabaseService implements OnModuleInit {
     condition?: string | null;
     location?: string | null;
     images?: Prisma.JsonValue;
+    externalAppName?: string | null;
+    externalAppLink?: string | null;
+    playStoreUrl?: string | null;
+    androidPackage?: string | null;
     createdAt: Date;
     seller: { name: string; username?: string; avatar?: string; verification?: string | null; role?: string | null };
     orders?: Array<unknown>;
@@ -5656,6 +5954,16 @@ export class AdminDatabaseService implements OnModuleInit {
       subcategory: item.subcategory ?? '',
       condition: item.condition ?? '',
       location: item.location ?? '',
+      externalAppName: item.externalAppName ?? '',
+      externalAppLink: item.externalAppLink ?? '',
+      playStoreUrl: item.playStoreUrl ?? '',
+      androidPackage: item.androidPackage ?? '',
+      externalApp: {
+        name: item.externalAppName ?? '',
+        appLink: item.externalAppLink ?? '',
+        playStoreUrl: item.playStoreUrl ?? '',
+        androidPackage: item.androidPackage ?? '',
+      },
       price: Number(item.price),
       currency: item.currency,
       status: item.status,
@@ -6367,6 +6675,27 @@ export class AdminDatabaseService implements OnModuleInit {
     return this.readStringArray(legacyHistory);
   }
 
+  private mapSupportHelpConfig(
+    row:
+      | {
+          value: Prisma.JsonValue;
+          updatedAt: Date;
+        }
+      | null,
+  ) {
+    const value = this.readObject(row?.value);
+    return {
+      enabled: this.readBoolean(value.enabled, true),
+      showOnLogin: this.readBoolean(value.showOnLogin, true),
+      headerText: this.readNullableString(value.headerText) ?? 'Need help signing in?',
+      bodyText:
+        this.readNullableString(value.bodyText) ??
+        'Send a message with an optional screenshot and support will reply from the admin dashboard.',
+      allowImages: this.readBoolean(value.allowImages, true),
+      updatedAt: row?.updatedAt.toISOString() ?? null,
+    };
+  }
+
   private mapSupportTicket(item: {
     id: string;
     userId: string | null;
@@ -6656,6 +6985,10 @@ export class AdminDatabaseService implements OnModuleInit {
       : {};
   }
 
+  private readBoolean(value: unknown, fallback = false) {
+    return typeof value === 'boolean' ? value : fallback;
+  }
+
   private readString(value: unknown) {
     return typeof value === 'string' && value.trim() ? value.trim() : undefined;
   }
@@ -6846,7 +7179,133 @@ export class AdminDatabaseService implements OnModuleInit {
 
   private mapAdminAppUser(user: Prisma.AppUserGetPayload<Record<string, never>>) {
     const { passwordHash: _passwordHash, ...safeUser } = user;
-    return safeUser;
+    const profileSetup = this.readObject(safeUser.profileSetup);
+    const adminModeration = this.mapUserAdminModeration(profileSetup.adminModeration);
+    return {
+      ...safeUser,
+      adminModeration,
+      suspendedUntil: adminModeration.suspendedUntil,
+      restrictedUntil: adminModeration.restrictedUntil,
+      restrictionScope: adminModeration.restrictionScope,
+      restrictionReason: adminModeration.reason,
+      restrictionActive: adminModeration.action === 'restrict' && adminModeration.active,
+      suspensionActive: adminModeration.action === 'suspend' && adminModeration.active,
+    };
+  }
+
+  private buildUserEnforcementPatch(
+    profileSetup: Record<string, unknown>,
+    patch: {
+      enforcementAction?: 'suspend' | 'restrict' | 'clear';
+      suspendedUntil?: string;
+      restrictedUntil?: string;
+      restrictionScope?: string[];
+      restrictionReason?: string;
+    },
+    actorAdminId?: string,
+  ) {
+    const changed =
+      patch.enforcementAction !== undefined ||
+      patch.suspendedUntil !== undefined ||
+      patch.restrictedUntil !== undefined ||
+      patch.restrictionScope !== undefined ||
+      patch.restrictionReason !== undefined;
+
+    if (!changed) {
+      return { changed: false, profileSetup };
+    }
+
+    const now = new Date().toISOString();
+    const existing = this.readObject(profileSetup.adminModeration);
+    const action =
+      patch.enforcementAction ??
+      (patch.suspendedUntil ? 'suspend' : 'restrict');
+    const reason =
+      patch.restrictionReason?.trim() ||
+      this.readNullableString(existing.reason) ||
+      null;
+    const suspendedUntil =
+      patch.suspendedUntil !== undefined
+        ? this.normalizeEnforcementDate(patch.suspendedUntil, 'suspendedUntil')
+        : this.readNullableString(existing.suspendedUntil);
+    const restrictedUntil =
+      patch.restrictedUntil !== undefined
+        ? this.normalizeEnforcementDate(patch.restrictedUntil, 'restrictedUntil')
+        : this.readNullableString(existing.restrictedUntil);
+    const restrictionScope =
+      patch.restrictionScope !== undefined
+        ? this.readStringArray(patch.restrictionScope).map((item) => item.trim())
+        : this.readStringArray(existing.restrictionScope);
+
+    const nextModeration =
+      action === 'clear'
+        ? {
+            action: 'clear',
+            active: false,
+            suspendedUntil: null,
+            restrictedUntil: null,
+            restrictionScope: [],
+            reason,
+            actorAdminId: actorAdminId ?? null,
+            updatedAt: now,
+            clearedAt: now,
+          }
+        : {
+            ...existing,
+            action,
+            active: true,
+            suspendedUntil: action === 'suspend' ? suspendedUntil : null,
+            restrictedUntil: action === 'restrict' ? restrictedUntil : null,
+            restrictionScope: action === 'restrict' ? restrictionScope : [],
+            reason,
+            actorAdminId: actorAdminId ?? null,
+            updatedAt: now,
+          };
+
+    return {
+      changed: true,
+      profileSetup: {
+        ...profileSetup,
+        adminModeration: nextModeration,
+      },
+    };
+  }
+
+  private mapUserAdminModeration(value: unknown) {
+    const moderation = this.readObject(value);
+    const action = this.readNullableString(moderation.action) ?? 'none';
+    const suspendedUntil = this.readNullableString(moderation.suspendedUntil);
+    const restrictedUntil = this.readNullableString(moderation.restrictedUntil);
+    const now = Date.now();
+    const suspensionActive =
+      action === 'suspend' &&
+      (!suspendedUntil || new Date(suspendedUntil).getTime() > now);
+    const restrictionActive =
+      action === 'restrict' &&
+      (!restrictedUntil || new Date(restrictedUntil).getTime() > now);
+
+    return {
+      action,
+      active: this.readBoolean(moderation.active, false) && (suspensionActive || restrictionActive),
+      suspendedUntil,
+      restrictedUntil,
+      restrictionScope: this.readStringArray(moderation.restrictionScope),
+      reason: this.readNullableString(moderation.reason),
+      actorAdminId: this.readNullableString(moderation.actorAdminId),
+      updatedAt: this.readNullableString(moderation.updatedAt),
+      clearedAt: this.readNullableString(moderation.clearedAt),
+    };
+  }
+
+  private normalizeEnforcementDate(value: string | undefined, fieldName: string) {
+    if (value === undefined || value.trim().length === 0) {
+      return null;
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new ConflictException(`${fieldName} must be a valid ISO date/time.`);
+    }
+    return parsed.toISOString();
   }
 
   private async queryPosts(query: {

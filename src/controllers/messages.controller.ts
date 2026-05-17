@@ -37,6 +37,7 @@ export class MessagesController {
       authorization,
       body.senderId,
     );
+    this.coreDatabase.assertUserNotRestrictedFor(actor, 'chat');
     return this.coreDatabase.createMessage(id, actor.id, body.text ?? body.message ?? body.body ?? '', {
       attachments: body.attachments,
       replyToMessageId: body.replyToMessageId,
@@ -51,6 +52,12 @@ export class MessagesController {
       mimeType: body.mimeType,
       uploadId: body.uploadId,
       attachmentItems: body.attachmentItems,
+      latitude: body.latitude ?? body.lat,
+      longitude: body.longitude ?? body.lng ?? body.lon,
+      locationUrl:
+        body.locationUrl ?? body.mapUrl ?? body.mapsUrl ?? body.googleMapsUrl,
+      locationName: body.locationName ?? body.locationLabel ?? body.address,
+      location: body.location,
     });
   }
 }

@@ -79,6 +79,7 @@ export class StoriesController {
       authorization,
       body.userId,
     );
+    this.coreDatabase.assertUserNotRestrictedFor(actor, 'posts');
     return this.storiesDatabase.createStory(actor.id, body);
   }
 
@@ -102,6 +103,7 @@ export class StoriesController {
       authorization,
       body.userId,
     );
+    this.coreDatabase.assertUserNotRestrictedFor(user, 'comments');
     return this.storiesDatabase.createStoryComment(id, user.id, body.comment);
   }
 
@@ -147,6 +149,7 @@ export class StoriesController {
       authorization,
       body.userId,
     );
+    this.coreDatabase.assertUserNotRestrictedFor(actor, 'chat');
     const recipientUserId = body.recipientUserId?.trim() || story.userId;
     const thread = await this.coreDatabase.ensureDirectThread(actor.id, recipientUserId);
     const text = body.message?.trim() || body.text?.trim() || '';

@@ -108,6 +108,17 @@ type ChatMessageAttachmentRecord = {
   sizeBytes?: number;
   durationMs?: number;
   thumbnailUrl?: string;
+  latitude?: number;
+  longitude?: number;
+  locationUrl?: string;
+  locationName?: string;
+};
+
+type ChatMessageLocationPayload = {
+  latitude?: number;
+  longitude?: number;
+  locationUrl?: string;
+  locationName?: string;
 };
 
 type BuddyRequestRow = QueryResultRow & {
@@ -356,9 +367,7 @@ export class CoreDatabaseService implements OnModuleInit {
         'Email is not verified yet. Complete email verification before login.',
       );
     }
-    if (userRow.blocked) {
-      throw new UnauthorizedException('This account is currently blocked.');
-    }
+    await this.assertLoginAllowed(userRow);
     const tokens = await this.issueTokens(userRow.id);
     return this.buildSessionPayload(this.mapUser(userRow), tokens);
   }
@@ -428,6 +437,7 @@ export class CoreDatabaseService implements OnModuleInit {
       throw new UnauthorizedException('Unable to create Google user.');
     }
 
+    await this.assertLoginAllowed(userRow);
     const tokens = await this.issueTokens(userRow.id);
     return this.buildSessionPayload(this.mapUser(userRow), tokens, {
       provider: 'google',
@@ -505,6 +515,7 @@ export class CoreDatabaseService implements OnModuleInit {
     const token = authorization?.replace(/^Bearer\s+/i, '');
     const user = await this.resolveUserFromAccessToken(token);
     if (user) {
+      this.assertAuthenticatedUserAllowed(user);
       return user;
     }
     if (fallbackUserId?.trim()) {
@@ -632,6 +643,7 @@ export class CoreDatabaseService implements OnModuleInit {
   }
 
   assertUserCanCreateJobs(user: { id: string; role?: string; profileType?: string }) {
+    this.assertUserNotRestrictedFor(user, 'jobs');
     if (!this.userHasCapability(user, 'jobs')) {
       throw new ForbiddenException(
         'Only business profiles can create jobs. Complete the business form first.',
@@ -644,6 +656,7 @@ export class CoreDatabaseService implements OnModuleInit {
     role?: string;
     profileType?: string;
   }) {
+    this.assertUserNotRestrictedFor(user, 'marketplace');
     if (!this.userHasCapability(user, 'marketplace')) {
       throw new ForbiddenException(
         'Only business profiles can create marketplace products. Complete the business form first.',
@@ -652,6 +665,7 @@ export class CoreDatabaseService implements OnModuleInit {
   }
 
   assertUserCanCreatePages(user: { id: string; role?: string; profileType?: string }) {
+    this.assertUserNotRestrictedFor(user, 'pages');
     if (!this.userHasCapability(user, 'pages')) {
       throw new ForbiddenException(
         'Only creator profiles can create pages. Complete the creator form first.',
@@ -660,11 +674,42 @@ export class CoreDatabaseService implements OnModuleInit {
   }
 
   assertUserCanCreateCommunities(user: { id: string; role?: string; profileType?: string }) {
+    this.assertUserNotRestrictedFor(user, 'communities');
     if (!this.userHasCapability(user, 'communities')) {
       throw new ForbiddenException(
         'Only creator and business profiles can create communities.',
       );
     }
+  }
+
+  assertUserNotRestrictedFor(
+    user: {
+      id?: string;
+      profileSetup?: Record<string, unknown>;
+      adminModeration?: Record<string, unknown>;
+      restrictionActive?: boolean;
+      restrictionScope?: string[];
+    },
+    feature: string,
+  ) {
+    const moderation = this.resolveAdminModeration(
+      user.profileSetup ?? { adminModeration: user.adminModeration ?? {} },
+    );
+    const activeRestriction = moderation.activeRestriction || user.restrictionActive === true;
+    if (!activeRestriction) {
+      return;
+    }
+
+    const scope = moderation.restrictionScope.length > 0
+      ? moderation.restrictionScope
+      : Array.isArray(user.restrictionScope)
+        ? user.restrictionScope
+        : [];
+    if (!this.restrictionScopeIncludes(scope, feature)) {
+      return;
+    }
+
+    throw new ForbiddenException(this.buildFeatureRestrictionMessage(feature, moderation));
   }
 
   async changePassword(input: { email: string; oldPassword: string; newPassword: string }) {
@@ -1705,6 +1750,11 @@ export class CoreDatabaseService implements OnModuleInit {
       mimeType?: string;
       uploadId?: string;
       attachmentItems?: ChatMessageAttachmentRecord[];
+      latitude?: number;
+      longitude?: number;
+      locationUrl?: string;
+      locationName?: string;
+      location?: Record<string, unknown> | string;
     },
   ) {
     const thread = await this.getThread(threadId);
@@ -1959,7 +2009,7 @@ export class CoreDatabaseService implements OnModuleInit {
 
   async storeAuthCode(
     email: string,
-    purpose: 'verify_email' | 'verify_phone' | 'reset_password',
+    purpose: 'verify_email' | 'verify_phone' | 'reset_password' | 'admin_reset_password',
     code: string,
     expiresAt: Date,
   ) {
@@ -1974,7 +2024,7 @@ export class CoreDatabaseService implements OnModuleInit {
 
   async getAuthCode(
     email: string,
-    purpose: 'verify_email' | 'verify_phone' | 'reset_password',
+    purpose: 'verify_email' | 'verify_phone' | 'reset_password' | 'admin_reset_password',
   ) {
     const { rows } = await this.database.query<
       QueryResultRow & { email: string; purpose: string; code: string; expires_at: Date | string }
@@ -1996,7 +2046,7 @@ export class CoreDatabaseService implements OnModuleInit {
 
   async deleteAuthCode(
     email: string,
-    purpose: 'verify_email' | 'verify_phone' | 'reset_password',
+    purpose: 'verify_email' | 'verify_phone' | 'reset_password' | 'admin_reset_password',
   ) {
     await this.database.query(`delete from auth_codes where email = $1 and purpose = $2`, [
       email,
@@ -2723,6 +2773,137 @@ export class CoreDatabaseService implements OnModuleInit {
     return storedHash.startsWith('$argon2');
   }
 
+  private async assertLoginAllowed(row: UserRow) {
+    const moderation = this.resolveAdminModeration(row.profile_setup);
+    if (moderation.action === 'suspend' && moderation.expired) {
+      await this.database.query(
+        `update app_users
+            set blocked = false,
+                status = 'Active',
+                profile_setup = jsonb_set(profile_setup, '{adminModeration,active}', 'false'::jsonb, true),
+                updated_at = now()
+          where id = $1`,
+        [row.id],
+      );
+      row.blocked = false;
+      row.status = 'Active';
+      if (row.profile_setup?.adminModeration && typeof row.profile_setup.adminModeration === 'object') {
+        row.profile_setup = {
+          ...row.profile_setup,
+          adminModeration: {
+            ...(row.profile_setup.adminModeration as Record<string, unknown>),
+            active: false,
+          },
+        };
+      }
+      return;
+    }
+
+    if (moderation.activeSuspension) {
+      return;
+    }
+
+    if (row.blocked) {
+      throw new UnauthorizedException(
+        'This account is currently blocked.',
+      );
+    }
+  }
+
+  private assertAuthenticatedUserAllowed(user: { blocked?: boolean; profileSetup?: Record<string, unknown> }) {
+    const moderation = this.resolveAdminModeration(user.profileSetup);
+    if (user.blocked || moderation.activeSuspension) {
+      throw new UnauthorizedException(
+        moderation.suspendedUntil
+          ? `This account is suspended until ${moderation.suspendedUntil}.`
+          : 'This account is currently blocked.',
+      );
+    }
+  }
+
+  private resolveAdminModeration(value: unknown) {
+    const profileSetup = this.toObject(value);
+    const moderation = this.toObject(profileSetup.adminModeration);
+    const action = typeof moderation.action === 'string' ? moderation.action.trim().toLowerCase() : '';
+    const suspendedUntil =
+      typeof moderation.suspendedUntil === 'string' && moderation.suspendedUntil.trim()
+        ? moderation.suspendedUntil.trim()
+        : null;
+    const restrictedUntil =
+      typeof moderation.restrictedUntil === 'string' && moderation.restrictedUntil.trim()
+        ? moderation.restrictedUntil.trim()
+        : null;
+    const now = Date.now();
+    const suspensionExpiry = suspendedUntil ? new Date(suspendedUntil).getTime() : null;
+    const restrictionExpiry = restrictedUntil ? new Date(restrictedUntil).getTime() : null;
+    const activeSuspension =
+      action === 'suspend' &&
+      (suspensionExpiry === null || Number.isNaN(suspensionExpiry) || suspensionExpiry > now);
+    const activeRestriction =
+      action === 'restrict' &&
+      (restrictionExpiry === null || Number.isNaN(restrictionExpiry) || restrictionExpiry > now);
+
+    return {
+      action,
+      suspendedUntil,
+      restrictedUntil,
+      restrictionScope: Array.isArray(moderation.restrictionScope)
+        ? moderation.restrictionScope.filter((item): item is string => typeof item === 'string')
+        : [],
+      reason: typeof moderation.reason === 'string' ? moderation.reason : null,
+      activeSuspension,
+      activeRestriction,
+      active: activeSuspension || activeRestriction,
+      expired:
+        (action === 'suspend' && suspensionExpiry !== null && !Number.isNaN(suspensionExpiry) && suspensionExpiry <= now) ||
+        (action === 'restrict' && restrictionExpiry !== null && !Number.isNaN(restrictionExpiry) && restrictionExpiry <= now),
+    };
+  }
+
+  private restrictionScopeIncludes(scope: string[], feature: string) {
+    const normalizedScope = scope
+      .map((item) => this.normalizeRestrictionKey(item))
+      .filter(Boolean);
+    if (
+      normalizedScope.some((item) =>
+        ['all', 'account', 'app', 'everything'].includes(item),
+      )
+    ) {
+      return true;
+    }
+
+    const featureKey = this.normalizeRestrictionKey(feature);
+    const aliasGroups = [
+      ['post', 'posts', 'feed', 'content', 'reel', 'reels', 'story', 'stories'],
+      ['comment', 'comments', 'reply', 'replies'],
+      ['chat', 'message', 'messages', 'messaging', 'groupchat', 'calls', 'call'],
+      ['live', 'livestream', 'livestreams', 'stream', 'streams'],
+      ['marketplace', 'shop', 'store', 'product', 'products'],
+      ['job', 'jobs', 'career', 'careers'],
+      ['page', 'pages'],
+      ['community', 'communities', 'group', 'groups'],
+    ];
+    const aliases =
+      aliasGroups.find((group) => group.includes(featureKey)) ?? [featureKey];
+    return aliases.some((alias) => normalizedScope.includes(alias));
+  }
+
+  private normalizeRestrictionKey(value: string) {
+    return value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  private buildFeatureRestrictionMessage(
+    feature: string,
+    moderation: ReturnType<CoreDatabaseService['resolveAdminModeration']>,
+  ) {
+    const label = feature.trim().replace(/[-_]+/g, ' ') || 'this feature';
+    const until = moderation.restrictedUntil
+      ? ` until ${moderation.restrictedUntil}`
+      : ' until an admin clears it';
+    const reason = moderation.reason ? ` Reason: ${moderation.reason}` : '';
+    return `You are restricted from using ${label}${until}.${reason}`;
+  }
+
   private mapUser(row: UserRow) {
     const normalizedRole = this.normalizeAppRole(row.role);
     const profileType = this.normalizeProfileType(row.profile_type ?? row.role, row.role);
@@ -2733,6 +2914,7 @@ export class CoreDatabaseService implements OnModuleInit {
     const verified = row.email_verified || verificationStatus.includes('verified');
     const badgeStyle = this.normalizeBadgeStyle(normalizedRole);
     const profileSetup = this.toObject(row.profile_setup);
+    const adminModeration = this.resolveAdminModeration(profileSetup);
     const capabilities = {
       canCreateJobs: this.userHasCapability({ profileType, role: normalizedRole }, 'jobs'),
       canCreateMarketplaceProducts: this.userHasCapability(
@@ -2758,6 +2940,9 @@ export class CoreDatabaseService implements OnModuleInit {
       role: normalizedRole,
       profileType,
       profileSetup,
+      adminModeration,
+      restrictionActive: adminModeration.activeRestriction,
+      restrictionScope: adminModeration.restrictionScope,
       capabilities,
       verification: verificationStatus,
       verified,
@@ -3117,8 +3302,16 @@ export class CoreDatabaseService implements OnModuleInit {
   }
 
   private mapMessage(row: MessageRow) {
-    const attachments = this.normalizeStoredChatAttachments(row.attachments, row.kind, row.media_path);
+    const attachments = this.normalizeStoredChatAttachments(
+      row.attachments,
+      row.kind,
+      row.media_path,
+    );
     const primaryAttachment = attachments[0];
+    const location =
+      row.kind === 'location'
+        ? this.extractStoredChatLocation(row, attachments)
+        : null;
     return {
       id: row.id,
       chatId: row.thread_id,
@@ -3135,10 +3328,40 @@ export class CoreDatabaseService implements OnModuleInit {
       kind: row.kind,
       mediaPath: row.media_path ?? primaryAttachment?.url ?? null,
       mediaUrl: primaryAttachment?.url ?? null,
-      imageUrl: row.kind === 'image' ? (primaryAttachment?.url ?? row.media_path ?? null) : null,
-      audioUrl: row.kind === 'audio' ? (primaryAttachment?.url ?? row.media_path ?? null) : null,
-      videoUrl: row.kind === 'video' ? (primaryAttachment?.url ?? row.media_path ?? null) : null,
-      fileUrl: row.kind === 'file' ? (primaryAttachment?.url ?? row.media_path ?? null) : null,
+      imageUrl:
+        row.kind === 'image'
+          ? (primaryAttachment?.url ?? row.media_path ?? null)
+          : null,
+      audioUrl:
+        row.kind === 'audio'
+          ? (primaryAttachment?.url ?? row.media_path ?? null)
+          : null,
+      videoUrl:
+        row.kind === 'video'
+          ? (primaryAttachment?.url ?? row.media_path ?? null)
+          : null,
+      fileUrl:
+        row.kind === 'file'
+          ? (primaryAttachment?.url ?? row.media_path ?? null)
+          : null,
+      latitude: location?.latitude ?? null,
+      longitude: location?.longitude ?? null,
+      locationUrl: location?.locationUrl ?? null,
+      mapUrl: location?.locationUrl ?? null,
+      googleMapsUrl: location?.locationUrl ?? null,
+      locationName: location?.locationName ?? null,
+      location: location
+        ? {
+            latitude: location.latitude ?? null,
+            longitude: location.longitude ?? null,
+            coordinates:
+              location.latitude !== undefined && location.longitude !== undefined
+                ? [location.longitude, location.latitude]
+                : null,
+            url: location.locationUrl ?? null,
+            name: location.locationName ?? null,
+          }
+        : null,
     };
   }
 
@@ -3157,17 +3380,31 @@ export class CoreDatabaseService implements OnModuleInit {
       mimeType?: string;
       uploadId?: string;
       attachmentItems?: ChatMessageAttachmentRecord[];
+      latitude?: number;
+      longitude?: number;
+      locationUrl?: string;
+      locationName?: string;
+      location?: Record<string, unknown> | string;
     },
   ) {
     const trimmedText = text.trim();
+    const normalizedKind = this.normalizeChatKindAlias(options?.kind);
     const attachmentItems = (options?.attachmentItems ?? [])
       .map((item) => this.normalizeAttachmentItem(item))
       .filter((item): item is ChatMessageAttachmentRecord => Boolean(item));
     const legacyAttachments = (options?.attachments ?? [])
-      .map((url) => this.normalizeAttachmentItem({ type: this.inferAttachmentType(options?.kind), url }))
+      .map((url) =>
+        this.normalizeAttachmentItem({
+          type: this.inferAttachmentType(options?.kind),
+          url,
+        }),
+      )
       .filter((item): item is ChatMessageAttachmentRecord => Boolean(item));
 
-    const aliasCandidates: Array<{ kind: Exclude<ChatMessageKind, 'text'>; url?: string }> = [
+    const aliasCandidates: Array<{
+      kind: Exclude<ChatMessageKind, 'text'>;
+      url?: string;
+    }> = [
       { kind: 'image', url: options?.imageUrl },
       { kind: 'audio', url: options?.audioUrl },
       { kind: 'video', url: options?.videoUrl },
@@ -3190,21 +3427,61 @@ export class CoreDatabaseService implements OnModuleInit {
       )
       .filter((item): item is ChatMessageAttachmentRecord => Boolean(item));
 
-    const attachments = [...attachmentItems, ...legacyAttachments, ...aliasAttachments].filter(
+    const attachments = [
+      ...attachmentItems,
+      ...legacyAttachments,
+      ...aliasAttachments,
+    ].filter(
+      (item, index, list) =>
+        list.findIndex(
+          (candidate) =>
+            candidate.type === item.type && candidate.url === item.url,
+        ) === index,
+    );
+
+    const inferredKind =
+      normalizedKind ??
+      attachmentItems[0]?.type ??
+      aliasAttachments[0]?.type ??
+      legacyAttachments[0]?.type ??
+      'text';
+
+    const locationPayload =
+      inferredKind === 'location'
+        ? this.normalizeChatLocationInput(trimmedText, options)
+        : null;
+    const messageText =
+      inferredKind === 'location' && !trimmedText && locationPayload
+        ? this.formatChatLocationText(locationPayload)
+        : trimmedText;
+    const locationAttachment =
+      inferredKind === 'location' && locationPayload?.locationUrl
+        ? this.normalizeAttachmentItem({
+            type: 'location',
+            url: locationPayload.locationUrl,
+            latitude: locationPayload.latitude,
+            longitude: locationPayload.longitude,
+            locationUrl: locationPayload.locationUrl,
+            locationName: locationPayload.locationName,
+            name: locationPayload.locationName,
+          })
+        : null;
+    const storedAttachments = [
+      ...(locationAttachment ? [locationAttachment] : []),
+      ...attachments,
+    ].filter(
       (item, index, list) =>
         list.findIndex(
           (candidate) => candidate.type === item.type && candidate.url === item.url,
         ) === index,
     );
 
-    const inferredKind =
-      this.normalizeChatKindAlias(options?.kind) ??
-      attachmentItems[0]?.type ??
-      aliasAttachments[0]?.type ??
-      legacyAttachments[0]?.type ??
-      'text';
-
-    if ((inferredKind === 'text' || inferredKind === 'location' || inferredKind === 'contact') && !trimmedText) {
+    if (
+      (inferredKind === 'text' ||
+        inferredKind === 'location' ||
+        inferredKind === 'contact') &&
+      !messageText
+    ) {
       throw new ConflictException('Text messages require a non-empty `text` value.');
     }
 
@@ -3212,7 +3489,7 @@ export class CoreDatabaseService implements OnModuleInit {
       inferredKind !== 'text' &&
       inferredKind !== 'location' &&
       inferredKind !== 'contact' &&
-      attachments.length === 0
+      storedAttachments.length === 0
     ) {
       throw new ConflictException(
         `Attachment messages require at least one uploaded media reference for kind \`${inferredKind}\`.`,
@@ -3220,11 +3497,11 @@ export class CoreDatabaseService implements OnModuleInit {
     }
 
     return {
-      text: trimmedText,
+      text: messageText,
       kind: inferredKind,
-      attachments,
+      attachments: storedAttachments,
       mediaPath:
-        attachments[0]?.url ??
+        storedAttachments[0]?.url ??
         options?.mediaPath?.trim() ??
         options?.mediaUrl?.trim() ??
         null,
@@ -3240,12 +3517,25 @@ export class CoreDatabaseService implements OnModuleInit {
     sizeBytes?: number;
     durationMs?: number;
     thumbnailUrl?: string;
+    latitude?: number;
+    longitude?: number;
+    locationUrl?: string;
+    locationName?: string;
   }): ChatMessageAttachmentRecord | null {
-    const url = input.url?.trim() ?? '';
+    const normalizedType = this.inferAttachmentType(input.type);
+    const latitude = this.readFiniteNumber(input.latitude);
+    const longitude = this.readFiniteNumber(input.longitude);
+    const coordinates = this.validChatLatLng(latitude, longitude);
+    const explicitLocationUrl = input.locationUrl?.trim() ?? '';
+    const url =
+      input.url?.trim() ||
+      explicitLocationUrl ||
+      (normalizedType === 'location' && coordinates
+        ? this.buildGoogleMapsUrl(coordinates)
+        : '');
     if (!url) {
       return null;
     }
-    const normalizedType = this.inferAttachmentType(input.type);
     return {
       type: normalizedType,
       url,
@@ -3255,6 +3545,10 @@ export class CoreDatabaseService implements OnModuleInit {
       sizeBytes: typeof input.sizeBytes === 'number' ? input.sizeBytes : undefined,
       durationMs: typeof input.durationMs === 'number' ? input.durationMs : undefined,
       thumbnailUrl: input.thumbnailUrl?.trim() || undefined,
+      latitude: coordinates?.latitude,
+      longitude: coordinates?.longitude,
+      locationUrl: normalizedType === 'location' ? url : undefined,
+      locationName: input.locationName?.trim() || undefined,
     };
   }
 
@@ -3267,6 +3561,11 @@ export class CoreDatabaseService implements OnModuleInit {
       case 'video':
         return 'video';
       case 'file':
+        return 'file';
+      case 'location':
+        return 'location';
+      case 'contact':
+        return 'contact';
       default:
         return 'file';
     }
@@ -3324,6 +3623,23 @@ export class CoreDatabaseService implements OnModuleInit {
             durationMs: typeof record.durationMs === 'number' ? record.durationMs : undefined,
             thumbnailUrl:
               typeof record.thumbnailUrl === 'string' ? record.thumbnailUrl : undefined,
+            latitude: this.readFiniteNumber(record.latitude ?? record.lat),
+            longitude: this.readFiniteNumber(
+              record.longitude ?? record.lng ?? record.lon,
+            ),
+            locationUrl: this.firstNonEmptyString([
+              record.locationUrl,
+              record.mapUrl,
+              record.mapsUrl,
+              record.googleMapsUrl,
+              record.url,
+            ]),
+            locationName: this.firstNonEmptyString([
+              record.locationName,
+              record.locationLabel,
+              record.name,
+              record.address,
+            ]),
           });
         }
         return null;
@@ -3344,6 +3660,287 @@ export class CoreDatabaseService implements OnModuleInit {
     }
 
     return [];
+  }
+
+  private normalizeChatLocationInput(
+    text: string,
+    options?: {
+      latitude?: number;
+      longitude?: number;
+      locationUrl?: string;
+      locationName?: string;
+      location?: Record<string, unknown> | string;
+    },
+  ): ChatMessageLocationPayload | null {
+    const locationObject: Record<string, unknown> =
+      options?.location &&
+      typeof options.location === 'object' &&
+      !Array.isArray(options.location)
+        ? options.location
+        : {};
+    const locationText =
+      typeof options?.location === 'string' ? options.location.trim() : '';
+    const explicitCoordinates = this.validChatLatLng(
+      this.readFiniteNumber(
+        options?.latitude ??
+          locationObject.latitude ??
+          locationObject.lat ??
+          locationObject.locationLatitude,
+      ),
+      this.readFiniteNumber(
+        options?.longitude ??
+          locationObject.longitude ??
+          locationObject.lng ??
+          locationObject.lon ??
+          locationObject.long ??
+          locationObject.locationLongitude,
+      ),
+    );
+    const listCoordinates = this.readChatCoordinateList(
+      locationObject.coordinates ??
+        locationObject.coords ??
+        locationObject.geoCoordinates ??
+        locationObject.position,
+    );
+    const textCoordinates = this.extractLatLngFromText(
+      [
+        text,
+        locationText,
+        this.firstNonEmptyString([
+          locationObject.locationText,
+          locationObject.address,
+          locationObject.name,
+        ]),
+      ]
+        .filter((value): value is string => Boolean(value?.trim()))
+        .join('\n'),
+    );
+    const coordinates =
+      explicitCoordinates ?? listCoordinates ?? textCoordinates;
+    const locationName = this.firstNonEmptyString([
+      options?.locationName,
+      locationObject.locationName,
+      locationObject.locationLabel,
+      locationObject.name,
+      locationObject.label,
+      locationObject.address,
+      this.isLocationLabel(locationText) ? locationText : undefined,
+      this.locationNameFromText(text),
+    ]);
+    const locationUrl =
+      this.firstNonEmptyString([
+        options?.locationUrl,
+        locationObject.locationUrl,
+        locationObject.mapUrl,
+        locationObject.mapsUrl,
+        locationObject.googleMapsUrl,
+        locationObject.url,
+      ]) ??
+      this.extractMapsUrlFromText(text) ??
+      this.extractMapsUrlFromText(locationText) ??
+      (coordinates
+        ? this.buildGoogleMapsUrl(coordinates)
+        : locationName
+          ? this.buildGoogleMapsUrl(locationName)
+          : undefined);
+
+    if (!coordinates && !locationUrl && !locationName && !text.trim()) {
+      return null;
+    }
+
+    return {
+      latitude: coordinates?.latitude,
+      longitude: coordinates?.longitude,
+      locationUrl,
+      locationName,
+    };
+  }
+
+  private formatChatLocationText(location: ChatMessageLocationPayload) {
+    const coordinates =
+      location.latitude !== undefined && location.longitude !== undefined
+        ? `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`
+        : '';
+    const header = coordinates
+      ? `Shared location: ${coordinates}`
+      : location.locationName?.trim() || 'Shared location';
+    return [header, location.locationUrl]
+      .filter((value): value is string => Boolean(value?.trim()))
+      .join('\n');
+  }
+
+  private extractStoredChatLocation(
+    row: MessageRow,
+    attachments: ChatMessageAttachmentRecord[],
+  ): ChatMessageLocationPayload | null {
+    const locationAttachment = attachments.find(
+      (item) =>
+        item.type === 'location' ||
+        item.latitude !== undefined ||
+        item.longitude !== undefined ||
+        Boolean(item.locationUrl?.trim()),
+    );
+    const attachmentCoordinates = this.validChatLatLng(
+      locationAttachment?.latitude,
+      locationAttachment?.longitude,
+    );
+    const textCoordinates = this.extractLatLngFromText(row.text);
+    const mediaCoordinates = this.extractLatLngFromText(row.media_path ?? '');
+    const coordinates =
+      attachmentCoordinates ?? textCoordinates ?? mediaCoordinates;
+    const locationUrl =
+      this.firstNonEmptyString([
+        locationAttachment?.locationUrl,
+        this.looksLikeMapsUrl(locationAttachment?.url ?? '')
+          ? locationAttachment?.url
+          : undefined,
+        this.looksLikeMapsUrl(row.media_path ?? '') ? row.media_path : undefined,
+      ]) ??
+      this.extractMapsUrlFromText(row.text) ??
+      (coordinates ? this.buildGoogleMapsUrl(coordinates) : undefined);
+    const locationName = this.firstNonEmptyString([
+      locationAttachment?.locationName,
+      locationAttachment?.name,
+      this.locationNameFromText(row.text),
+    ]);
+
+    if (!coordinates && !locationUrl && !locationName) {
+      return null;
+    }
+
+    return {
+      latitude: coordinates?.latitude,
+      longitude: coordinates?.longitude,
+      locationUrl,
+      locationName,
+    };
+  }
+
+  private readChatCoordinateList(value: unknown) {
+    if (!Array.isArray(value) || value.length < 2) {
+      return null;
+    }
+    const first = this.readFiniteNumber(value[0]);
+    const second = this.readFiniteNumber(value[1]);
+    if (first === undefined || second === undefined) {
+      return null;
+    }
+    if (Math.abs(first) > 90 && Math.abs(second) <= 90) {
+      return this.validChatLatLng(second, first);
+    }
+    return (
+      this.validChatLatLng(second, first) ??
+      this.validChatLatLng(first, second)
+    );
+  }
+
+  private extractLatLngFromText(value: string) {
+    const match = value.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
+    if (!match) {
+      return null;
+    }
+    return this.validChatLatLng(
+      this.readFiniteNumber(match[1]),
+      this.readFiniteNumber(match[2]),
+    );
+  }
+
+  private validChatLatLng(latitude?: number, longitude?: number) {
+    if (
+      latitude === undefined ||
+      longitude === undefined ||
+      latitude < -90 ||
+      latitude > 90 ||
+      longitude < -180 ||
+      longitude > 180
+    ) {
+      return null;
+    }
+    return { latitude, longitude };
+  }
+
+  private readFiniteNumber(value: unknown) {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : undefined;
+    }
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value.trim());
+      return Number.isFinite(parsed) ? parsed : undefined;
+    }
+    return undefined;
+  }
+
+  private firstNonEmptyString(values: unknown[]) {
+    for (const value of values) {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+    }
+    return undefined;
+  }
+
+  private locationNameFromText(text: string) {
+    for (const line of text.split('\n').map((item) => item.trim())) {
+      if (!line || this.looksLikeMapsUrl(line)) {
+        continue;
+      }
+      if (/^shared location\b/i.test(line)) {
+        return 'Shared location';
+      }
+      const coordinates = this.extractLatLngFromText(line);
+      if (coordinates && line.replace(/[-\d.,\s]/g, '') === '') {
+        return 'Shared location';
+      }
+      return line;
+    }
+    return undefined;
+  }
+
+  private isLocationLabel(value: string) {
+    return Boolean(value.trim()) &&
+      !this.looksLikeMapsUrl(value) &&
+      !this.extractLatLngFromText(value);
+  }
+
+  private extractMapsUrlFromText(text: string) {
+    const matches = text.matchAll(/(geo:[^\s]+|https?:\/\/[^\s]+)/gi);
+    for (const match of matches) {
+      const normalized = (match[0] ?? '').trim().replace(/[),.;]+$/g, '');
+      if (this.looksLikeMapsUrl(normalized)) {
+        return normalized;
+      }
+    }
+    return undefined;
+  }
+
+  private looksLikeMapsUrl(value: string) {
+    const normalized = value.trim().toLowerCase();
+    if (normalized.startsWith('geo:')) {
+      return true;
+    }
+    try {
+      const url = new URL(normalized);
+      return (
+        (url.hostname.includes('google.com') &&
+          url.pathname.includes('/maps')) ||
+        url.hostname === 'maps.google.com' ||
+        url.hostname === 'maps.app.goo.gl' ||
+        (url.hostname === 'goo.gl' && url.pathname.startsWith('/maps')) ||
+        url.hostname === 'maps.apple.com'
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  private buildGoogleMapsUrl(
+    location: { latitude: number; longitude: number } | string,
+  ) {
+    const query =
+      typeof location === 'string'
+        ? location.trim()
+        : `${location.latitude.toFixed(6)},${location.longitude.toFixed(6)}`;
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
   }
 
   private mapNotification(row: NotificationRow) {

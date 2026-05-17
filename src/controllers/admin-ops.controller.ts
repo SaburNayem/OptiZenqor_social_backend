@@ -25,17 +25,22 @@ import {
   AdminModerationCasesQueryDto,
   AdminModerationCaseUpdateDto,
   AdminSessionRefreshDto,
+  AdminSupportHelpConfigUpdateDto,
   AdminSupportOperationsQueryDto,
   AdminSupportTicketUpdateDto,
 } from '../dto/admin.dto';
-import { AdminLoginDto } from '../dto/auth.dto';
+import { AdminLoginDto, ForgotPasswordDto, ResetPasswordDto } from '../dto/auth.dto';
 import { AdminDatabaseService } from '../services/admin-database.service';
+import { MailService } from '../services/mail.service';
 import { successResponse } from '../utils/api-response.util';
 
 @ApiTags('admin-ops')
 @Controller('admin')
 export class AdminOpsController {
-  constructor(private readonly adminDatabase: AdminDatabaseService) {}
+  constructor(
+    private readonly adminDatabase: AdminDatabaseService,
+    private readonly mailService: MailService,
+  ) {}
 
   @Post('auth/login')
   @ApiOperation({ summary: 'Admin dashboard login' })
@@ -44,6 +49,44 @@ export class AdminOpsController {
   @ApiUnauthorizedResponse({ description: 'Invalid admin credentials.' })
   login(@Body() body: AdminLoginDto) {
     return this.adminDatabase.loginAdmin(body.email, body.password);
+  }
+
+  @Post('auth/forgot-password')
+  @ApiOperation({ summary: 'Start admin forgot-password flow' })
+  @ApiBody({ type: ForgotPasswordDto })
+  async forgotPassword(@Body() body: ForgotPasswordDto) {
+    const email = body.email.trim().toLowerCase();
+    const code = this.generateVerificationCode();
+    const admin = await this.adminDatabase.requestAdminPasswordReset(
+      email,
+      code,
+      new Date(Date.now() + 10 * 60 * 1000),
+    );
+    const delivery = admin
+      ? await this.mailService.sendPasswordResetEmail(admin.email, code)
+      : null;
+
+    return successResponse(
+      'If that admin account exists, a password reset code has been sent.',
+      {
+        email,
+        otp: {
+          required: true,
+          expiresInMinutes: 10,
+        },
+        ...(delivery ? { delivery } : {}),
+      },
+    );
+  }
+
+  @Post('auth/reset-password')
+  @ApiOperation({ summary: 'Complete admin password reset with OTP' })
+  @ApiBody({ type: ResetPasswordDto })
+  async resetPassword(@Body() body: ResetPasswordDto) {
+    return successResponse(
+      'Admin password reset completed.',
+      await this.adminDatabase.resetAdminPassword(body.email, body.otp, body.password),
+    );
   }
 
   @Post('auth/refresh')
@@ -414,6 +457,31 @@ export class AdminOpsController {
     );
   }
 
+  @Get('support-help/config')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard)
+  async getSupportHelpConfig() {
+    return successResponse(
+      'Support help configuration fetched successfully.',
+      await this.adminDatabase.getSupportHelpConfig(),
+    );
+  }
+
+  @Patch('support-help/config')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard, RolesGuard)
+  @Roles('Super Admin', 'Operations Admin', 'Support Admin')
+  async updateSupportHelpConfig(
+    @Body() body: AdminSupportHelpConfigUpdateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      'Support help configuration updated successfully.',
+      await this.adminDatabase.updateSupportHelpConfig(body, admin.adminId),
+    );
+  }
+
   @Get('support/tickets')
   @ApiBearerAuth('admin-bearer')
   @UseGuards(AdminSessionGuard)
@@ -467,5 +535,9 @@ export class AdminOpsController {
     @Headers('authorization') authorization?: string,
   ) {
     return this.updateSupportOperation(id, body, authorization);
+  }
+
+  private generateVerificationCode() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
   }
 }

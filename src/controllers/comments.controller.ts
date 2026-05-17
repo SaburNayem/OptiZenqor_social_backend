@@ -25,6 +25,7 @@ export class CommentsController {
       authorization,
       body.authorId,
     );
+    this.coreDatabase.assertUserNotRestrictedFor(actor, 'comments');
     const comment = await this.coreDatabase.createPostComment(id, actor.name, body.message, {
       authorId: actor.id,
       replyTo: body.replyTo,
@@ -50,6 +51,7 @@ export class CommentsController {
       authorization,
       body.authorId,
     );
+    this.coreDatabase.assertUserNotRestrictedFor(actor, 'comments');
     const comment = await this.coreDatabase.createPostComment(id, actor.name, body.message, {
       authorId: actor.id,
       replyTo: commentId,
@@ -69,6 +71,7 @@ export class CommentsController {
       authorization,
       body.userId,
     );
+    this.coreDatabase.assertUserNotRestrictedFor(actor, 'comments');
     const comment = await this.coreDatabase.reactToComment(
       id,
       commentId,

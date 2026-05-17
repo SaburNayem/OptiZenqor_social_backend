@@ -57,6 +57,7 @@ export class SupportController {
       tickets,
       chat: await this.supportDatabase.getSupportChat(user?.id ?? null),
       mail: await this.supportDatabase.getSupportMail(),
+      loginHelp: await this.supportDatabase.getSupportHelpConfig(),
     });
   }
 
@@ -116,6 +117,10 @@ export class SupportController {
         message: body.message,
         priority: body.priority,
         userId: user?.id ?? null,
+        attachments: body.attachments,
+        contactEmail: body.contactEmail,
+        contactName: body.contactName,
+        source: body.source,
       }),
     );
   }

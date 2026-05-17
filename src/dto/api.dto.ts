@@ -769,6 +769,103 @@ export class CreateMessageDto {
   replyToMessageId?: string;
 
   @ApiPropertyOptional({
+    description: 'Latitude for shared-location messages.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  latitude?: number;
+
+  @ApiPropertyOptional({
+    description: 'Longitude for shared-location messages.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  longitude?: number;
+
+  @ApiPropertyOptional({
+    description: 'Latitude alias accepted for mobile clients.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  lat?: number;
+
+  @ApiPropertyOptional({
+    description: 'Longitude alias accepted for mobile clients.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  lng?: number;
+
+  @ApiPropertyOptional({
+    description: 'Longitude alias accepted for mobile clients.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  lon?: number;
+
+  @ApiPropertyOptional({
+    description: 'Google Maps or geo URL for shared-location messages.',
+  })
+  @IsOptional()
+  @IsString()
+  locationUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Map URL alias for shared-location messages.',
+  })
+  @IsOptional()
+  @IsString()
+  mapUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Maps URL alias for shared-location messages.',
+  })
+  @IsOptional()
+  @IsString()
+  mapsUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Google Maps URL alias for shared-location messages.',
+  })
+  @IsOptional()
+  @IsString()
+  googleMapsUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Human-readable place label for shared-location messages.',
+  })
+  @IsOptional()
+  @IsString()
+  locationName?: string;
+
+  @ApiPropertyOptional({
+    description: 'Place label alias for shared-location messages.',
+  })
+  @IsOptional()
+  @IsString()
+  locationLabel?: string;
+
+  @ApiPropertyOptional({
+    description: 'Address alias for shared-location messages.',
+  })
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Structured shared-location payload. Accepts latitude/longitude, coordinates, url, and name fields.',
+    type: Object,
+  })
+  @IsOptional()
+  location?: Record<string, unknown> | string;
+
+  @ApiPropertyOptional({
     enum: [
       'text',
       'image',
@@ -1866,6 +1963,27 @@ export class CreateTicketDto {
   @IsOptional()
   @IsString()
   priority?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  attachments?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  contactEmail?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  contactName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  source?: string;
 }
 
 export class CreateSupportMessageDto {
@@ -2155,6 +2273,34 @@ export class CreateProductDto {
   @ApiProperty()
   @IsString()
   location!: string;
+
+  @ApiPropertyOptional({
+    description: 'Display name for an external app connected to this listing.',
+  })
+  @IsOptional()
+  @IsString()
+  externalAppName?: string;
+
+  @ApiPropertyOptional({
+    description: 'Deep link or app link opened from the marketplace listing.',
+  })
+  @IsOptional()
+  @IsString()
+  externalAppLink?: string;
+
+  @ApiPropertyOptional({
+    description: 'Google Play fallback URL when the external app is not installed.',
+  })
+  @IsOptional()
+  @IsString()
+  playStoreUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Android package name used to build a Play Store fallback.',
+  })
+  @IsOptional()
+  @IsString()
+  androidPackage?: string;
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()

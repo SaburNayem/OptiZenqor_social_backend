@@ -85,6 +85,7 @@ export class RealtimeController {
   @UseGuards(SessionAuthGuard)
   @Post('group-chat')
   async createGroupChat(@CurrentUser() user: { id: string }, @Body() body: CreateGroupChatDto) {
+    this.coreDatabase.assertUserNotRestrictedFor(user, 'chat');
     const thread = await this.coreDatabase.createGroupThread(
       user.id,
       body.name,
@@ -101,6 +102,7 @@ export class RealtimeController {
     @CurrentUser() user: { id: string },
     @Body() body: UpdateGroupChatDto,
   ) {
+    this.coreDatabase.assertUserNotRestrictedFor(user, 'chat');
     const thread = await this.coreDatabase.updateGroupThread(id, user.id, body.name);
     const group = this.mapGroupChat(thread);
     return successResponse('Group chat updated successfully.', group);
@@ -109,6 +111,7 @@ export class RealtimeController {
   @UseGuards(SessionAuthGuard)
   @Delete('group-chat/:id')
   async deleteGroupChat(@Param('id') id: string, @CurrentUser() user: { id: string }) {
+    this.coreDatabase.assertUserNotRestrictedFor(user, 'chat');
     return successResponse(
       'Group chat deleted successfully.',
       await this.coreDatabase.deleteGroupThread(id, user.id),
@@ -122,6 +125,7 @@ export class RealtimeController {
     @CurrentUser() user: { id: string },
     @Body() body: GroupChatMemberDto,
   ) {
+    this.coreDatabase.assertUserNotRestrictedFor(user, 'chat');
     const identifier = body.userId?.trim() || body.username?.trim() || '';
     const thread = await this.coreDatabase.addThreadParticipant(
       id,
@@ -140,6 +144,7 @@ export class RealtimeController {
     @Param('userId') userId: string,
     @CurrentUser() user: { id: string },
   ) {
+    this.coreDatabase.assertUserNotRestrictedFor(user, 'chat');
     const thread = await this.coreDatabase.removeThreadParticipant(id, user.id, userId);
     const group = this.mapGroupChat(thread);
     return successResponse('Group member removed successfully.', group);
@@ -153,6 +158,7 @@ export class RealtimeController {
     @CurrentUser() user: { id: string },
     @Body() body: GroupChatMemberDto,
   ) {
+    this.coreDatabase.assertUserNotRestrictedFor(user, 'chat');
     const thread = await this.coreDatabase.updateThreadParticipantRole(
       id,
       user.id,
@@ -270,6 +276,7 @@ export class RealtimeController {
     @CurrentUser() user: { id: string },
     @Body() body: CreateLiveStreamDto,
   ) {
+    this.coreDatabase.assertUserNotRestrictedFor(user, 'live');
     const stream = await this.socialStateDatabase.createLiveStream(user.id, {
       title: body.title ?? '',
       description: body.description,
@@ -285,6 +292,7 @@ export class RealtimeController {
   @UseGuards(SessionAuthGuard)
   @Patch('live-stream/:id/start')
   async startLiveStream(@Param('id') id: string, @CurrentUser() user: { id: string }) {
+    this.coreDatabase.assertUserNotRestrictedFor(user, 'live');
     const stream = await this.socialStateDatabase.startLiveStream(id, user.id);
     return successResponse('Live stream started successfully.', stream);
   }
@@ -335,6 +343,7 @@ export class RealtimeController {
       authorization,
       body.userId,
     );
+    this.coreDatabase.assertUserNotRestrictedFor(actor, 'comments');
     const comment = await this.socialStateDatabase.createLiveStreamComment(
       id,
       actor.id,
@@ -426,6 +435,7 @@ export class RealtimeController {
       authorization,
       body.initiatorId,
     );
+    this.coreDatabase.assertUserNotRestrictedFor(actor, 'chat');
     const session = await this.realtimeState.createCallSession({
       ...body,
       initiatorId: actor.id,

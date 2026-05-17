@@ -46,6 +46,7 @@ export class ReelsController {
       authorization,
       body.authorId,
     );
+    this.coreDatabase.assertUserNotRestrictedFor(user, 'posts');
     const reel = await this.reelsDatabase.createReel(user.id, body);
     return successResponse('Reel created successfully.', reel);
   }
@@ -71,6 +72,7 @@ export class ReelsController {
       authorization,
       body.userId,
     );
+    this.coreDatabase.assertUserNotRestrictedFor(user, 'comments');
     return this.reelsDatabase.createReelComment(id, user.id, body.comment);
   }
 
