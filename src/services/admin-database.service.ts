@@ -2228,15 +2228,17 @@ export class AdminDatabaseService implements OnModuleInit {
     const skip = (page - 1) * limit;
     const order = query.order === 'asc' ? 'asc' : 'desc';
     const sortField = this.resolveAdminUserSortField(query.sort);
+    const search = query.search?.trim();
     const where: Prisma.AppUserWhereInput = {
       ...(query.role?.trim() ? { role: query.role.trim() } : {}),
       ...(query.status?.trim() ? { status: query.status.trim() } : {}),
-      ...(query.search?.trim()
+      ...(search
         ? {
             OR: [
-              { name: { contains: query.search.trim(), mode: 'insensitive' } },
-              { username: { contains: query.search.trim(), mode: 'insensitive' } },
-              { email: { contains: query.search.trim(), mode: 'insensitive' } },
+              { id: { contains: search, mode: 'insensitive' } },
+              { name: { contains: search, mode: 'insensitive' } },
+              { username: { contains: search, mode: 'insensitive' } },
+              { email: { contains: search, mode: 'insensitive' } },
             ],
           }
         : {}),
@@ -2370,7 +2372,9 @@ export class AdminDatabaseService implements OnModuleInit {
     const normalizedType = targetType.trim().toLowerCase() as 'post' | 'reel' | 'story';
     const status = patch.remove ? 'Removed' : patch.status?.trim() || undefined;
     const deletedAt = patch.remove ? new Date() : undefined;
+    const shouldClearDeletedAt = Boolean(status && !patch.remove && status.toLowerCase() !== 'removed');
     let targetLabel = '';
+    let ownerId: string | null = null;
 
     if (normalizedType === 'post') {
       const updated = await this.prisma.appPost.update({
@@ -2378,39 +2382,48 @@ export class AdminDatabaseService implements OnModuleInit {
         data: {
           ...(status ? { status } : {}),
           ...(deletedAt ? { deletedAt } : {}),
+          ...(shouldClearDeletedAt ? { deletedAt: null } : {}),
         },
         select: {
           id: true,
           caption: true,
+          authorId: true,
         },
       });
       targetLabel = updated.caption?.trim() || updated.id;
+      ownerId = updated.authorId;
     } else if (normalizedType === 'reel') {
       const updated = await this.prisma.reel.update({
         where: { id },
         data: {
           ...(status ? { status } : {}),
           ...(deletedAt ? { deletedAt } : {}),
+          ...(shouldClearDeletedAt ? { deletedAt: null } : {}),
         },
         select: {
           id: true,
           caption: true,
+          userId: true,
         },
       });
       targetLabel = updated.caption?.trim() || updated.id;
+      ownerId = updated.userId;
     } else {
       const updated = await this.prisma.story.update({
         where: { id },
         data: {
           ...(status ? { status } : {}),
           ...(deletedAt ? { deletedAt } : {}),
+          ...(shouldClearDeletedAt ? { deletedAt: null } : {}),
         },
         select: {
           id: true,
           text: true,
+          userId: true,
         },
       });
       targetLabel = updated.text?.trim() || updated.id;
+      ownerId = updated.userId;
     }
 
     await this.upsertModerationCaseForTarget(
@@ -2447,6 +2460,23 @@ export class AdminDatabaseService implements OnModuleInit {
       },
       actorAdminId,
     );
+
+    await this.sendAdminActionNotification({
+      recipientId: ownerId,
+      title: `${this.capitalizeLabel(normalizedType)} moderation update`,
+      body: this.describeContentModerationAction(normalizedType, status, patch.remove),
+      routeName: '/notifications',
+      entityId: id,
+      entityType: normalizedType,
+      action: patch.remove ? 'remove' : status ?? 'moderate',
+      note: patch.note,
+      metadata: {
+        targetType: normalizedType,
+        targetLabel,
+        status: status ?? null,
+        removed: patch.remove ?? false,
+      },
+    });
 
     await this.createAuditLog({
       actorAdminId,
@@ -2494,6 +2524,8 @@ export class AdminDatabaseService implements OnModuleInit {
       ...(search
         ? {
             OR: [
+              { id: { contains: search, mode: 'insensitive' } },
+              { authorId: { contains: search, mode: 'insensitive' } },
               { message: { contains: search, mode: 'insensitive' } },
               { authorName: { contains: search, mode: 'insensitive' } },
               { postId: { contains: search, mode: 'insensitive' } },
@@ -2592,6 +2624,21 @@ export class AdminDatabaseService implements OnModuleInit {
         metadata: patch,
       });
 
+      await this.sendAdminActionNotification({
+        recipientId: existing.authorId,
+        title: 'Comment moderation update',
+        body: 'Your comment was removed by an admin.',
+        routeName: '/notifications',
+        entityId: id,
+        entityType: 'post_comment',
+        action: 'remove',
+        note: patch.note,
+        metadata: {
+          postId: existing.postId,
+          targetType: 'comment',
+        },
+      });
+
       return {
         id,
         deleted: true,
@@ -2632,6 +2679,23 @@ export class AdminDatabaseService implements OnModuleInit {
       actorAdminId,
     );
 
+    await this.sendAdminActionNotification({
+      recipientId: updated.authorId,
+      title: 'Comment moderation update',
+      body: updated.isReported
+        ? 'Your comment was flagged for moderation review.'
+        : 'Your comment is visible again.',
+      routeName: '/notifications',
+      entityId: updated.id,
+      entityType: 'post_comment',
+      action: updated.isReported ? 'flag' : 'restore',
+      note: patch.note,
+      metadata: {
+        postId: updated.postId,
+        targetType: 'comment',
+      },
+    });
+
     await this.createAuditLog({
       actorAdminId,
       action: 'admin.comment.moderate',
@@ -2658,18 +2722,26 @@ export class AdminDatabaseService implements OnModuleInit {
     limit?: number;
     search?: string;
     status?: string;
+    targetType?: string;
   }) {
     const page = this.resolvePage(query.page);
     const limit = this.resolveLimit(query.limit);
     const skip = (page - 1) * limit;
+    const search = query.search?.trim();
+    const targetType = this.normalizeReportTargetType(query.targetType);
     const where: Prisma.UserReportWhereInput = {
       ...(query.status?.trim() ? { status: query.status.trim() } : {}),
-      ...(query.search?.trim()
+      ...this.buildReportTargetTypeWhere(targetType),
+      ...(search
         ? {
             OR: [
-              { reason: { contains: query.search.trim(), mode: 'insensitive' } },
-              { details: { contains: query.search.trim(), mode: 'insensitive' } },
-              { targetEntityId: { contains: query.search.trim(), mode: 'insensitive' } },
+              { id: { contains: search, mode: 'insensitive' } },
+              { reason: { contains: search, mode: 'insensitive' } },
+              { details: { contains: search, mode: 'insensitive' } },
+              { reporterUserId: { contains: search, mode: 'insensitive' } },
+              { targetUserId: { contains: search, mode: 'insensitive' } },
+              { targetEntityId: { contains: search, mode: 'insensitive' } },
+              { targetEntityType: { contains: search, mode: 'insensitive' } },
             ],
           }
         : {}),
@@ -2690,20 +2762,34 @@ export class AdminDatabaseService implements OnModuleInit {
     ]);
 
     return this.wrapPaginated(
-      items.map((item) => ({
-        id: item.id,
-        reporterUserId: item.reporterUserId,
-        reporterName: item.reporter.name,
-        targetUserId: item.targetUserId,
-        targetUserName: item.targetUser?.name ?? null,
-        targetEntityId: item.targetEntityId,
-        targetEntityType: item.targetEntityType,
-        reason: item.reason,
-        details: item.details,
-        status: item.status,
-        createdAt: item.createdAt.toISOString(),
-        updatedAt: item.updatedAt.toISOString(),
-      })),
+      items.map((item) => {
+        const normalizedTargetType = this.normalizeReportTargetType(
+          item.targetEntityType ?? (item.targetUserId ? 'user' : 'report'),
+        );
+        const targetId = item.targetEntityId ?? item.targetUserId ?? item.id;
+        const targetModule = this.resolveReportTargetModule(normalizedTargetType);
+        return {
+          id: item.id,
+          reporterUserId: item.reporterUserId,
+          reporterName: item.reporter.name,
+          targetUserId: item.targetUserId,
+          targetUserName: item.targetUser?.name ?? null,
+          targetEntityId: item.targetEntityId,
+          targetEntityType: item.targetEntityType,
+          targetType: normalizedTargetType,
+          targetId,
+          targetLabel: item.targetUser?.name ?? item.targetEntityId ?? item.targetUserId ?? 'N/A',
+          targetModule,
+          targetSearch: targetId,
+          targetActionLabel: this.resolveReportTargetActionLabel(normalizedTargetType, targetModule),
+          actionLocation: this.resolveReportActionLocation(normalizedTargetType, targetModule),
+          reason: item.reason,
+          details: item.details,
+          status: item.status,
+          createdAt: item.createdAt.toISOString(),
+          updatedAt: item.updatedAt.toISOString(),
+        };
+      }),
       page,
       limit,
       total,
@@ -2823,14 +2909,17 @@ export class AdminDatabaseService implements OnModuleInit {
     const page = this.resolvePage(query.page);
     const limit = this.resolveLimit(query.limit);
     const skip = (page - 1) * limit;
+    const search = query.search?.trim();
     const where: Prisma.MarketplaceProductWhereInput = {
       ...(query.status?.trim() ? { status: query.status.trim() } : {}),
-      ...(query.search?.trim()
+      ...(search
         ? {
             OR: [
-              { title: { contains: query.search.trim(), mode: 'insensitive' } },
-              { description: { contains: query.search.trim(), mode: 'insensitive' } },
-              { category: { contains: query.search.trim(), mode: 'insensitive' } },
+              { id: { contains: search, mode: 'insensitive' } },
+              { sellerId: { contains: search, mode: 'insensitive' } },
+              { title: { contains: search, mode: 'insensitive' } },
+              { description: { contains: search, mode: 'insensitive' } },
+              { category: { contains: search, mode: 'insensitive' } },
             ],
           }
         : {}),
@@ -2922,6 +3011,20 @@ export class AdminDatabaseService implements OnModuleInit {
       entityType: 'marketplace_product',
       entityId: item.id,
       metadata: input,
+    });
+
+    await this.sendAdminActionNotification({
+      recipientId: item.sellerId,
+      title: 'Marketplace listing created',
+      body: `An admin created marketplace listing "${item.title}" for your account.`,
+      routeName: '/notifications',
+      entityId: item.id,
+      entityType: 'marketplace_product',
+      action: 'create',
+      metadata: {
+        title: item.title,
+        status: item.status,
+      },
     });
 
     return this.mapAdminMarketplaceRow(item);
@@ -3059,6 +3162,22 @@ export class AdminDatabaseService implements OnModuleInit {
       metadata: patch,
     });
 
+    await this.sendAdminActionNotification({
+      recipientId: updated.sellerId,
+      title: 'Marketplace listing update',
+      body: patch.status?.trim()
+        ? `Your marketplace listing "${updated.title}" status changed to ${patch.status.trim()}.`
+        : `Your marketplace listing "${updated.title}" was updated by an admin.`,
+      routeName: '/notifications',
+      entityId: updated.id,
+      entityType: 'marketplace_product',
+      action: 'update',
+      metadata: {
+        title: updated.title,
+        status: updated.status,
+      },
+    });
+
     return this.mapAdminMarketplaceRow(updated);
   }
 
@@ -3083,6 +3202,19 @@ export class AdminDatabaseService implements OnModuleInit {
       },
     });
 
+    await this.sendAdminActionNotification({
+      recipientId: existing.sellerId,
+      title: 'Marketplace listing removed',
+      body: `Your marketplace listing "${existing.title}" was removed by an admin.`,
+      routeName: '/notifications',
+      entityId: id,
+      entityType: 'marketplace_product',
+      action: 'delete',
+      metadata: {
+        title: existing.title,
+      },
+    });
+
     return {
       id,
       deleted: true,
@@ -3098,14 +3230,17 @@ export class AdminDatabaseService implements OnModuleInit {
     const page = this.resolvePage(query.page);
     const limit = this.resolveLimit(query.limit);
     const skip = (page - 1) * limit;
+    const search = query.search?.trim();
     const where: Prisma.JobWhereInput = {
       ...(query.status?.trim() ? { status: query.status.trim() } : {}),
-      ...(query.search?.trim()
+      ...(search
         ? {
             OR: [
-              { title: { contains: query.search.trim(), mode: 'insensitive' } },
-              { company: { contains: query.search.trim(), mode: 'insensitive' } },
-              { description: { contains: query.search.trim(), mode: 'insensitive' } },
+              { id: { contains: search, mode: 'insensitive' } },
+              { recruiterId: { contains: search, mode: 'insensitive' } },
+              { title: { contains: search, mode: 'insensitive' } },
+              { company: { contains: search, mode: 'insensitive' } },
+              { description: { contains: search, mode: 'insensitive' } },
             ],
           }
         : {}),
@@ -3182,6 +3317,20 @@ export class AdminDatabaseService implements OnModuleInit {
       entityType: 'job',
       entityId: item.id,
       metadata: input,
+    });
+
+    await this.sendAdminActionNotification({
+      recipientId: item.recruiterId,
+      title: 'Job listing created',
+      body: `An admin created job listing "${item.title}" for your account.`,
+      routeName: '/notifications',
+      entityId: item.id,
+      entityType: 'job',
+      action: 'create',
+      metadata: {
+        title: item.title,
+        status: item.status,
+      },
     });
 
     return this.mapAdminJobRow(item);
@@ -3294,6 +3443,22 @@ export class AdminDatabaseService implements OnModuleInit {
       metadata: patch,
     });
 
+    await this.sendAdminActionNotification({
+      recipientId: updated.recruiterId,
+      title: 'Job listing update',
+      body: patch.status?.trim()
+        ? `Your job listing "${updated.title}" status changed to ${patch.status.trim()}.`
+        : `Your job listing "${updated.title}" was updated by an admin.`,
+      routeName: '/notifications',
+      entityId: updated.id,
+      entityType: 'job',
+      action: 'update',
+      metadata: {
+        title: updated.title,
+        status: updated.status,
+      },
+    });
+
     return this.mapAdminJobRow(updated);
   }
 
@@ -3315,6 +3480,19 @@ export class AdminDatabaseService implements OnModuleInit {
       metadata: {
         title: existing.title,
         recruiterId: existing.recruiterId,
+      },
+    });
+
+    await this.sendAdminActionNotification({
+      recipientId: existing.recruiterId,
+      title: 'Job listing removed',
+      body: `Your job listing "${existing.title}" was removed by an admin.`,
+      routeName: '/notifications',
+      entityId: id,
+      entityType: 'job',
+      action: 'delete',
+      metadata: {
+        title: existing.title,
       },
     });
 
@@ -5417,6 +5595,69 @@ export class AdminDatabaseService implements OnModuleInit {
     return this.getPermissionMatrix();
   }
 
+  async createAdminAccount(
+    input: {
+      name: string;
+      email: string;
+      password: string;
+      role?: string;
+      isActive?: boolean;
+    },
+    actorAdminId: string,
+  ) {
+    const actor = await this.getAdminUserById(actorAdminId);
+    if (this.normalizeAdminRole(actor.role) !== 'superadmin') {
+      throw new UnauthorizedException('Only superadmin can manage admin accounts.');
+    }
+
+    const email = input.email.trim().toLowerCase();
+    const existing = await this.prisma.adminUser.findUnique({
+      where: { email },
+    });
+    if (existing) {
+      throw new ConflictException('Admin email already exists.');
+    }
+
+    const role = this.canonicalizeStoredAdminRole(input.role?.trim() || 'admin');
+    const admin = await this.prisma.adminUser.create({
+      data: {
+        id: makeId('admin'),
+        name: input.name.trim() || 'Admin',
+        email,
+        role,
+        passwordHash: await argon2.hash(input.password),
+        mfaEnabled: false,
+        isActive: input.isActive ?? true,
+      },
+    });
+
+    await this.createAuditLog({
+      actorAdminId,
+      action: 'admin.account.create',
+      entityType: 'admin_user',
+      entityId: admin.id,
+      metadata: {
+        email: admin.email,
+        role: this.normalizeAdminRole(admin.role),
+        isActive: admin.isActive,
+        appAccess:
+          this.normalizeAdminRole(admin.role) === 'admin'
+            ? 'admin accounts can sign into the app'
+            : 'superadmin accounts are dashboard-only',
+      },
+    });
+
+    return {
+      id: admin.id,
+      name: admin.name,
+      email: admin.email,
+      role: this.normalizeAdminRole(admin.role),
+      isActive: admin.isActive,
+      createdAt: admin.createdAt.toISOString(),
+      updatedAt: admin.updatedAt.toISOString(),
+    };
+  }
+
   async listAdminAccounts() {
     const admins = await this.prisma.adminUser.findMany({
       orderBy: { createdAt: 'desc' },
@@ -5827,6 +6068,124 @@ export class AdminDatabaseService implements OnModuleInit {
     });
   }
 
+  private normalizeReportTargetType(value?: string | null) {
+    const normalized = value?.trim().toLowerCase().replaceAll('_', '-') ?? '';
+    if (!normalized) {
+      return '';
+    }
+    if (['post', 'app-post'].includes(normalized)) {
+      return 'post';
+    }
+    if (['reel', 'app-reel'].includes(normalized)) {
+      return 'reel';
+    }
+    if (['story', 'app-story'].includes(normalized)) {
+      return 'story';
+    }
+    if (['comment', 'post-comment', 'app-post-comment', 'reel-comment', 'story-comment'].includes(normalized)) {
+      return 'comment';
+    }
+    if (['marketplace', 'marketplace-product', 'product', 'listing'].includes(normalized)) {
+      return 'marketplace';
+    }
+    if (['job', 'jobs'].includes(normalized)) {
+      return 'job';
+    }
+    if (['user', 'account', 'profile'].includes(normalized)) {
+      return 'user';
+    }
+    return normalized;
+  }
+
+  private buildReportTargetTypeWhere(targetType: string): Prisma.UserReportWhereInput {
+    if (!targetType) {
+      return {};
+    }
+    if (targetType === 'user') {
+      return {
+        OR: [
+          { targetEntityType: null, targetUserId: { not: null } },
+          { targetEntityType: { in: ['user', 'account', 'profile'] } },
+        ],
+      };
+    }
+    if (targetType === 'marketplace') {
+      return {
+        targetEntityType: { in: ['marketplace', 'marketplace_product', 'product', 'listing'] },
+      };
+    }
+    if (targetType === 'comment') {
+      return {
+        targetEntityType: {
+          in: ['comment', 'post_comment', 'app_post_comment', 'reel_comment', 'story_comment'],
+        },
+      };
+    }
+    if (targetType === 'post') {
+      return { targetEntityType: { in: ['post', 'app_post'] } };
+    }
+    if (targetType === 'reel') {
+      return { targetEntityType: { in: ['reel', 'app_reel'] } };
+    }
+    if (targetType === 'story') {
+      return { targetEntityType: { in: ['story', 'app_story'] } };
+    }
+    return { targetEntityType: targetType };
+  }
+
+  private resolveReportTargetModule(targetType: string) {
+    switch (targetType) {
+      case 'user':
+        return 'users';
+      case 'post':
+        return 'posts';
+      case 'reel':
+        return 'reels';
+      case 'story':
+        return 'stories';
+      case 'comment':
+        return 'comments';
+      case 'marketplace':
+        return 'marketplace';
+      case 'job':
+        return 'jobs';
+      default:
+        return 'reports';
+    }
+  }
+
+  private resolveReportTargetActionLabel(targetType: string, targetModule: string) {
+    if (targetModule === 'reports') {
+      return 'Use target ID';
+    }
+    const labels: Record<string, string> = {
+      users: 'Open user',
+      posts: 'Open post',
+      reels: 'Open reel',
+      stories: 'Open story',
+      comments: 'Open comment',
+      marketplace: 'Open listing',
+      jobs: 'Open job',
+    };
+    return labels[targetModule] ?? `Open ${targetType}`;
+  }
+
+  private resolveReportActionLocation(targetType: string, targetModule: string) {
+    if (targetModule === 'reports') {
+      return 'Use the target ID in the matching admin section.';
+    }
+    const labels: Record<string, string> = {
+      users: 'User Management',
+      posts: 'Posts',
+      reels: 'Reels',
+      stories: 'Stories',
+      comments: 'Comments',
+      marketplace: 'Marketplace',
+      jobs: 'Jobs',
+    };
+    return `Take action in ${labels[targetModule] ?? targetType}.`;
+  }
+
   private async sendUserRestrictionNotification(user: {
     id: string;
     name: string;
@@ -5861,6 +6220,63 @@ export class AdminDatabaseService implements OnModuleInit {
         source: 'admin_user_management',
       },
     });
+  }
+
+  private async sendAdminActionNotification(input: {
+    recipientId?: string | null;
+    title: string;
+    body: string;
+    routeName: string;
+    entityId?: string | null;
+    entityType: string;
+    action: string;
+    note?: string | null;
+    metadata?: Record<string, unknown>;
+  }) {
+    if (!input.recipientId) {
+      return;
+    }
+
+    const note = input.note?.trim();
+    await this.coreDatabase.pushNotification({
+      recipientId: input.recipientId,
+      title: input.title,
+      body: note ? `${input.body} Note: ${note}` : input.body,
+      routeName: input.routeName,
+      entityId: input.entityId ?? undefined,
+      type: 'system',
+      entityType: input.entityType,
+      metadata: {
+        ...(input.metadata ?? {}),
+        action: input.action,
+        source: 'admin_dashboard',
+      },
+    });
+  }
+
+  private describeContentModerationAction(
+    targetType: 'post' | 'reel' | 'story',
+    status?: string,
+    removed?: boolean,
+  ) {
+    if (removed) {
+      return `Your ${targetType} was removed by an admin.`;
+    }
+    const normalizedStatus = status?.trim().toLowerCase();
+    if (normalizedStatus === 'under review') {
+      return `Your ${targetType} was put under review.`;
+    }
+    if (normalizedStatus === 'visible') {
+      return `Your ${targetType} is visible again.`;
+    }
+    if (status?.trim()) {
+      return `Your ${targetType} status changed to ${status.trim()}.`;
+    }
+    return `Your ${targetType} moderation state was updated.`;
+  }
+
+  private capitalizeLabel(value: string) {
+    return value.charAt(0).toUpperCase() + value.slice(1);
   }
 
   private describeRestrictionDuration(restrictedUntil: string | null) {
@@ -7317,10 +7733,17 @@ export class AdminDatabaseService implements OnModuleInit {
     const page = this.resolvePage(query.page);
     const limit = this.resolveLimit(query.limit);
     const skip = (page - 1) * limit;
+    const search = query.search?.trim();
     const where: Prisma.AppPostWhereInput = {
       ...(query.status?.trim() ? { status: query.status.trim() } : {}),
-      ...(query.search?.trim()
-        ? { caption: { contains: query.search.trim(), mode: 'insensitive' } }
+      ...(search
+        ? {
+            OR: [
+              { id: { contains: search, mode: 'insensitive' } },
+              { authorId: { contains: search, mode: 'insensitive' } },
+              { caption: { contains: search, mode: 'insensitive' } },
+            ],
+          }
         : {}),
     };
     const [total, items] = await Promise.all([
@@ -7347,10 +7770,17 @@ export class AdminDatabaseService implements OnModuleInit {
     const page = this.resolvePage(query.page);
     const limit = this.resolveLimit(query.limit);
     const skip = (page - 1) * limit;
+    const search = query.search?.trim();
     const where: Prisma.ReelWhereInput = {
       ...(query.status?.trim() ? { status: query.status.trim() } : {}),
-      ...(query.search?.trim()
-        ? { caption: { contains: query.search.trim(), mode: 'insensitive' } }
+      ...(search
+        ? {
+            OR: [
+              { id: { contains: search, mode: 'insensitive' } },
+              { userId: { contains: search, mode: 'insensitive' } },
+              { caption: { contains: search, mode: 'insensitive' } },
+            ],
+          }
         : {}),
     };
     const [total, items] = await Promise.all([
@@ -7377,10 +7807,17 @@ export class AdminDatabaseService implements OnModuleInit {
     const page = this.resolvePage(query.page);
     const limit = this.resolveLimit(query.limit);
     const skip = (page - 1) * limit;
+    const search = query.search?.trim();
     const where: Prisma.StoryWhereInput = {
       ...(query.status?.trim() ? { status: query.status.trim() } : {}),
-      ...(query.search?.trim()
-        ? { text: { contains: query.search.trim(), mode: 'insensitive' } }
+      ...(search
+        ? {
+            OR: [
+              { id: { contains: search, mode: 'insensitive' } },
+              { userId: { contains: search, mode: 'insensitive' } },
+              { text: { contains: search, mode: 'insensitive' } },
+            ],
+          }
         : {}),
     };
     const [total, items] = await Promise.all([

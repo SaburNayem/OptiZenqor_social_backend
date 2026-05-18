@@ -35,6 +35,8 @@ export type IdPrefix =
   | 'collection_item'
   | 'campaign'
   | 'txn'
+  | 'payment'
+  | 'payment_event'
   | 'plan'
   | 'subscription'
   | 'chat_pref'

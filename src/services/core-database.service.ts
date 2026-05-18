@@ -48,6 +48,15 @@ type UserRow = QueryResultRow & {
   profile_setup?: Record<string, unknown> | null;
 };
 
+type AdminAuthRow = QueryResultRow & {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  password_hash: string;
+  is_active: boolean;
+};
+
 type PostRow = QueryResultRow & {
   id: string;
   author_id: string;
@@ -266,6 +275,168 @@ export class CoreDatabaseService implements OnModuleInit {
     return row;
   }
 
+  private async getAppUserRowByEmailOptional(email: string) {
+    const { rows } = await this.database.query<UserRow>(
+      `select * from app_users where lower(email) = lower($1) limit 1`,
+      [email],
+    );
+    return rows[0] ?? null;
+  }
+
+  private async getActiveAdminAuthRowByEmail(email: string) {
+    const { rows } = await this.database.query<AdminAuthRow>(
+      `select id, name, email, role, password_hash, is_active
+       from admin_users
+       where lower(email) = lower($1)
+         and is_active = true
+       limit 1`,
+      [email],
+    );
+    return rows[0] ?? null;
+  }
+
+  private normalizeDashboardAdminAppRole(role?: string | null) {
+    const normalized = (role ?? '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+    return normalized === 'superadmin' ? 'superadmin' : 'admin';
+  }
+
+  private async buildDashboardAdminUsername(admin: AdminAuthRow) {
+    const localPart = admin.email.split('@')[0] ?? '';
+    const source = localPart.trim() || admin.name.trim() || 'admin';
+    const sanitized = source
+      .toLowerCase()
+      .replace(/[^a-z0-9._]/g, '')
+      .replace(/^[._]+|[._]+$/g, '');
+    const base = (sanitized.startsWith('admin') ? sanitized : `admin_${sanitized || 'user'}`)
+      .slice(0, 28)
+      .replace(/[._]+$/g, '') || `admin${Date.now()}`;
+    let username = base;
+    let attempt = 0;
+    while (await this.usernameExists(username)) {
+      attempt += 1;
+      username = `${base}${attempt}`;
+    }
+    return username;
+  }
+
+  private buildDashboardAdminProfileSetup(
+    currentProfileSetup: Record<string, unknown> | null | undefined,
+    admin: AdminAuthRow,
+  ) {
+    const profileSetup = this.toObject(currentProfileSetup);
+    const now = new Date().toISOString();
+    return {
+      ...profileSetup,
+      adminBridge: {
+        adminId: admin.id,
+        adminEmail: admin.email,
+        adminRole: 'admin',
+        source: 'dashboard_admin',
+        appAccess: 'full',
+        dashboardOnly: false,
+        syncedAt: now,
+      },
+      adminModeration: {
+        ...this.toObject(profileSetup.adminModeration),
+        action: 'clear',
+        active: false,
+        activeSuspension: false,
+        activeRestriction: false,
+        reason: null,
+        suspendedUntil: null,
+        restrictedUntil: null,
+        restrictionScope: [],
+        clearedAt: now,
+        updatedAt: now,
+        actorAdminId: admin.id,
+      },
+    };
+  }
+
+  private async syncDashboardAdminAppUser(admin: AdminAuthRow) {
+    if (this.normalizeDashboardAdminAppRole(admin.role) === 'superadmin') {
+      throw new UnauthorizedException(
+        'Super admin accounts are dashboard-only. Create an admin account for app access.',
+      );
+    }
+
+    const existing = await this.getAppUserRowByEmailOptional(admin.email);
+    if (existing) {
+      const profileSetup = this.buildDashboardAdminProfileSetup(existing.profile_setup, admin);
+      const { rows } = await this.database.query<UserRow>(
+        `update app_users
+         set name = $2,
+             role = 'Admin',
+             profile_type = 'business',
+             profile_setup = $3::jsonb,
+             verification = 'Verified',
+             status = 'Active',
+             health = 'Admin account',
+             email_verified = true,
+             blocked = false,
+             password_hash = $4,
+             updated_at = now()
+         where id = $1
+         returning *`,
+        [
+          existing.id,
+          existing.name?.trim() || admin.name.trim() || 'Admin',
+          JSON.stringify(profileSetup),
+          admin.password_hash,
+        ],
+      );
+      const updated = rows[0];
+      if (!updated) {
+        throw new UnauthorizedException('Unable to sync admin app access.');
+      }
+      return updated;
+    }
+
+    const id = makeId('user');
+    const username = await this.buildDashboardAdminUsername(admin);
+    const profileSetup = this.buildDashboardAdminProfileSetup({}, admin);
+    const { rows } = await this.database.query<UserRow>(
+      `insert into app_users (
+        id, name, username, email, avatar, bio, interests, role, profile_type, profile_setup, verification, status,
+        followers, following, wallet_summary, health, reports, last_active,
+        email_verified, blocked, password_hash
+      ) values (
+        $1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10::jsonb,$11,$12,
+        $13,$14,$15,$16,$17,$18,
+        $19,$20,$21
+      )
+      returning *`,
+      [
+        id,
+        admin.name.trim() || 'Admin',
+        username,
+        admin.email,
+        '',
+        'Dashboard admin with full app access.',
+        JSON.stringify([]),
+        'Admin',
+        'business',
+        JSON.stringify(profileSetup),
+        'Verified',
+        'Active',
+        0,
+        0,
+        '$0 balance',
+        'Admin account',
+        '0 open reports',
+        'just now',
+        true,
+        false,
+        admin.password_hash,
+      ],
+    );
+    const created = rows[0];
+    if (!created) {
+      throw new UnauthorizedException('Unable to create admin app access.');
+    }
+    return created;
+  }
+
   async findUserByEmailOptional(email: string) {
     const { rows } = await this.database.query<UserRow>(
       `select * from app_users where lower(email) = lower($1) limit 1`,
@@ -352,24 +523,42 @@ export class CoreDatabaseService implements OnModuleInit {
   }
 
   async authenticateUser(input: { email: string; password: string }) {
-    const userRow = await this.getUserByEmail(input.email);
-    if (!(await this.verifyPassword(input.password, userRow.password_hash))) {
-      throw new UnauthorizedException('Invalid email or password.');
+    const email = input.email.trim().toLowerCase();
+    const userRow = await this.getAppUserRowByEmailOptional(email);
+
+    if (userRow && await this.verifyPassword(input.password, userRow.password_hash)) {
+      if (this.isDashboardOnlyAppRole(userRow.role)) {
+        throw new UnauthorizedException(
+          'Super admin accounts are dashboard-only. Create an admin account for app access.',
+        );
+      }
+      if (!this.isArgonHash(userRow.password_hash)) {
+        await this.database.query(
+          `update app_users set password_hash = $2, updated_at = now() where id = $1`,
+          [userRow.id, await this.hashPassword(input.password)],
+        );
+      }
+      if (!userRow.email_verified) {
+        throw new UnauthorizedException(
+          'Email is not verified yet. Complete email verification before login.',
+        );
+      }
+      await this.assertLoginAllowed(userRow);
+      const tokens = await this.issueTokens(userRow.id);
+      return this.buildSessionPayload(this.mapUser(userRow), tokens);
     }
-    if (!this.isArgonHash(userRow.password_hash)) {
-      await this.database.query(
-        `update app_users set password_hash = $2, updated_at = now() where id = $1`,
-        [userRow.id, await this.hashPassword(input.password)],
-      );
+
+    const adminRow = await this.getActiveAdminAuthRowByEmail(email);
+    if (adminRow && await argon2.verify(adminRow.password_hash, input.password)) {
+      const syncedUser = await this.syncDashboardAdminAppUser(adminRow);
+      const tokens = await this.issueTokens(syncedUser.id);
+      return this.buildSessionPayload(this.mapUser(syncedUser), tokens, {
+        adminAppAccess: true,
+        dashboardAdminId: adminRow.id,
+      });
     }
-    if (!userRow.email_verified) {
-      throw new UnauthorizedException(
-        'Email is not verified yet. Complete email verification before login.',
-      );
-    }
-    await this.assertLoginAllowed(userRow);
-    const tokens = await this.issueTokens(userRow.id);
-    return this.buildSessionPayload(this.mapUser(userRow), tokens);
+
+    throw new UnauthorizedException('Invalid email or password.');
   }
 
   async loginWithGoogle(input: { email: string; name: string; googleIdToken?: string }) {
@@ -689,9 +878,14 @@ export class CoreDatabaseService implements OnModuleInit {
       adminModeration?: Record<string, unknown>;
       restrictionActive?: boolean;
       restrictionScope?: string[];
+      role?: string | null;
     },
     feature: string,
   ) {
+    if (this.isAppAdminRole(user.role)) {
+      return;
+    }
+
     const moderation = this.resolveAdminModeration(
       user.profileSetup ?? { adminModeration: user.adminModeration ?? {} },
     );
@@ -2774,6 +2968,15 @@ export class CoreDatabaseService implements OnModuleInit {
   }
 
   private async assertLoginAllowed(row: UserRow) {
+    if (this.isDashboardOnlyAppRole(row.role)) {
+      throw new UnauthorizedException(
+        'Super admin accounts are dashboard-only. Create an admin account for app access.',
+      );
+    }
+    if (this.isAppAdminRole(row.role)) {
+      return;
+    }
+
     const moderation = this.resolveAdminModeration(row.profile_setup);
     if (moderation.action === 'suspend' && moderation.expired) {
       await this.database.query(
@@ -2810,7 +3013,20 @@ export class CoreDatabaseService implements OnModuleInit {
     }
   }
 
-  private assertAuthenticatedUserAllowed(user: { blocked?: boolean; profileSetup?: Record<string, unknown> }) {
+  private assertAuthenticatedUserAllowed(user: {
+    blocked?: boolean;
+    profileSetup?: Record<string, unknown>;
+    role?: string | null;
+  }) {
+    if (this.isDashboardOnlyAppRole(user.role)) {
+      throw new UnauthorizedException(
+        'Super admin accounts are dashboard-only. Create an admin account for app access.',
+      );
+    }
+    if (this.isAppAdminRole(user.role)) {
+      return;
+    }
+
     const moderation = this.resolveAdminModeration(user.profileSetup);
     if (user.blocked || moderation.activeSuspension) {
       throw new UnauthorizedException(
@@ -3022,6 +3238,8 @@ export class CoreDatabaseService implements OnModuleInit {
       case 'seller':
       case 'recruiter':
         return role;
+      case 'admin':
+        return 'admin';
       default:
         return 'standard';
     }
@@ -3078,6 +3296,10 @@ export class CoreDatabaseService implements OnModuleInit {
     user: { profileType?: string | null; role?: string | null },
     capability: 'jobs' | 'marketplace' | 'pages' | 'communities',
   ) {
+    if (this.isAppAdminRole(user.role)) {
+      return true;
+    }
+
     const profileType = this.normalizeProfileType(user.profileType, user.role);
 
     if (capability === 'pages') {
@@ -3107,6 +3329,14 @@ export class CoreDatabaseService implements OnModuleInit {
       default:
         return 'user';
     }
+  }
+
+  private isAppAdminRole(role?: string | null) {
+    return this.normalizeAppRole(role) === 'admin';
+  }
+
+  private isDashboardOnlyAppRole(role?: string | null) {
+    return this.normalizeAppRole(role) === 'superadmin';
   }
 
   private canonicalizeStoredAppRole(role?: string | null) {

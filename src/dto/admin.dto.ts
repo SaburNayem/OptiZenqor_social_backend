@@ -3,8 +3,10 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
+  IsEmail,
   IsIn,
   IsInt,
+  MinLength,
   IsNumber,
   IsObject,
   IsOptional,
@@ -17,6 +19,31 @@ export class AdminSessionRefreshDto {
   @ApiProperty({ example: 'admin_refresh_xxxxxxxxx' })
   @IsString()
   refreshToken!: string;
+}
+
+export class AdminStaffCreateDto {
+  @ApiProperty({ example: 'App Admin' })
+  @IsString()
+  name!: string;
+
+  @ApiProperty({ example: 'app-admin@optizenqor.app' })
+  @IsEmail()
+  email!: string;
+
+  @ApiProperty({ minLength: 8 })
+  @IsString()
+  @MinLength(8)
+  password!: string;
+
+  @ApiPropertyOptional({ enum: ['admin', 'superadmin'], default: 'admin' })
+  @IsOptional()
+  @IsIn(['admin', 'superadmin'])
+  role?: 'admin' | 'superadmin';
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class AdminStaffUpdateDto {
@@ -135,6 +162,13 @@ export class AdminReportsQueryDto {
   @IsOptional()
   @IsString()
   status?: string;
+
+  @ApiPropertyOptional({
+    enum: ['user', 'post', 'reel', 'story', 'comment', 'marketplace', 'product', 'job'],
+  })
+  @IsOptional()
+  @IsString()
+  targetType?: string;
 }
 
 export class AdminAuditLogsQueryDto {

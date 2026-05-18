@@ -31,6 +31,7 @@ Database-backed now:
 - hidden posts and archived post/story/reel state
 - live stream sessions, comments, and reactions
 - call sessions and call signals
+- payment orders, payment records, and gateway webhook/IPN logs
 - admin users and admin sessions
 - moderation cases and admin audit logs
 - admin operational settings
@@ -178,6 +179,86 @@ Experience:
 - supports `page`, `limit`, `search`, `category`, `status`, `sellerId`, `sort`, `order`
 - `POST /marketplace/products`
 - `POST /marketplace/checkout`
+
+Payments:
+
+- `POST /payments/create`
+- `POST /payments/sslcommerz/ipn`
+- `POST /payments/2checkout/webhook`
+- `GET /payments/success`
+- `GET /payments/fail`
+- `GET /payments/cancel`
+- `GET /payments/:id/status`
+
+## Payment Setup
+
+The payment system is backend-owned. React and Flutter never receive gateway secrets; they only call `POST /payments/create` and open the returned `checkoutUrl`.
+
+Supported gateways:
+
+- Bangladesh/local payments: SSLCommerz for bKash, Nagad, Rocket, local cards
+- Global cards: 2Checkout / Verifone hosted checkout
+
+Backend environment:
+
+```env
+PAYMENT_PUBLIC_BASE_URL=https://your-backend.example.com
+PAYMENT_FRONTEND_RETURN_URL=https://your-web.example.com
+SSLCOMMERZ_SANDBOX=true
+SSLCOMMERZ_STORE_ID=your_sslcommerz_store_id
+SSLCOMMERZ_STORE_PASSWORD=your_sslcommerz_store_password
+TWOCHECKOUT_SANDBOX=true
+TWOCHECKOUT_MERCHANT_CODE=your_2checkout_merchant_code
+TWOCHECKOUT_SECRET_WORD=your_2checkout_buy_link_secret_word
+TWOCHECKOUT_SECRET_KEY=your_2checkout_ipn_secret_key
+TWOCHECKOUT_CHECKOUT_URL=https://secure.2checkout.com/checkout/buy
+```
+
+Database:
+
+```bash
+npm run prisma:generate
+npm run prisma:migrate
+```
+
+Flow:
+
+1. App or web sends `POST /payments/create` with amount, currency, item details, and customer info.
+2. Backend chooses gateway automatically: `BDT` or `region=local` uses SSLCommerz, otherwise 2Checkout.
+3. Backend creates `Order` and `Payment` with `PENDING` status.
+4. Backend returns `checkoutUrl`.
+5. Frontend opens the checkout URL.
+6. Gateway sends IPN/webhook to backend.
+7. Backend verifies signature/validation API, amount, currency, gateway transaction ID, and order ID.
+8. Backend marks the payment `PAID`, `FAILED`, `CANCELLED`, or `REFUNDED` and stores the raw event in `payment_events`.
+
+Webhook URLs to configure in gateway dashboards:
+
+- SSLCommerz IPN: `https://your-backend.example.com/payments/sslcommerz/ipn`
+- 2Checkout webhook/IPN: `https://your-backend.example.com/payments/2checkout/webhook`
+
+Example request:
+
+```bash
+curl -X POST "$API_URL/payments/create" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "itemType": "premium_plan",
+    "itemId": "monthly",
+    "title": "Premium monthly plan",
+    "amount": 499,
+    "currency": "BDT",
+    "region": "local",
+    "customer": {
+      "name": "Sabur",
+      "email": "customer@example.com",
+      "phone": "+8801700000000",
+      "city": "Dhaka",
+      "country": "Bangladesh"
+    }
+  }'
+```
 - `GET /marketplace/drafts`
 - `POST /marketplace/drafts`
 - `PATCH /marketplace/drafts/:id`

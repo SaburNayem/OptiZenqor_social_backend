@@ -21,6 +21,7 @@ import { AdminSessionGuard } from '../auth/admin-session.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import {
+  AdminStaffCreateDto,
   AdminStaffUpdateDto,
   AdminModerationCasesQueryDto,
   AdminModerationCaseUpdateDto,
@@ -356,6 +357,24 @@ export class AdminOpsController {
     return successResponse(
       'Admin staff fetched successfully.',
       await this.adminDatabase.listAdminAccounts(),
+    );
+  }
+
+  @Post('staff')
+  @ApiBearerAuth('admin-bearer')
+  @UseGuards(AdminSessionGuard, RolesGuard)
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Create an admin account' })
+  async createAdminStaff(
+    @Body() body: AdminStaffCreateDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);
+    return successResponse(
+      body.role === 'superadmin'
+        ? 'Superadmin staff created successfully. Dashboard access only.'
+        : 'Admin staff created successfully. This admin can sign into the app.',
+      await this.adminDatabase.createAdminAccount(body, admin.adminId),
     );
   }
 

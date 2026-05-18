@@ -5,6 +5,7 @@ import { AdminApiModule } from './modules/admin-api.module';
 import { ContentApiModule } from './modules/content-api.module';
 import { DataModule } from './modules/data.module';
 import { ExperienceApiModule } from './modules/experience-api.module';
+import { PaymentModule } from './payments/payment.module';
 import { SystemApiModule } from './modules/system-api.module';
 
 @Module({
@@ -17,6 +18,7 @@ import { SystemApiModule } from './modules/system-api.module';
     SystemApiModule,
     ContentApiModule,
     ExperienceApiModule,
+    PaymentModule,
     AdminApiModule,
   ],
 })
