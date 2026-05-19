@@ -336,6 +336,23 @@ export class RealtimeStateService implements OnModuleInit {
   getCallContract() {
     return {
       rtcConfig: this.getRtcConfig(),
+      localMedia: {
+        openCameraBeforeRealtime: true,
+        openCameraBeforeCallSession: true,
+        requireRealtimeForPreview: false,
+        requireActiveCallForPreview: false,
+        requestedConstraints: {
+          audio: true,
+          video: true,
+        },
+        startupOrder: [
+          'request-local-media',
+          'render-local-preview',
+          'connect-realtime-or-use-rest-fallback',
+          'create-or-join-call-session',
+          'exchange-webrtc-signals',
+        ],
+      },
       sessionLifecycle: {
         create: 'POST /calls/sessions',
         join: 'POST /calls/sessions/:id/join',
@@ -449,8 +466,16 @@ export class RealtimeStateService implements OnModuleInit {
   }
 
   getSocketContract() {
+    const socketPath = process.env.SOCKET_PATH?.trim() || '/socket.io';
+    const socketUrl =
+      process.env.SOCKET_PUBLIC_URL?.trim() ||
+      process.env.SOCKET_URL?.trim() ||
+      undefined;
     return {
       namespace: '/realtime',
+      path: socketPath,
+      socketPath,
+      ...(socketUrl ? { url: socketUrl, socketUrl } : {}),
       auth: {
         tokenField: 'auth.token',
         fallbackUserIdField: 'auth.userId',

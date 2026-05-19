@@ -1,6 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma, Subscription } from '@prisma/client';
 import { makeId } from '../common/id.util';
+import {
+  describeNotificationSchedule,
+  normalizeNotificationSchedule,
+} from '../common/notification-schedule';
 import { PrismaService } from './prisma.service';
 
 @Injectable()
@@ -140,6 +144,7 @@ export class MonetizationDatabaseService {
       name: item.name,
       audience: item.audience,
       schedule: item.schedule,
+      ...describeNotificationSchedule(item.schedule, item.status),
       status: item.status,
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),
@@ -149,15 +154,24 @@ export class MonetizationDatabaseService {
   async createNotificationCampaign(input: {
     name: string;
     audience: string;
-    schedule: string;
+    schedule?: string;
+    scheduleMode?: string;
+    deliveryMode?: string;
+    sendNow?: boolean;
+    scheduledAt?: string;
+    sendAt?: string;
+    scheduleDate?: string;
+    scheduleTime?: string;
+    timezoneOffsetMinutes?: number;
   }) {
+    const schedule = this.normalizeCampaignSchedule(input);
     const campaign = await this.prisma.notificationCampaign.create({
       data: {
         id: makeId('campaign'),
         name: input.name,
         audience: input.audience,
-        schedule: input.schedule,
-        status: 'scheduled',
+        schedule: schedule.schedule,
+        status: schedule.status,
       },
     });
 
@@ -166,10 +180,21 @@ export class MonetizationDatabaseService {
       name: campaign.name,
       audience: campaign.audience,
       schedule: campaign.schedule,
+      ...describeNotificationSchedule(campaign.schedule, campaign.status),
       status: campaign.status,
       createdAt: campaign.createdAt.toISOString(),
       updatedAt: campaign.updatedAt.toISOString(),
     };
+  }
+
+  private normalizeCampaignSchedule(input: Parameters<typeof normalizeNotificationSchedule>[0]) {
+    try {
+      return normalizeNotificationSchedule(input);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'Invalid notification schedule.',
+      );
+    }
   }
 
   private mapPlan(item: {

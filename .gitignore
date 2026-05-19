@@ -2,6 +2,7 @@ node_modules
 dist
 .npm-cache
 .env
+firebase/*.json
 .vercel
 temp_mobile_repo
 temp_dashboard_repo

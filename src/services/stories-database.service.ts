@@ -12,10 +12,12 @@ export class StoriesDatabaseService {
     private readonly coreDatabase: CoreDatabaseService,
   ) {}
 
-  async getActiveStories(userId?: string) {
+  async getActiveStories(userId?: string, viewerId?: string | null) {
+    const hiddenStoryIds = await this.getHiddenTargetIds(viewerId, 'story');
     const stories = await this.prisma.story.findMany({
       where: {
         userId: userId?.trim() || undefined,
+        ...(hiddenStoryIds.length ? { id: { notIn: hiddenStoryIds } } : {}),
         expiresAt: { gt: new Date() },
         deletedAt: null,
       },
@@ -25,10 +27,12 @@ export class StoriesDatabaseService {
     return stories.map((row) => this.mapStory(row));
   }
 
-  async getStory(id: string) {
+  async getStory(id: string, viewerId?: string | null) {
+    const hiddenStoryIds = await this.getHiddenTargetIds(viewerId, 'story');
     const story = await this.prisma.story.findFirst({
       where: {
         id,
+        ...(hiddenStoryIds.length ? { id: { notIn: hiddenStoryIds } } : {}),
         expiresAt: { gt: new Date() },
         deletedAt: null,
       },
@@ -247,6 +251,21 @@ export class StoriesDatabaseService {
         };
       }),
     );
+  }
+
+  private async getHiddenTargetIds(viewerId: string | null | undefined, targetType: string) {
+    const normalizedViewerId = viewerId?.trim();
+    if (!normalizedViewerId) {
+      return [];
+    }
+    const rows = await this.prisma.userHiddenEntity.findMany({
+      where: {
+        userId: normalizedViewerId,
+        targetType,
+      },
+      select: { targetId: true },
+    });
+    return rows.map((row) => row.targetId);
   }
 
   async recordStoryView(storyId: string, userId: string) {

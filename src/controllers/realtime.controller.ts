@@ -216,13 +216,6 @@ export class RealtimeController {
     return successResponse('Calls fetched successfully.', calls);
   }
 
-  @UseGuards(SessionAuthGuard)
-  @Get('calls/:id')
-  async getCall(@Param('id') id: string) {
-    const session = this.realtimeState.getCallSession(id);
-    return successResponse('Call fetched successfully.', session);
-  }
-
   @Get('live-stream')
   async getLiveStreams(
     @Query() query: PaginationQueryDto,
@@ -423,6 +416,13 @@ export class RealtimeController {
   getCallSession(@Param('id') id: string) {
     const session = this.realtimeState.getCallSession(id);
     return successResponse('Call session fetched successfully.', session);
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Get('calls/:id')
+  async getCall(@Param('id') id: string) {
+    const session = this.realtimeState.getCallSession(id);
+    return successResponse('Call fetched successfully.', session);
   }
 
   @UseGuards(SessionAuthGuard)

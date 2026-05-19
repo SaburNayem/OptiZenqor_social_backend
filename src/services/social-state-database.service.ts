@@ -12,7 +12,19 @@ import { PrismaService } from './prisma.service';
 import { ReelsDatabaseService } from './reels-database.service';
 import { StoriesDatabaseService } from './stories-database.service';
 
-type TargetType = 'post' | 'story' | 'reel' | 'comment';
+type TargetType =
+  | 'post'
+  | 'story'
+  | 'reel'
+  | 'comment'
+  | 'product'
+  | 'marketplace'
+  | 'event'
+  | 'job'
+  | 'community'
+  | 'page'
+  | 'chat'
+  | 'live';
 type ArchiveTargetType =
   | 'post'
   | 'story'
@@ -279,7 +291,7 @@ export class SocialStateDatabaseService {
     const skip = (page - 1) * limit;
     const where = {
       userId,
-      ...(targetType ? { targetType } : {}),
+      ...(targetType ? { targetType: this.normalizeHiddenTargetType(targetType) } : {}),
     };
 
     const [total, rows] = await Promise.all([
@@ -309,11 +321,12 @@ export class SocialStateDatabaseService {
   }
 
   async getHiddenEntity(userId: string, targetId: string, targetType?: TargetType) {
+    const normalizedTargetType = targetType ? this.normalizeHiddenTargetType(targetType) : undefined;
     const row = await this.prisma.userHiddenEntity.findFirst({
       where: {
         userId,
         targetId,
-        ...(targetType ? { targetType } : {}),
+        ...(normalizedTargetType ? { targetType: normalizedTargetType } : {}),
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -337,20 +350,21 @@ export class SocialStateDatabaseService {
     targetId: string,
     reason?: string,
   ) {
-    await this.assertEntityExists(targetType, targetId);
+    const normalizedTargetType = this.normalizeHiddenTargetType(targetType);
+    await this.assertEntityExists(normalizedTargetType, targetId);
     const row = await this.prisma.userHiddenEntity.upsert({
       where: {
         userId_targetId_targetType: {
           userId,
           targetId,
-          targetType,
+          targetType: normalizedTargetType,
         },
       },
       create: {
         id: makeId('hidden'),
         userId,
         targetId,
-        targetType,
+        targetType: normalizedTargetType,
         reason: reason?.trim() || null,
       },
       update: {
@@ -371,16 +385,17 @@ export class SocialStateDatabaseService {
   }
 
   async unhideEntity(userId: string, targetId: string, targetType?: TargetType) {
+    const normalizedTargetType = targetType ? this.normalizeHiddenTargetType(targetType) : undefined;
     const deleted = await this.prisma.userHiddenEntity.deleteMany({
       where: {
         userId,
         targetId,
-        ...(targetType ? { targetType } : {}),
+        ...(normalizedTargetType ? { targetType: normalizedTargetType } : {}),
       },
     });
     return {
       targetId,
-      targetType: targetType ?? 'post',
+      targetType: normalizedTargetType ?? 'post',
       hidden: false,
       removedCount: deleted.count,
     };
@@ -821,7 +836,60 @@ export class SocialStateDatabaseService {
         await this.reelsDatabase.getReel(targetId);
         return;
       case 'comment':
-        throw new NotFoundException('Comment hiding is not yet supported by durable storage.');
+        await this.assertCommentExists(targetId);
+        return;
+      case 'product':
+      case 'marketplace': {
+        const product = await this.prisma.marketplaceProduct.findFirst({
+          where: { id: targetId, deletedAt: null },
+        });
+        if (!product) {
+          throw new NotFoundException(`Marketplace product ${targetId} not found.`);
+        }
+        return;
+      }
+      case 'event': {
+        const event = await this.prisma.event.findFirst({
+          where: { id: targetId, deletedAt: null },
+        });
+        if (!event) {
+          throw new NotFoundException(`Event ${targetId} not found.`);
+        }
+        return;
+      }
+      case 'job': {
+        const job = await this.prisma.job.findFirst({
+          where: { id: targetId, deletedAt: null },
+        });
+        if (!job) {
+          throw new NotFoundException(`Job ${targetId} not found.`);
+        }
+        return;
+      }
+      case 'community': {
+        const community = await this.prisma.community.findFirst({
+          where: { id: targetId, deletedAt: null },
+        });
+        if (!community) {
+          throw new NotFoundException(`Community ${targetId} not found.`);
+        }
+        return;
+      }
+      case 'page': {
+        const page = await this.prisma.page.findFirst({
+          where: { id: targetId },
+        });
+        if (!page) {
+          throw new NotFoundException(`Page ${targetId} not found.`);
+        }
+        return;
+      }
+      case 'chat':
+        await this.assertChatEntityExists(targetId);
+        return;
+      case 'live':
+        await this.assertLiveEntityExists(targetId);
+        return;
       default:
         throw new NotFoundException(`Unsupported target type ${targetType}.`);
     }
@@ -932,9 +1000,86 @@ export class SocialStateDatabaseService {
         return this.storiesDatabase.getStory(targetId).catch(() => null);
       case 'reel':
         return this.reelsDatabase.getReel(targetId).catch(() => null);
+      case 'comment':
+        return this.resolveCommentEntity(targetId);
+      case 'product':
+      case 'marketplace':
+        return this.prisma.marketplaceProduct
+          .findFirst({ where: { id: targetId, deletedAt: null } })
+          .catch(() => null);
+      case 'event':
+        return this.prisma.event
+          .findFirst({ where: { id: targetId, deletedAt: null } })
+          .catch(() => null);
+      case 'job':
+        return this.prisma.job
+          .findFirst({ where: { id: targetId, deletedAt: null } })
+          .catch(() => null);
+      case 'community':
+        return this.prisma.community
+          .findFirst({ where: { id: targetId, deletedAt: null } })
+          .catch(() => null);
+      case 'page':
+        return this.prisma.page.findFirst({ where: { id: targetId } }).catch(() => null);
+      case 'chat':
+        return this.resolveChatEntity(targetId);
+      case 'live':
+        return this.resolveLiveEntity(targetId);
       default:
         return null;
     }
+  }
+
+  private normalizeHiddenTargetType(targetType: TargetType): TargetType {
+    return targetType === 'marketplace' ? 'product' : targetType;
+  }
+
+  private async assertCommentExists(targetId: string) {
+    const entity = await this.resolveCommentEntity(targetId);
+    if (!entity) {
+      throw new NotFoundException(`Comment ${targetId} not found.`);
+    }
+  }
+
+  private async assertChatEntityExists(targetId: string) {
+    const entity = await this.resolveChatEntity(targetId);
+    if (!entity) {
+      throw new NotFoundException(`Chat item ${targetId} not found.`);
+    }
+  }
+
+  private async assertLiveEntityExists(targetId: string) {
+    const entity = await this.resolveLiveEntity(targetId);
+    if (!entity) {
+      throw new NotFoundException(`Live item ${targetId} not found.`);
+    }
+  }
+
+  private async resolveCommentEntity(targetId: string) {
+    const [postComment, reelComment, storyComment, liveComment] = await Promise.all([
+      this.prisma.appPostComment.findUnique({ where: { id: targetId } }),
+      this.prisma.reelComment.findUnique({ where: { id: targetId } }),
+      this.prisma.storyComment.findUnique({ where: { id: targetId } }),
+      this.prisma.liveStreamComment.findUnique({ where: { id: targetId } }),
+    ]);
+    return postComment ?? reelComment ?? storyComment ?? liveComment ?? null;
+  }
+
+  private async resolveChatEntity(targetId: string) {
+    const [thread, message, marketplaceConversation] = await Promise.all([
+      this.prisma.chatThread.findUnique({ where: { id: targetId } }),
+      this.prisma.chatMessage.findUnique({ where: { id: targetId } }),
+      this.prisma.marketplaceConversation.findUnique({ where: { id: targetId } }),
+    ]);
+    return thread ?? message ?? marketplaceConversation ?? null;
+  }
+
+  private async resolveLiveEntity(targetId: string) {
+    const [stream, comment] = await Promise.all([
+      this.prisma.liveStreamSession.findUnique({ where: { id: targetId } }),
+      this.prisma.liveStreamComment.findUnique({ where: { id: targetId } }),
+    ]);
+    return stream ?? comment ?? null;
   }
 
   private mapThreadPreference(item: {

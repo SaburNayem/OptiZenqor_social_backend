@@ -1,7 +1,9 @@
 import 'reflect-metadata';
 
+import type { INestApplication } from '@nestjs/common';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { IncomingMessage, ServerResponse } from 'http';
 import {
   DocumentBuilder,
   SwaggerDocumentOptions,
@@ -66,9 +68,11 @@ function assertStartupEnv() {
   }
 }
 
-async function bootstrap() {
+async function createConfiguredApp() {
   assertStartupEnv();
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: process.env.VERCEL ? ['error', 'warn'] : undefined,
+  });
   app.enableCors({
     origin: parseCorsOrigins(),
     credentials: true,
@@ -241,6 +245,11 @@ async function bootstrap() {
     );
   });
 
+  return app;
+}
+
+async function bootstrap() {
+  const app = await createConfiguredApp();
   const port = Number(process.env.PORT ?? 3000);
   const host = process.env.HOST ?? '0.0.0.0';
   await app.listen(port, host);
@@ -252,4 +261,42 @@ async function bootstrap() {
   console.log(`OpenAPI JSON at http://localhost:${port}/docs-json`);
 }
 
-bootstrap();
+type VercelServer = (req: IncomingMessage, res: ServerResponse) => unknown;
+
+let cachedVercelServer: Promise<VercelServer> | undefined;
+
+async function getVercelServer() {
+  cachedVercelServer ??= createConfiguredApp().then(
+    async (app: INestApplication) => {
+      await app.init();
+      return app.getHttpAdapter().getInstance() as VercelServer;
+    },
+  );
+  return cachedVercelServer;
+}
+
+export default async function handler(
+  req: IncomingMessage,
+  res: ServerResponse,
+) {
+  try {
+    const server = await getVercelServer();
+    return server(req, res);
+  } catch (error) {
+    console.error('Vercel handler failed during startup.', error);
+    if (!res.headersSent) {
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(
+        JSON.stringify({
+          success: false,
+          message: 'Server startup failed.',
+        }),
+      );
+    }
+  }
+}
+
+if (!process.env.VERCEL) {
+  void bootstrap();
+}

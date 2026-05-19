@@ -12,10 +12,12 @@ export class ReelsDatabaseService {
     private readonly coreDatabase: CoreDatabaseService,
   ) {}
 
-  async getReels(userId?: string) {
+  async getReels(userId?: string, viewerId?: string | null) {
+    const hiddenReelIds = await this.getHiddenTargetIds(viewerId, 'reel');
     const reels = await this.prisma.reel.findMany({
       where: {
         userId: userId?.trim() || undefined,
+        ...(hiddenReelIds.length ? { id: { notIn: hiddenReelIds } } : {}),
         deletedAt: null,
       },
       orderBy: { createdAt: 'desc' },
@@ -23,10 +25,12 @@ export class ReelsDatabaseService {
     return Promise.all(reels.map((row) => this.mapReel(row)));
   }
 
-  async getReel(id: string) {
+  async getReel(id: string, viewerId?: string | null) {
+    const hiddenReelIds = await this.getHiddenTargetIds(viewerId, 'reel');
     const reel = await this.prisma.reel.findFirst({
       where: {
         id,
+        ...(hiddenReelIds.length ? { id: { notIn: hiddenReelIds } } : {}),
         deletedAt: null,
       },
     });
@@ -203,6 +207,21 @@ export class ReelsDatabaseService {
     });
 
     return this.getReelReactions(reelId);
+  }
+
+  private async getHiddenTargetIds(viewerId: string | null | undefined, targetType: string) {
+    const normalizedViewerId = viewerId?.trim();
+    if (!normalizedViewerId) {
+      return [];
+    }
+    const rows = await this.prisma.userHiddenEntity.findMany({
+      where: {
+        userId: normalizedViewerId,
+        targetType,
+      },
+      select: { targetId: true },
+    });
+    return rows.map((row) => row.targetId);
   }
 
   private async mapReel(row: {

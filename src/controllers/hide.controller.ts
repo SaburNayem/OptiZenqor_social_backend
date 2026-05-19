@@ -76,6 +76,7 @@ export class HideController {
   @Post('posts/:postId')
   async hidePost(
     @Param('postId') postId: string,
+    @Body() body: Partial<HideItemDto> = {},
     @Headers('authorization') authorization?: string,
   ) {
     const user = await this.coreDatabase.requireUserFromAuthorization(authorization);
@@ -83,6 +84,7 @@ export class HideController {
       user.id,
       'post',
       postId,
+      body.reason,
     );
     return {
       success: true,

@@ -162,4 +162,15 @@ export class NotificationsController {
     const notification = await this.coreDatabase.markNotificationRead(id, actor.id);
     return successResponse('Notification marked as read successfully.', notification);
   }
+
+  @UseGuards(SessionAuthGuard)
+  @Delete(':id')
+  async deleteNotification(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(authorization);
+    const notification = await this.coreDatabase.deleteNotification(id, actor.id);
+    return successResponse('Notification deleted successfully.', notification);
+  }
 }

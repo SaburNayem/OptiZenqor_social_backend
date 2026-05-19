@@ -1357,9 +1357,49 @@ export class HideItemDto {
   @IsString()
   targetId!: string;
 
-  @ApiProperty({ enum: ['post', 'reel', 'story', 'comment'] })
-  @IsIn(['post', 'reel', 'story', 'comment'])
-  targetType!: 'post' | 'reel' | 'story' | 'comment';
+  @ApiProperty({
+    enum: [
+      'post',
+      'reel',
+      'story',
+      'comment',
+      'product',
+      'marketplace',
+      'event',
+      'job',
+      'community',
+      'page',
+      'chat',
+      'live',
+    ],
+  })
+  @IsIn([
+    'post',
+    'reel',
+    'story',
+    'comment',
+    'product',
+    'marketplace',
+    'event',
+    'job',
+    'community',
+    'page',
+    'chat',
+    'live',
+  ])
+  targetType!:
+    | 'post'
+    | 'reel'
+    | 'story'
+    | 'comment'
+    | 'product'
+    | 'marketplace'
+    | 'event'
+    | 'job'
+    | 'community'
+    | 'page'
+    | 'chat'
+    | 'live';
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -2063,9 +2103,65 @@ export class CreateNotificationCampaignDto {
   @IsString()
   audience!: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional({
+    enum: ['now', 'later'],
+    description: 'Use now for immediate send, later for a selected date/time.',
+  })
+  @IsOptional()
+  @IsIn(['now', 'later'])
+  scheduleMode?: 'now' | 'later';
+
+  @ApiPropertyOptional({
+    enum: ['now', 'later'],
+    description: 'Alias for scheduleMode.',
+  })
+  @IsOptional()
+  @IsIn(['now', 'later'])
+  deliveryMode?: 'now' | 'later';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  sendNow?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'ISO timestamp from a date/time picker. Example: 2026-05-20T09:30:00+06:00',
+  })
+  @IsOptional()
   @IsString()
-  schedule!: string;
+  scheduledAt?: string;
+
+  @ApiPropertyOptional({
+    description: 'Alias for scheduledAt.',
+  })
+  @IsOptional()
+  @IsString()
+  sendAt?: string;
+
+  @ApiPropertyOptional({ example: '2026-05-20' })
+  @IsOptional()
+  @IsString()
+  scheduleDate?: string;
+
+  @ApiPropertyOptional({ example: '09:30' })
+  @IsOptional()
+  @IsString()
+  scheduleTime?: string;
+
+  @ApiPropertyOptional({
+    description: 'Client Date.getTimezoneOffset() value, used with scheduleDate and scheduleTime.',
+    example: -360,
+  })
+  @IsOptional()
+  @IsNumber()
+  timezoneOffsetMinutes?: number;
+
+  @ApiPropertyOptional({
+    description: 'Backward-compatible free-form schedule. Can also be "now".',
+  })
+  @IsOptional()
+  @IsString()
+  schedule?: string;
 }
 
 export class SetActiveAccountDto {
@@ -2095,9 +2191,60 @@ export class SubmitVerificationRequestDto {
 }
 
 export class SubmitReportDto {
-  @ApiProperty()
+  @ApiProperty({
+    example: 'harassment',
+    description: 'Reason key from GET /report-center/options, or a custom reason string.',
+  })
   @IsString()
+  @IsNotEmpty()
   reason!: string;
+
+  @ApiPropertyOptional({
+    example: 'post',
+    description: 'Preferred target type. Supports user/person, post, reel, story, comment, marketplace/product, job, event, community, page, chat, and live.',
+  })
+  @IsOptional()
+  @IsString()
+  targetType?: string;
+
+  @ApiPropertyOptional({
+    example: 'post_xxxxxxxxxxxxxxxx',
+    description: 'Preferred target id for the selected targetType.',
+  })
+  @IsOptional()
+  @IsString()
+  targetId?: string;
+
+  @ApiPropertyOptional({
+    example: 'user_xxxxxxxxxxxxxxxx',
+    description: 'Reported person id. Also used as the owner/person attached to content reports when supplied.',
+  })
+  @IsOptional()
+  @IsString()
+  targetUserId?: string;
+
+  @ApiPropertyOptional({
+    example: 'post_xxxxxxxxxxxxxxxx',
+    description: 'Backward-compatible target id alias.',
+  })
+  @IsOptional()
+  @IsString()
+  targetEntityId?: string;
+
+  @ApiPropertyOptional({
+    example: 'post',
+    description: 'Backward-compatible target type alias.',
+  })
+  @IsOptional()
+  @IsString()
+  targetEntityType?: string;
+
+  @ApiPropertyOptional({
+    example: 'This post directly attacks another person and includes private information.',
+  })
+  @IsOptional()
+  @IsString()
+  details?: string;
 }
 
 export class ResolveDeepLinkDto {

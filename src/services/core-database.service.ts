@@ -1300,8 +1300,8 @@ export class CoreDatabaseService implements OnModuleInit {
     };
   }
 
-  async getFeed() {
-    const posts = await this.getPosts();
+  async getFeed(viewerId?: string | null) {
+    const posts = await this.getPosts(undefined, viewerId ?? undefined);
     return Promise.all(
       posts.map(async (post) => ({
         ...post,
@@ -1310,22 +1310,61 @@ export class CoreDatabaseService implements OnModuleInit {
     );
   }
 
-  async getPosts(authorId?: string) {
+  async getPosts(authorId?: string, viewerId?: string | null) {
+    const visibleWhere = `
+      deleted_at is null
+      and lower(coalesce(status, '')) <> 'removed'
+    `;
+    const hiddenWhere = viewerId?.trim()
+      ? `
+        and not exists (
+          select 1
+          from app_user_hidden_entities hidden
+          where hidden.user_id = $${authorId ? 2 : 1}
+            and hidden.target_type = 'post'
+            and hidden.target_id = app_posts.id
+        )
+      `
+      : '';
     const { rows } = authorId
       ? await this.database.query<PostRow>(
-          `select * from app_posts where author_id = $1 order by created_at desc`,
-          [authorId],
+          `select * from app_posts
+           where author_id = $1
+             and ${visibleWhere}
+             ${hiddenWhere}
+           order by created_at desc`,
+          viewerId?.trim() ? [authorId, viewerId.trim()] : [authorId],
         )
       : await this.database.query<PostRow>(
-          `select * from app_posts order by created_at desc`,
+          `select * from app_posts
+           where ${visibleWhere}
+             ${hiddenWhere}
+           order by created_at desc`,
+          viewerId?.trim() ? [viewerId.trim()] : [],
         );
     return rows.map((row) => this.mapPost(row));
   }
 
-  async getPost(id: string) {
+  async getPost(id: string, viewerId?: string | null) {
+    const hiddenWhere = viewerId?.trim()
+      ? `
+        and not exists (
+          select 1
+          from app_user_hidden_entities hidden
+          where hidden.user_id = $2
+            and hidden.target_type = 'post'
+            and hidden.target_id = app_posts.id
+        )
+      `
+      : '';
     const { rows } = await this.database.query<PostRow>(
-      `select * from app_posts where id = $1 limit 1`,
-      [id],
+      `select * from app_posts
+       where id = $1
+         and deleted_at is null
+         and lower(coalesce(status, '')) <> 'removed'
+         ${hiddenWhere}
+       limit 1`,
+      viewerId?.trim() ? [id, viewerId.trim()] : [id],
     );
     const row = rows[0];
     if (!row) {
@@ -2201,6 +2240,23 @@ export class CoreDatabaseService implements OnModuleInit {
     return this.mapNotification(row);
   }
 
+  async deleteNotification(id: string, recipientId?: string) {
+    const { rows } = await this.database.query<NotificationRow>(
+      recipientId
+        ? `delete from app_notifications where id = $1 and recipient_id = $2 returning *`
+        : `delete from app_notifications where id = $1 returning *`,
+      recipientId ? [id, recipientId] : [id],
+    );
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundException(`Notification ${id} not found`);
+    }
+    return {
+      id: row.id,
+      deleted: true,
+    };
+  }
+
   async storeAuthCode(
     email: string,
     purpose: 'verify_email' | 'verify_phone' | 'reset_password' | 'admin_reset_password',
@@ -2417,6 +2473,25 @@ export class CoreDatabaseService implements OnModuleInit {
         type text not null,
         created_at timestamptz not null
       );
+    `);
+    await this.database.query(`
+      alter table app_posts
+      add column if not exists deleted_at timestamptz null;
+    `);
+    await this.database.query(`
+      create table if not exists app_user_hidden_entities (
+        id text primary key,
+        user_id text not null references app_users(id) on delete cascade,
+        target_id text not null,
+        target_type text not null,
+        reason text null,
+        created_at timestamptz not null default now(),
+        unique (user_id, target_id, target_type)
+      );
+    `);
+    await this.database.query(`
+      create index if not exists app_user_hidden_entities_user_type_created_idx
+      on app_user_hidden_entities(user_id, target_type, created_at desc);
     `);
     await this.database.query(`
       do $$

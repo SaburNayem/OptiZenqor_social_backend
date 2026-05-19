@@ -15,6 +15,43 @@ import {
 import { CoreDatabaseService } from './core-database.service';
 import { PrismaService } from './prisma.service';
 
+const WEB_NAVIGATION_ITEMS = [
+  { key: 'home', label: 'Home', path: '/', sortOrder: 10, requiresAuth: true },
+  { key: 'stories', label: 'Stories', path: '/', sortOrder: 20, requiresAuth: true },
+  { key: 'reels', label: 'Reels', path: '/reels', sortOrder: 30, requiresAuth: true },
+  { key: 'explore', label: 'Explore', path: '/explore', sortOrder: 40, requiresAuth: true },
+  { key: 'marketplace', label: 'Marketplace', path: '/marketplace', sortOrder: 50, requiresAuth: true },
+  { key: 'jobs', label: 'Jobs', path: '/jobs', sortOrder: 60, requiresAuth: true },
+  { key: 'events', label: 'Events', path: '/events', sortOrder: 70, requiresAuth: true },
+  { key: 'communities', label: 'Communities', path: '/communities', sortOrder: 80, requiresAuth: true },
+  { key: 'pages', label: 'Pages', path: '/pages', sortOrder: 90, requiresAuth: true },
+  { key: 'calls', label: 'Calls', path: '/calls', sortOrder: 100, requiresAuth: true },
+  { key: 'live-streams', label: 'Live Streams', path: '/live-streams', sortOrder: 110, requiresAuth: true },
+  { key: 'notifications', label: 'Notifications', path: '/notifications', sortOrder: 120, requiresAuth: true },
+  { key: 'messages', label: 'Messages', path: '/messages', sortOrder: 130, requiresAuth: true },
+  { key: 'connections', label: 'Connections', path: '/connections', sortOrder: 140, requiresAuth: true },
+  { key: 'bookmarks', label: 'Bookmarks', path: '/bookmarks', sortOrder: 150, requiresAuth: true },
+  { key: 'saved-collections', label: 'Saved Collections', path: '/saved-collections', sortOrder: 160, requiresAuth: true },
+  { key: 'drafts', label: 'Drafts', path: '/drafts', sortOrder: 170, requiresAuth: true },
+  { key: 'scheduling', label: 'Scheduling', path: '/scheduling', sortOrder: 180, requiresAuth: true },
+  { key: 'upload-manager', label: 'Upload Manager', path: '/upload-manager', sortOrder: 190, requiresAuth: true },
+  { key: 'groups', label: 'Groups', path: '/groups', sortOrder: 200, requiresAuth: true },
+  { key: 'group-chat', label: 'Group Chat', path: '/group-chat', sortOrder: 210, requiresAuth: true },
+  { key: 'creator-tools', label: 'Creator Tools', path: '/creator-tools', sortOrder: 220, requiresAuth: true },
+  { key: 'wallet', label: 'Wallet', path: '/wallet', sortOrder: 230, requiresAuth: true },
+  { key: 'premium', label: 'Premium', path: '/premium', sortOrder: 240, requiresAuth: true },
+  { key: 'subscriptions', label: 'Subscriptions', path: '/subscriptions', sortOrder: 250, requiresAuth: true },
+  { key: 'support', label: 'Help & Support', path: '/support', sortOrder: 260, requiresAuth: true },
+  { key: 'verification', label: 'Verification', path: '/verification', sortOrder: 270, requiresAuth: true },
+  { key: 'activity-sessions', label: 'Activity Sessions', path: '/activity-sessions', sortOrder: 280, requiresAuth: true },
+  { key: 'account-switching', label: 'Account Switching', path: '/account-switching', sortOrder: 290, requiresAuth: true },
+  { key: 'blocked-users', label: 'Blocked Users', path: '/blocked-users', sortOrder: 300, requiresAuth: true },
+  { key: 'invite-referral', label: 'Invite Referral', path: '/invite-referral', sortOrder: 310, requiresAuth: true },
+  { key: 'archive', label: 'Archive Center', path: '/archive', sortOrder: 320, requiresAuth: true },
+  { key: 'profile', label: 'Profile', path: '/profile', sortOrder: 330, requiresAuth: true },
+  { key: 'settings', label: 'Settings', path: '/settings', sortOrder: 340, requiresAuth: true },
+];
+
 @Injectable()
 export class ExperienceDatabaseService {
   constructor(
@@ -23,7 +60,17 @@ export class ExperienceDatabaseService {
   ) {}
 
   async getBootstrap(userId?: string) {
-    const [feed, stories, reels, notifications, communities, products, jobs, events] =
+    const [
+      feed,
+      stories,
+      reels,
+      notifications,
+      communities,
+      products,
+      jobs,
+      events,
+      runtimeConfig,
+    ] =
       await Promise.all([
         this.coreDatabase.getFeed(),
         this.prisma.story.count({ where: { deletedAt: null, expiresAt: { gt: new Date() } } }),
@@ -37,6 +84,7 @@ export class ExperienceDatabaseService {
         this.prisma.marketplaceProduct.count({ where: { deletedAt: null } }),
         this.prisma.job.count({ where: { deletedAt: null } }),
         this.prisma.event.count({ where: { deletedAt: null } }),
+        this.getPublicRuntimeConfig(),
       ]);
 
     const user = userId ? await this.coreDatabase.getUser(userId).catch(() => null) : null;
@@ -69,6 +117,11 @@ export class ExperienceDatabaseService {
         jobs: '/jobs',
         events: '/events',
       },
+      runtimeConfig,
+      publicConfig: runtimeConfig,
+      web: runtimeConfig.web,
+      featureFlags: runtimeConfig.featureFlags,
+      appConfig: runtimeConfig.appConfig,
       feedPreview: feed.slice(0, 5),
     };
   }
@@ -2941,6 +2994,77 @@ export class ExperienceDatabaseService {
       }
     }
     return next;
+  }
+
+  private async getPublicRuntimeConfig() {
+    const [settingsRows, appConfigRows, featureFlagRows] = await Promise.all([
+      this.prisma.adminOperationalSetting.findMany({
+        where: {
+          key: {
+            startsWith: 'web.',
+          },
+        },
+        orderBy: { key: 'asc' },
+      }),
+      this.prisma.adminAppConfigEntry.findMany({
+        where: { isPublic: true },
+        orderBy: [{ category: 'asc' }, { key: 'asc' }],
+      }),
+      this.prisma.adminFeatureFlag.findMany({
+        where: {
+          OR: [
+            { category: { startsWith: 'web' } },
+            { category: { startsWith: 'public' } },
+          ],
+        },
+        orderBy: [{ category: 'asc' }, { key: 'asc' }],
+      }),
+    ]);
+
+    const settings = settingsRows.reduce<Record<string, unknown>>((acc, item) => {
+      acc[item.key] = item.value;
+      return acc;
+    }, {});
+    const navigation = WEB_NAVIGATION_ITEMS.map((item) => {
+      const settingKey = `web.navigation.${item.key}.visible`;
+      const visible = this.readBoolean(settings[settingKey], true) ?? true;
+      return {
+        ...item,
+        visible,
+        settingKey,
+      };
+    });
+
+    return {
+      generatedAt: new Date().toISOString(),
+      web: {
+        navigation,
+        hiddenRoutes: navigation
+          .filter((item) => !item.visible)
+          .map((item) => item.path)
+          .filter((value, index, values) => values.indexOf(value) === index),
+      },
+      appConfig: appConfigRows.map((item) => ({
+        key: item.key,
+        category: item.category,
+        title: item.title,
+        description: item.description,
+        value: item.value,
+        metadata: this.toObject(item.metadata),
+        updatedAt: item.updatedAt.toISOString(),
+      })),
+      featureFlags: featureFlagRows.map((item) => ({
+        key: item.key,
+        category: item.category,
+        title: item.title,
+        description: item.description,
+        isEnabled: item.isEnabled,
+        rolloutPercentage: item.rolloutPercentage,
+        audience: this.toObject(item.audience),
+        metadata: this.toObject(item.metadata),
+        updatedAt: item.updatedAt.toISOString(),
+      })),
+    };
   }
 
   private readString(value: unknown, key?: string) {

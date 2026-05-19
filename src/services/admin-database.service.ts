@@ -10,14 +10,26 @@ import * as argon2 from 'argon2';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { makeId } from '../common/id.util';
+import {
+  describeNotificationSchedule,
+  normalizeNotificationSchedule,
+} from '../common/notification-schedule';
+import {
+  getReportTargetTypeAliases,
+  normalizeReportTargetType,
+} from '../common/report-options';
 import { CoreDatabaseService } from './core-database.service';
+import { NotificationDeliveryService } from './notification-delivery.service';
 import { PrismaService } from './prisma.service';
+import { ReportPresentationService } from './report-presentation.service';
 
 @Injectable()
 export class AdminDatabaseService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly coreDatabase: CoreDatabaseService,
+    private readonly notificationDelivery: NotificationDeliveryService,
+    private readonly reportPresentation: ReportPresentationService,
   ) {}
 
   async onModuleInit() {
@@ -808,6 +820,7 @@ export class AdminDatabaseService implements OnModuleInit {
       audience: row.audience,
       segmentId: row.audience,
       schedule: row.schedule,
+      ...describeNotificationSchedule(row.schedule, row.status),
       status: row.status,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
@@ -818,15 +831,24 @@ export class AdminDatabaseService implements OnModuleInit {
     name: string;
     audience: string;
     segmentId: string;
-    schedule: string;
+    schedule?: string;
+    scheduleMode?: string;
+    deliveryMode?: string;
+    sendNow?: boolean;
+    scheduledAt?: string;
+    sendAt?: string;
+    scheduleDate?: string;
+    scheduleTime?: string;
+    timezoneOffsetMinutes?: number;
   }, actorAdminId?: string) {
+    const schedule = this.normalizeCampaignSchedule(input);
     const item = await this.prisma.notificationCampaign.create({
       data: {
         id: makeId('campaign'),
         name: input.name.trim(),
         audience: input.segmentId?.trim() || input.audience.trim(),
-        schedule: input.schedule.trim(),
-        status: 'scheduled',
+        schedule: schedule.schedule,
+        status: schedule.status,
       },
     });
 
@@ -844,6 +866,7 @@ export class AdminDatabaseService implements OnModuleInit {
       audience: input.audience,
       segmentId: item.audience,
       schedule: item.schedule,
+      ...describeNotificationSchedule(item.schedule, item.status),
       status: item.status,
       createdAt: item.createdAt.toISOString(),
     };
@@ -2122,17 +2145,33 @@ export class AdminDatabaseService implements OnModuleInit {
       this.prisma.userReport.count({ where: { status: 'resolved' } }),
     ]);
 
+    const recentReports = await Promise.all(
+      reports.map(async (report) => {
+        const presentation = await this.reportPresentation.describeReport(report);
+        return {
+          id: report.id,
+          status: report.status,
+          statusLabel: presentation.statusLabel,
+          reason: report.reason,
+          reasonKey: presentation.reasonKey,
+          reasonLabel: presentation.reasonLabel,
+          severity: presentation.severity,
+          reporterName: report.reporter.name,
+          reporterUsername: report.reporter.username,
+          targetUserName: report.targetUser?.name ?? presentation.targetOwnerName,
+          targetEntityId: report.targetEntityId,
+          targetEntityType: report.targetEntityType,
+          targetType: presentation.targetType,
+          targetTypeLabel: presentation.targetTypeLabel,
+          targetLabel: presentation.targetLabel,
+          targetPreview: presentation.targetPreview,
+          createdAt: report.createdAt.toISOString(),
+        };
+      }),
+    );
+
     return {
-      recentReports: reports.map((report) => ({
-        id: report.id,
-        status: report.status,
-        reason: report.reason,
-        reporterName: report.reporter.name,
-        targetUserName: report.targetUser?.name ?? null,
-        targetEntityId: report.targetEntityId,
-        targetEntityType: report.targetEntityType,
-        createdAt: report.createdAt.toISOString(),
-      })),
+      recentReports,
       totals: {
         submitted: submittedCount,
         reviewing: reviewingCount,
@@ -2742,6 +2781,28 @@ export class AdminDatabaseService implements OnModuleInit {
               { targetUserId: { contains: search, mode: 'insensitive' } },
               { targetEntityId: { contains: search, mode: 'insensitive' } },
               { targetEntityType: { contains: search, mode: 'insensitive' } },
+              {
+                reporter: {
+                  is: {
+                    OR: [
+                      { name: { contains: search, mode: 'insensitive' } },
+                      { username: { contains: search, mode: 'insensitive' } },
+                      { email: { contains: search, mode: 'insensitive' } },
+                    ],
+                  },
+                },
+              },
+              {
+                targetUser: {
+                  is: {
+                    OR: [
+                      { name: { contains: search, mode: 'insensitive' } },
+                      { username: { contains: search, mode: 'insensitive' } },
+                      { email: { contains: search, mode: 'insensitive' } },
+                    ],
+                  },
+                },
+              },
             ],
           }
         : {}),
@@ -2761,39 +2822,56 @@ export class AdminDatabaseService implements OnModuleInit {
       }),
     ]);
 
-    return this.wrapPaginated(
-      items.map((item) => {
-        const normalizedTargetType = this.normalizeReportTargetType(
-          item.targetEntityType ?? (item.targetUserId ? 'user' : 'report'),
-        );
-        const targetId = item.targetEntityId ?? item.targetUserId ?? item.id;
-        const targetModule = this.resolveReportTargetModule(normalizedTargetType);
+    const mapped = await Promise.all(
+      items.map(async (item) => {
+        const presentation = await this.reportPresentation.describeReport(item);
         return {
           id: item.id,
           reporterUserId: item.reporterUserId,
           reporterName: item.reporter.name,
+          reporterUsername: item.reporter.username,
+          reporterEmail: item.reporter.email,
+          reporterAvatar: item.reporter.avatar,
           targetUserId: item.targetUserId,
           targetUserName: item.targetUser?.name ?? null,
+          targetUserUsername: item.targetUser?.username ?? null,
+          targetUserAvatar: item.targetUser?.avatar ?? null,
           targetEntityId: item.targetEntityId,
           targetEntityType: item.targetEntityType,
-          targetType: normalizedTargetType,
-          targetId,
-          targetLabel: item.targetUser?.name ?? item.targetEntityId ?? item.targetUserId ?? 'N/A',
-          targetModule,
-          targetSearch: targetId,
-          targetActionLabel: this.resolveReportTargetActionLabel(normalizedTargetType, targetModule),
-          actionLocation: this.resolveReportActionLocation(normalizedTargetType, targetModule),
+          targetType: presentation.targetType,
+          targetTypeLabel: presentation.targetTypeLabel,
+          targetId: presentation.targetId,
+          targetLabel: presentation.targetLabel,
+          targetSummary: presentation.targetSummary,
+          targetOwnerUserId: presentation.targetOwnerUserId,
+          targetOwnerName: presentation.targetOwnerName,
+          targetOwnerUsername: presentation.targetOwnerUsername,
+          targetModule: presentation.targetModule,
+          targetSearch: presentation.targetSearch,
+          targetActionLabel: presentation.targetActionLabel,
+          actionLocation: presentation.actionLocation,
+          routeName: presentation.routeName,
+          targetPreview: presentation.targetPreview,
           reason: item.reason,
+          reasonKey: presentation.reasonKey,
+          reasonLabel: presentation.reasonLabel,
+          reasonDescription: presentation.reasonDescription,
+          severity: presentation.severity,
           details: item.details,
           status: item.status,
+          statusLabel: presentation.statusLabel,
+          statusDescription: presentation.statusDescription,
+          displayTitle: presentation.displayTitle,
           createdAt: item.createdAt.toISOString(),
           updatedAt: item.updatedAt.toISOString(),
         };
       }),
-      page,
-      limit,
-      total,
     );
+
+    return {
+      ...this.wrapPaginated(mapped, page, limit, total),
+      options: this.reportPresentation.getReportOptions(),
+    };
   }
 
   async updateReport(
@@ -2812,7 +2890,6 @@ export class AdminDatabaseService implements OnModuleInit {
       where: { id },
       data: {
         status: patch.status,
-        details: patch.note?.trim() || existing.details,
         updatedAt: new Date(),
       },
     });
@@ -2854,7 +2931,40 @@ export class AdminDatabaseService implements OnModuleInit {
       metadata: patch,
     });
 
-    return updated;
+    const updatedReport = await this.prisma.userReport.findUnique({
+      where: { id },
+      include: {
+        reporter: true,
+        targetUser: true,
+      },
+    });
+    const report = updatedReport ?? updated;
+    const presentation = await this.reportPresentation.describeReport(report);
+
+    return {
+      id: report.id,
+      reporterUserId: report.reporterUserId,
+      reporterName: updatedReport?.reporter.name ?? null,
+      targetUserId: report.targetUserId,
+      targetUserName: updatedReport?.targetUser?.name ?? null,
+      targetEntityId: report.targetEntityId,
+      targetEntityType: report.targetEntityType,
+      targetType: presentation.targetType,
+      targetTypeLabel: presentation.targetTypeLabel,
+      targetId: presentation.targetId,
+      targetLabel: presentation.targetLabel,
+      targetPreview: presentation.targetPreview,
+      reason: report.reason,
+      reasonKey: presentation.reasonKey,
+      reasonLabel: presentation.reasonLabel,
+      severity: presentation.severity,
+      details: report.details,
+      status: report.status,
+      statusLabel: presentation.statusLabel,
+      note: patch.note?.trim() || null,
+      createdAt: report.createdAt.toISOString(),
+      updatedAt: report.updatedAt.toISOString(),
+    };
   }
 
   async queryAuditLogs(query: {
@@ -4901,18 +5011,27 @@ export class AdminDatabaseService implements OnModuleInit {
     input: {
       name: string;
       audience: string;
-      schedule: string;
+      schedule?: string;
+      scheduleMode?: string;
+      deliveryMode?: string;
+      sendNow?: boolean;
+      scheduledAt?: string;
+      sendAt?: string;
+      scheduleDate?: string;
+      scheduleTime?: string;
+      timezoneOffsetMinutes?: number;
       status?: string;
     },
     actorAdminId?: string,
   ) {
+    const schedule = this.normalizeCampaignSchedule(input);
     const item = await this.prisma.notificationCampaign.create({
       data: {
         id: makeId('campaign'),
         name: input.name.trim(),
         audience: input.audience.trim(),
-        schedule: input.schedule.trim(),
-        status: input.status?.trim() || 'scheduled',
+        schedule: schedule.schedule,
+        status: schedule.status,
       },
     });
 
@@ -4929,6 +5048,20 @@ export class AdminDatabaseService implements OnModuleInit {
       status: item.status,
     });
 
+    if (item.status === 'sent') {
+      const delivery = await this.notificationDelivery.deliverCampaign(item.id, {
+        actorAdminId,
+        note: 'Sent immediately when the campaign was created.',
+      });
+      await this.createAuditLog({
+        actorAdminId,
+        action: 'notification_campaign.send',
+        entityType: 'notification_campaign',
+        entityId: item.id,
+        metadata: delivery,
+      });
+    }
+
     return this.getAdminNotificationCampaign(item.id);
   }
 
@@ -4938,6 +5071,14 @@ export class AdminDatabaseService implements OnModuleInit {
       name?: string;
       audience?: string;
       schedule?: string;
+      scheduleMode?: string;
+      deliveryMode?: string;
+      sendNow?: boolean;
+      scheduledAt?: string;
+      sendAt?: string;
+      scheduleDate?: string;
+      scheduleTime?: string;
+      timezoneOffsetMinutes?: number;
       status?: string;
     },
     actorAdminId?: string,
@@ -4949,13 +5090,17 @@ export class AdminDatabaseService implements OnModuleInit {
       throw new NotFoundException(`Notification campaign ${id} not found.`);
     }
 
+    const shouldUpdateSchedule = this.hasCampaignSchedulePatch(patch);
+    const schedule = shouldUpdateSchedule
+      ? this.normalizeCampaignSchedule(patch, existing)
+      : null;
     const updated = await this.prisma.notificationCampaign.update({
       where: { id },
       data: {
         name: patch.name?.trim() || undefined,
         audience: patch.audience?.trim() || undefined,
-        schedule: patch.schedule?.trim() || undefined,
-        status: patch.status?.trim() || undefined,
+        schedule: schedule?.schedule,
+        status: schedule?.status ?? patch.status?.trim() ?? undefined,
         updatedAt: new Date(),
       },
     });
@@ -4977,6 +5122,14 @@ export class AdminDatabaseService implements OnModuleInit {
     input: {
       action: 'send' | 'schedule' | 'cancel' | 'delete';
       schedule?: string;
+      scheduleMode?: string;
+      deliveryMode?: string;
+      sendNow?: boolean;
+      scheduledAt?: string;
+      sendAt?: string;
+      scheduleDate?: string;
+      scheduleTime?: string;
+      timezoneOffsetMinutes?: number;
       note?: string;
     },
     actorAdminId?: string,
@@ -4993,16 +5146,34 @@ export class AdminDatabaseService implements OnModuleInit {
       throw new NotFoundException(`Notification campaign ${id} not found.`);
     }
 
+    if (action === 'send') {
+      const delivery = await this.notificationDelivery.deliverCampaign(id, {
+        actorAdminId,
+        note: input.note,
+      });
+      await this.createAuditLog({
+        actorAdminId,
+        action: 'notification_campaign.send',
+        entityType: 'notification_campaign',
+        entityId: id,
+        metadata: delivery,
+      });
+      return this.getAdminNotificationCampaign(id);
+    }
+
+    const schedule =
+      action === 'schedule' && this.hasCampaignSchedulePatch(input)
+          ? this.normalizeCampaignSchedule({ ...input, scheduleMode: input.scheduleMode ?? 'later' }, existing)
+          : null;
     const nextStatus =
-      action === 'send' ? 'sent' : action === 'cancel' ? 'cancelled' : 'scheduled';
+      action === 'cancel'
+          ? 'cancelled'
+          : schedule?.status ?? 'scheduled';
     const updated = await this.prisma.notificationCampaign.update({
       where: { id },
       data: {
         status: nextStatus,
-        schedule:
-          action === 'schedule' && input.schedule?.trim()
-            ? input.schedule.trim()
-            : existing.schedule,
+        schedule: schedule?.schedule ?? existing.schedule,
         updatedAt: new Date(),
       },
     });
@@ -5034,11 +5205,6 @@ export class AdminDatabaseService implements OnModuleInit {
       throw new NotFoundException(`Notification campaign ${id} not found.`);
     }
 
-    await this.createNotificationCampaignHistory(id, 'delete', actorAdminId, {
-      name: existing.name,
-      audience: existing.audience,
-      note: note?.trim() || null,
-    });
     await this.createAuditLog({
       actorAdminId,
       action: 'notification_campaign.delete',
@@ -5050,9 +5216,14 @@ export class AdminDatabaseService implements OnModuleInit {
         note: note?.trim() || null,
       },
     });
-    await this.prisma.notificationCampaign.delete({
-      where: { id },
-    });
+    await this.prisma.$transaction([
+      this.prisma.notificationCampaignActionHistory.deleteMany({
+        where: { campaignId: id },
+      }),
+      this.prisma.notificationCampaign.delete({
+        where: { id },
+      }),
+    ]);
 
     return {
       id,
@@ -6069,68 +6240,23 @@ export class AdminDatabaseService implements OnModuleInit {
   }
 
   private normalizeReportTargetType(value?: string | null) {
-    const normalized = value?.trim().toLowerCase().replaceAll('_', '-') ?? '';
-    if (!normalized) {
-      return '';
-    }
-    if (['post', 'app-post'].includes(normalized)) {
-      return 'post';
-    }
-    if (['reel', 'app-reel'].includes(normalized)) {
-      return 'reel';
-    }
-    if (['story', 'app-story'].includes(normalized)) {
-      return 'story';
-    }
-    if (['comment', 'post-comment', 'app-post-comment', 'reel-comment', 'story-comment'].includes(normalized)) {
-      return 'comment';
-    }
-    if (['marketplace', 'marketplace-product', 'product', 'listing'].includes(normalized)) {
-      return 'marketplace';
-    }
-    if (['job', 'jobs'].includes(normalized)) {
-      return 'job';
-    }
-    if (['user', 'account', 'profile'].includes(normalized)) {
-      return 'user';
-    }
-    return normalized;
+    return normalizeReportTargetType(value);
   }
 
   private buildReportTargetTypeWhere(targetType: string): Prisma.UserReportWhereInput {
     if (!targetType) {
       return {};
     }
+    const aliases = getReportTargetTypeAliases(targetType);
     if (targetType === 'user') {
       return {
         OR: [
           { targetEntityType: null, targetUserId: { not: null } },
-          { targetEntityType: { in: ['user', 'account', 'profile'] } },
+          { targetEntityType: { in: aliases } },
         ],
       };
     }
-    if (targetType === 'marketplace') {
-      return {
-        targetEntityType: { in: ['marketplace', 'marketplace_product', 'product', 'listing'] },
-      };
-    }
-    if (targetType === 'comment') {
-      return {
-        targetEntityType: {
-          in: ['comment', 'post_comment', 'app_post_comment', 'reel_comment', 'story_comment'],
-        },
-      };
-    }
-    if (targetType === 'post') {
-      return { targetEntityType: { in: ['post', 'app_post'] } };
-    }
-    if (targetType === 'reel') {
-      return { targetEntityType: { in: ['reel', 'app_reel'] } };
-    }
-    if (targetType === 'story') {
-      return { targetEntityType: { in: ['story', 'app_story'] } };
-    }
-    return { targetEntityType: targetType };
+    return { targetEntityType: { in: aliases } };
   }
 
   private resolveReportTargetModule(targetType: string) {
@@ -6149,6 +6275,15 @@ export class AdminDatabaseService implements OnModuleInit {
         return 'marketplace';
       case 'job':
         return 'jobs';
+      case 'event':
+        return 'events';
+      case 'community':
+        return 'communities';
+      case 'page':
+        return 'pages';
+      case 'chat':
+      case 'live':
+        return 'support-operations';
       default:
         return 'reports';
     }
@@ -6166,6 +6301,10 @@ export class AdminDatabaseService implements OnModuleInit {
       comments: 'Open comment',
       marketplace: 'Open listing',
       jobs: 'Open job',
+      events: 'Open event',
+      communities: 'Open community',
+      pages: 'Open page',
+      'support-operations': 'Open case',
     };
     return labels[targetModule] ?? `Open ${targetType}`;
   }
@@ -6182,6 +6321,10 @@ export class AdminDatabaseService implements OnModuleInit {
       comments: 'Comments',
       marketplace: 'Marketplace',
       jobs: 'Jobs',
+      events: 'Events',
+      communities: 'Communities',
+      pages: 'Pages',
+      'support-operations': 'Support Operations',
     };
     return `Take action in ${labels[targetModule] ?? targetType}.`;
   }
@@ -6512,6 +6655,41 @@ export class AdminDatabaseService implements OnModuleInit {
     };
   }
 
+  private normalizeCampaignSchedule(
+    input: Parameters<typeof normalizeNotificationSchedule>[0],
+    fallback?: { schedule?: string | null; status?: string | null },
+  ) {
+    try {
+      return normalizeNotificationSchedule(input, fallback);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'Invalid notification schedule.',
+      );
+    }
+  }
+
+  private hasCampaignSchedulePatch(input: {
+    schedule?: string;
+    scheduleMode?: string;
+    deliveryMode?: string;
+    sendNow?: boolean;
+    scheduledAt?: string;
+    sendAt?: string;
+    scheduleDate?: string;
+    scheduleTime?: string;
+  }) {
+    return Boolean(
+      input.sendNow ||
+        input.schedule?.trim() ||
+        input.scheduleMode?.trim() ||
+        input.deliveryMode?.trim() ||
+        input.scheduledAt?.trim() ||
+        input.sendAt?.trim() ||
+        input.scheduleDate?.trim() ||
+        input.scheduleTime?.trim(),
+    );
+  }
+
   private mapAdminNotificationCampaignRow(item: {
     id: string;
     name: string;
@@ -6527,6 +6705,7 @@ export class AdminDatabaseService implements OnModuleInit {
       audience: item.audience,
       segmentId: item.audience,
       schedule: item.schedule,
+      ...describeNotificationSchedule(item.schedule, item.status),
       status: item.status,
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),

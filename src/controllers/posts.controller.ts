@@ -14,12 +14,16 @@ export class PostsController {
   @Get()
   @ApiQuery({ name: 'authorId', required: false })
   @ApiQuery({ name: 'userId', required: false })
+  @ApiQuery({ name: 'viewerId', required: false })
   async getPosts(
     @Query('authorId') authorId?: string,
     @Query('userId') userId?: string,
+    @Query('viewerId') viewerId?: string,
+    @Headers('authorization') authorization?: string,
   ) {
+    const resolvedViewerId = await this.resolveViewerId(viewerId, authorization);
     const posts = await Promise.all(
-      (await this.coreDatabase.getPosts(authorId ?? userId)).map(async (post) => ({
+      (await this.coreDatabase.getPosts(authorId ?? userId, resolvedViewerId)).map(async (post) => ({
         ...post,
         author: await this.coreDatabase.getUser(post.authorId),
       })),
@@ -28,8 +32,16 @@ export class PostsController {
   }
 
   @Get(':id')
-  async getPost(@Param('id') id: string) {
-    const post = await this.coreDatabase.getPost(id);
+  @ApiQuery({ name: 'viewerId', required: false })
+  async getPost(
+    @Param('id') id: string,
+    @Query('viewerId') viewerId?: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const post = await this.coreDatabase.getPost(
+      id,
+      await this.resolveViewerId(viewerId, authorization),
+    );
     const author = await this.coreDatabase.getUser(post.authorId);
     const comments = await this.coreDatabase.getPostComments(id);
     const reactions = await this.coreDatabase.getPostReactions(id);
@@ -107,5 +119,15 @@ export class PostsController {
       throw new ForbiddenException('You can only delete your own post.');
     }
     return successResponse('Post deleted successfully.', await this.coreDatabase.deletePost(id));
+  }
+
+  private async resolveViewerId(viewerId?: string, authorization?: string) {
+    if (viewerId?.trim()) {
+      return viewerId.trim();
+    }
+    const user = await this.coreDatabase
+      .requireUserFromAuthorization(authorization)
+      .catch(() => null);
+    return user?.id ?? null;
   }
 }

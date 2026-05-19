@@ -25,6 +25,9 @@ import { SocialStateDatabaseService } from '../services/social-state-database.se
 import { AdminDatabaseService } from '../services/admin-database.service';
 import { AppUtilityDatabaseService } from '../services/app-utility-database.service';
 import { ReferenceDataBootstrapService } from '../services/reference-data-bootstrap.service';
+import { FirebasePushService } from '../services/firebase-push.service';
+import { NotificationDeliveryService } from '../services/notification-delivery.service';
+import { ReportPresentationService } from '../services/report-presentation.service';
 
 @Global()
 @Module({
@@ -55,6 +58,9 @@ import { ReferenceDataBootstrapService } from '../services/reference-data-bootst
     AdminDatabaseService,
     AppUtilityDatabaseService,
     ReferenceDataBootstrapService,
+    FirebasePushService,
+    NotificationDeliveryService,
+    ReportPresentationService,
   ],
   exports: [
     AdminSessionGuard,
@@ -83,6 +89,9 @@ import { ReferenceDataBootstrapService } from '../services/reference-data-bootst
     AdminDatabaseService,
     AppUtilityDatabaseService,
     ReferenceDataBootstrapService,
+    FirebasePushService,
+    NotificationDeliveryService,
+    ReportPresentationService,
   ],
 })
 export class DataModule {}

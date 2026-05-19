@@ -4,6 +4,7 @@ import { makeId } from '../common/id.util';
 import { CoreDatabaseService } from './core-database.service';
 import { PrismaService } from './prisma.service';
 import { ReelsDatabaseService } from './reels-database.service';
+import { ReportPresentationService } from './report-presentation.service';
 import { StoriesDatabaseService } from './stories-database.service';
 
 @Injectable()
@@ -13,6 +14,7 @@ export class AccountStateDatabaseService {
     private readonly coreDatabase: CoreDatabaseService,
     private readonly reelsDatabase: ReelsDatabaseService,
     private readonly storiesDatabase: StoriesDatabaseService,
+    private readonly reportPresentation: ReportPresentationService,
   ) {}
 
   async getBookmarks(userId: string) {
@@ -360,24 +362,37 @@ export class AccountStateDatabaseService {
     reporterUserId: string;
     reason: string;
     details?: string;
+    targetType?: string;
+    targetId?: string;
     targetUserId?: string;
     targetEntityId?: string;
     targetEntityType?: string;
   }) {
+    const prepared = await this.reportPresentation.prepareSubmission(input);
     const report = await this.prisma.userReport.create({
       data: {
         id: makeId('report'),
         reporterUserId: input.reporterUserId,
-        targetUserId: input.targetUserId ?? null,
-        targetEntityId: input.targetEntityId ?? null,
-        targetEntityType: input.targetEntityType ?? null,
-        reason: input.reason,
-        details: input.details ?? null,
+        targetUserId: prepared.targetUserId ?? null,
+        targetEntityId: prepared.targetEntityId,
+        targetEntityType: prepared.targetEntityType,
+        reason: prepared.reason,
+        details: prepared.details,
         status: 'submitted',
-        postId: input.targetEntityType === 'post' ? input.targetEntityId ?? null : null,
+        postId: prepared.targetEntityType === 'post' ? prepared.targetEntityId : null,
       },
     });
+    if (prepared.targetEntityType === 'comment' && prepared.targetEntityId) {
+      await this.prisma.appPostComment.updateMany({
+        where: { id: prepared.targetEntityId },
+        data: { isReported: true },
+      });
+    }
     return this.mapReport(report);
+  }
+
+  getReportOptions() {
+    return this.reportPresentation.getReportOptions();
   }
 
   async getReportCenter(userId: string) {
@@ -385,15 +400,18 @@ export class AccountStateDatabaseService {
       where: { reporterUserId: userId },
       orderBy: { createdAt: 'desc' },
     });
-    const mapped = reports.map((row) => this.mapReport(row));
+    const mapped = await Promise.all(reports.map((row) => this.mapReport(row)));
     return {
       success: true,
       summary: {
         total: mapped.length,
         openReports: mapped.filter((item) => item.status !== 'resolved').length,
         resolvedReports: mapped.filter((item) => item.status === 'resolved').length,
+        byStatus: this.groupCount(mapped.map((item) => item.status)),
+        byTargetType: this.groupCount(mapped.map((item) => item.targetType)),
       },
       reports: mapped,
+      options: this.getReportOptions(),
       data: {
         reports: mapped,
       },
@@ -740,7 +758,7 @@ export class AccountStateDatabaseService {
     };
   }
 
-  private mapReport(row: {
+  private async mapReport(row: {
     id: string;
     reporterUserId: string;
     targetUserId: string | null;
@@ -752,18 +770,42 @@ export class AccountStateDatabaseService {
     createdAt: Date;
     updatedAt: Date;
   }) {
+    const presentation = await this.reportPresentation.describeReport(row);
     return {
       id: row.id,
       reporterUserId: row.reporterUserId,
       targetUserId: row.targetUserId,
       targetEntityId: row.targetEntityId,
       targetEntityType: row.targetEntityType,
+      targetType: presentation.targetType,
+      targetTypeLabel: presentation.targetTypeLabel,
+      targetId: presentation.targetId,
+      targetLabel: presentation.targetLabel,
+      targetSummary: presentation.targetSummary,
+      targetOwnerUserId: presentation.targetOwnerUserId,
+      targetOwnerName: presentation.targetOwnerName,
+      targetPreview: presentation.targetPreview,
       reason: row.reason,
+      reasonKey: presentation.reasonKey,
+      reasonLabel: presentation.reasonLabel,
+      reasonDescription: presentation.reasonDescription,
+      severity: presentation.severity,
       details: row.details,
       status: row.status,
+      statusLabel: presentation.statusLabel,
+      statusDescription: presentation.statusDescription,
+      displayTitle: presentation.displayTitle,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
+  }
+
+  private groupCount(values: string[]) {
+    return values.reduce<Record<string, number>>((acc, value) => {
+      const key = value || 'unknown';
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {});
   }
 
   private mapDraft(row: {

@@ -66,6 +66,8 @@ type SettingsContext = {
     | null;
 };
 
+type SettingsVisibilityMap = Record<string, unknown>;
+
 @Injectable()
 export class SettingsDatabaseService {
   constructor(
@@ -77,9 +79,14 @@ export class SettingsDatabaseService {
   ) {}
 
   async getSections(userId: string) {
-    const context = await this.buildContext(userId);
-    const sections = await this.readSettingsSectionsCatalog();
-    return sections.map((section) => this.hydrateSection(section, context));
+    const [context, sections, visibility] = await Promise.all([
+      this.buildContext(userId),
+      this.readSettingsSectionsCatalog(),
+      this.readSettingsVisibility(),
+    ]);
+    return sections
+      .map((section) => this.hydrateSection(section, context, visibility))
+      .filter((section) => this.isSettingsSectionVisible(section, visibility));
   }
 
   async getItems(userId: string) {
@@ -94,15 +101,34 @@ export class SettingsDatabaseService {
   }
 
   async getItem(userId: string, itemKey: string) {
-    const context = await this.buildContext(userId);
-    return this.hydrateItem(await this.readSettingsItemCatalog(itemKey), context);
+    const [context, visibility] = await Promise.all([
+      this.buildContext(userId),
+      this.readSettingsVisibility(),
+    ]);
+    const item = await this.readSettingsItemCatalog(itemKey);
+    if (!this.isSettingsItemVisible(item.sectionKey, item, visibility)) {
+      throw new NotFoundException(`Settings item ${itemKey} not found`);
+    }
+    return this.hydrateItem(item, context);
   }
 
   async getRouteEntry(userId: string, routePath: string) {
-    const context = await this.buildContext(userId);
+    const [context, visibility] = await Promise.all([
+      this.buildContext(userId),
+      this.readSettingsVisibility(),
+    ]);
     const entry = await this.readSettingsRouteEntryCatalog(routePath);
+    if (this.isSection(entry) && !this.isSettingsSectionVisible(entry, visibility)) {
+      throw new NotFoundException(`Settings route ${routePath} not found`);
+    }
+    if (
+      !this.isSection(entry) &&
+      !this.isSettingsItemVisible(entry.sectionKey, entry, visibility)
+    ) {
+      throw new NotFoundException(`Settings route ${routePath} not found`);
+    }
     return this.isSection(entry)
-      ? this.hydrateSection(entry, context)
+      ? this.hydrateSection(entry, context, visibility)
       : this.hydrateItem(entry, context);
   }
 
@@ -551,6 +577,7 @@ export class SettingsDatabaseService {
   private hydrateSection(
     section: SettingsCatalogSectionRecord,
     context: SettingsContext,
+    visibility: SettingsVisibilityMap = {},
   ) {
     const sectionOverride = this.toObject(
       context.settingsState[`catalog.section_overrides.${section.key}`],
@@ -558,16 +585,18 @@ export class SettingsDatabaseService {
     return {
       ...section,
       ...sectionOverride,
-      items: section.items.map((item) =>
-        this.hydrateItem(
-          {
-            ...item,
-            sectionKey: section.key,
-            sectionTitle: section.title,
-          },
-          context,
+      items: section.items
+        .filter((item) => this.isSettingsItemVisible(section.key, item, visibility))
+        .map((item) =>
+          this.hydrateItem(
+            {
+              ...item,
+              sectionKey: section.key,
+              sectionTitle: section.title,
+            },
+            context,
+          ),
         ),
-      ),
     };
   }
 
@@ -927,6 +956,63 @@ export class SettingsDatabaseService {
     return row.value
       .filter((item) => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
       .map((item) => item as Record<string, unknown>);
+  }
+
+  private async readSettingsVisibility(): Promise<SettingsVisibilityMap> {
+    const rows = await this.prisma.adminOperationalSetting.findMany({
+      where: {
+        key: {
+          startsWith: 'app.settings.',
+        },
+      },
+      orderBy: { key: 'asc' },
+    });
+    return rows.reduce<SettingsVisibilityMap>((acc, row) => {
+      acc[row.key] = row.value;
+      return acc;
+    }, {});
+  }
+
+  private isSettingsSectionVisible(
+    section: SettingsCatalogSectionRecord,
+    visibility: SettingsVisibilityMap,
+  ) {
+    const explicit = this.resolveVisibilityFlag(visibility, [
+      `app.settings.sections.${section.key}.visible`,
+      `app.settings.groups.${section.key}.visible`,
+    ]);
+    if (explicit === false) {
+      return false;
+    }
+    return section.items.length > 0;
+  }
+
+  private isSettingsItemVisible(
+    sectionKey: string | undefined,
+    item: SettingsCatalogItemRecord,
+    visibility: SettingsVisibilityMap,
+  ) {
+    const keys = [
+      `app.settings.items.${item.key}.visible`,
+      `app.settings.sections.${item.key}.visible`,
+    ];
+    if (sectionKey) {
+      keys.push(`app.settings.sections.${sectionKey}.items.${item.key}.visible`);
+    }
+    return this.resolveVisibilityFlag(visibility, keys) !== false;
+  }
+
+  private resolveVisibilityFlag(
+    visibility: SettingsVisibilityMap,
+    keys: string[],
+  ) {
+    for (const key of keys) {
+      const value = visibility[key];
+      if (typeof value === 'boolean') {
+        return value;
+      }
+    }
+    return true;
   }
 
   private isSection(

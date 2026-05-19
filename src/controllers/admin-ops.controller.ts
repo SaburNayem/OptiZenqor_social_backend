@@ -292,7 +292,21 @@ export class AdminOpsController {
   @UseGuards(AdminSessionGuard, RolesGuard)
   @Roles('Super Admin', 'Operations Admin', 'Support Admin')
   async createCampaign(
-    @Body() body: { name: string; audience: string; segmentId: string; schedule: string },
+    @Body()
+    body: {
+      name: string;
+      audience: string;
+      segmentId: string;
+      schedule?: string;
+      scheduleMode?: string;
+      deliveryMode?: string;
+      sendNow?: boolean;
+      scheduledAt?: string;
+      sendAt?: string;
+      scheduleDate?: string;
+      scheduleTime?: string;
+      timezoneOffsetMinutes?: number;
+    },
     @Headers('authorization') authorization?: string,
   ) {
     const admin = await this.adminDatabase.getAuthenticatedAdmin(authorization);

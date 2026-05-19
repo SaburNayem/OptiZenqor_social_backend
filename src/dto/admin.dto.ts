@@ -164,7 +164,21 @@ export class AdminReportsQueryDto {
   status?: string;
 
   @ApiPropertyOptional({
-    enum: ['user', 'post', 'reel', 'story', 'comment', 'marketplace', 'product', 'job'],
+    enum: [
+      'user',
+      'post',
+      'reel',
+      'story',
+      'comment',
+      'marketplace',
+      'product',
+      'job',
+      'event',
+      'community',
+      'page',
+      'chat',
+      'live',
+    ],
   })
   @IsOptional()
   @IsString()
@@ -873,9 +887,50 @@ export class AdminNotificationCampaignCreateDto {
   @IsString()
   audience!: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ enum: ['now', 'later'] })
+  @IsOptional()
+  @IsIn(['now', 'later'])
+  scheduleMode?: 'now' | 'later';
+
+  @ApiPropertyOptional({ enum: ['now', 'later'], description: 'Alias for scheduleMode.' })
+  @IsOptional()
+  @IsIn(['now', 'later'])
+  deliveryMode?: 'now' | 'later';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  sendNow?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  schedule!: string;
+  scheduledAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sendAt?: string;
+
+  @ApiPropertyOptional({ example: '2026-05-20' })
+  @IsOptional()
+  @IsString()
+  scheduleDate?: string;
+
+  @ApiPropertyOptional({ example: '09:30' })
+  @IsOptional()
+  @IsString()
+  scheduleTime?: string;
+
+  @ApiPropertyOptional({ example: -360 })
+  @IsOptional()
+  @IsNumber()
+  timezoneOffsetMinutes?: number;
+
+  @ApiPropertyOptional({ description: 'Backward-compatible free-form schedule. Can also be "now".' })
+  @IsOptional()
+  @IsString()
+  schedule?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -893,6 +948,46 @@ export class AdminNotificationCampaignUpdateDto {
   @IsOptional()
   @IsString()
   audience?: string;
+
+  @ApiPropertyOptional({ enum: ['now', 'later'] })
+  @IsOptional()
+  @IsIn(['now', 'later'])
+  scheduleMode?: 'now' | 'later';
+
+  @ApiPropertyOptional({ enum: ['now', 'later'], description: 'Alias for scheduleMode.' })
+  @IsOptional()
+  @IsIn(['now', 'later'])
+  deliveryMode?: 'now' | 'later';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  sendNow?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  scheduledAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sendAt?: string;
+
+  @ApiPropertyOptional({ example: '2026-05-20' })
+  @IsOptional()
+  @IsString()
+  scheduleDate?: string;
+
+  @ApiPropertyOptional({ example: '09:30' })
+  @IsOptional()
+  @IsString()
+  scheduleTime?: string;
+
+  @ApiPropertyOptional({ example: -360 })
+  @IsOptional()
+  @IsNumber()
+  timezoneOffsetMinutes?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -915,6 +1010,46 @@ export class AdminNotificationCampaignActionDto {
   @IsOptional()
   @IsString()
   schedule?: string;
+
+  @ApiPropertyOptional({ enum: ['now', 'later'] })
+  @IsOptional()
+  @IsIn(['now', 'later'])
+  scheduleMode?: 'now' | 'later';
+
+  @ApiPropertyOptional({ enum: ['now', 'later'], description: 'Alias for scheduleMode.' })
+  @IsOptional()
+  @IsIn(['now', 'later'])
+  deliveryMode?: 'now' | 'later';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  sendNow?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  scheduledAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sendAt?: string;
+
+  @ApiPropertyOptional({ example: '2026-05-20' })
+  @IsOptional()
+  @IsString()
+  scheduleDate?: string;
+
+  @ApiPropertyOptional({ example: '09:30' })
+  @IsOptional()
+  @IsString()
+  scheduleTime?: string;
+
+  @ApiPropertyOptional({ example: -360 })
+  @IsOptional()
+  @IsNumber()
+  timezoneOffsetMinutes?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

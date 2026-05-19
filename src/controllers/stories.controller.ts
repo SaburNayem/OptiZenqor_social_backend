@@ -59,8 +59,16 @@ export class StoriesController {
   }
 
   @Get(':id')
-  async getStory(@Param('id') id: string) {
-    const story = await this.storiesDatabase.getStory(id);
+  @ApiQuery({ name: 'viewerId', required: false })
+  async getStory(
+    @Param('id') id: string,
+    @Query('viewerId') viewerId?: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const story = await this.storiesDatabase.getStory(
+      id,
+      await this.resolveViewerId(viewerId, authorization),
+    );
     const payload = {
       ...story,
       comments: await this.storiesDatabase.getStoryComments(id),
@@ -191,11 +199,11 @@ export class StoriesController {
     viewerId: string | null,
   ) {
     if (userId?.trim()) {
-      return this.storiesDatabase.getActiveStories(userId.trim());
+      return this.storiesDatabase.getActiveStories(userId.trim(), viewerId);
     }
 
     if (scope?.trim().toLowerCase() !== 'buddies') {
-      return this.storiesDatabase.getActiveStories();
+      return this.storiesDatabase.getActiveStories(undefined, viewerId);
     }
 
     if (!viewerId) {
@@ -205,7 +213,7 @@ export class StoriesController {
     const buddyIds = await this.coreDatabase
       .getBuddyIds(viewerId)
       .catch((): string[] => []);
-    return (await this.storiesDatabase.getActiveStories()).filter(
+    return (await this.storiesDatabase.getActiveStories(undefined, viewerId)).filter(
       (story: { userId: string }) =>
         story.userId === viewerId || buddyIds.includes(story.userId),
     );

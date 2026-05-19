@@ -1,7 +1,7 @@
-import { Controller, Delete, Get, Headers, Param, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Headers, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
-import { PaginationQueryDto } from '../dto/api.dto';
+import { HideItemDto, PaginationQueryDto } from '../dto/api.dto';
 import { CoreDatabaseService } from '../services/core-database.service';
 import { SocialStateDatabaseService } from '../services/social-state-database.service';
 
@@ -30,6 +30,56 @@ export class HiddenPostsController {
       message: 'Hidden posts fetched successfully.',
       ...payload,
       hiddenPosts: payload.items,
+    };
+  }
+
+  @Post()
+  async hidePostFromBody(
+    @Body() body: Partial<HideItemDto> = {},
+    @Headers('authorization') authorization?: string,
+  ) {
+    if (!body.targetId?.trim()) {
+      throw new BadRequestException('targetId is required.');
+    }
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    const hidden = await this.socialStateDatabase.hideEntity(
+      user.id,
+      'post',
+      body.targetId.trim(),
+      body.reason,
+    );
+    return {
+      success: true,
+      message: 'Post hidden successfully.',
+      data: hidden,
+      hidden,
+    };
+  }
+
+  @Post(':targetId')
+  async hidePost(
+    @Param('targetId') targetId: string,
+    @Body() body: Partial<HideItemDto> = {},
+    @Headers('authorization') authorization?: string,
+  ) {
+    const user = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    const hidden = await this.socialStateDatabase.hideEntity(
+      user.id,
+      'post',
+      targetId,
+      body.reason,
+    );
+    return {
+      success: true,
+      message: 'Post hidden successfully.',
+      data: hidden,
+      hidden,
     };
   }
 

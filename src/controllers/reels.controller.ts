@@ -21,14 +21,31 @@ export class ReelsController {
   @Get()
   @ApiQuery({ name: 'authorId', required: false })
   @ApiQuery({ name: 'userId', required: false })
-  async getReels(@Query('authorId') authorId?: string, @Query('userId') userId?: string) {
-    const reels = await this.reelsDatabase.getReels(authorId ?? userId);
+  @ApiQuery({ name: 'viewerId', required: false })
+  async getReels(
+    @Query('authorId') authorId?: string,
+    @Query('userId') userId?: string,
+    @Query('viewerId') viewerId?: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const reels = await this.reelsDatabase.getReels(
+      authorId ?? userId,
+      await this.resolveViewerId(viewerId, authorization),
+    );
     return this.wrapListResponse('Reels fetched successfully.', reels);
   }
 
   @Get(':id')
-  async getReel(@Param('id') id: string) {
-    const reel = await this.reelsDatabase.getReel(id);
+  @ApiQuery({ name: 'viewerId', required: false })
+  async getReel(
+    @Param('id') id: string,
+    @Query('viewerId') viewerId?: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const reel = await this.reelsDatabase.getReel(
+      id,
+      await this.resolveViewerId(viewerId, authorization),
+    );
     const payload = {
       ...reel,
       comments: await this.reelsDatabase.getReelComments(id),
@@ -101,5 +118,15 @@ export class ReelsController {
 
   private wrapListResponse(message: string, items: unknown[]) {
     return listResponse(message, items);
+  }
+
+  private async resolveViewerId(viewerId?: string, authorization?: string) {
+    if (viewerId?.trim()) {
+      return viewerId.trim();
+    }
+    const user = await this.coreDatabase
+      .requireUserFromAuthorization(authorization)
+      .catch(() => null);
+    return user?.id ?? null;
   }
 }
