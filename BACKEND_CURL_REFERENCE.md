@@ -3,14 +3,14 @@
 ## Base URL
 
 ```bash
-http://localhost:3000
+https://opti-zenqor-social-backend.vercel.app
 ```
 
 ## Health and docs
 
 ```bash
-curl http://localhost:3000/health
-curl http://localhost:3000/docs-json
+curl https://opti-zenqor-social-backend.vercel.app/health
+curl https://opti-zenqor-social-backend.vercel.app/docs-json
 ```
 
 ## Auth
@@ -18,7 +18,7 @@ curl http://localhost:3000/docs-json
 Login:
 
 ```bash
-curl -X POST http://localhost:3000/auth/login ^
+curl -X POST https://opti-zenqor-social-backend.vercel.app/auth/login ^
   -H "Content-Type: application/json" ^
   -d "{\"email\":\"maya@optizenqor.app\",\"password\":\"123456\"}"
 ```
@@ -26,7 +26,7 @@ curl -X POST http://localhost:3000/auth/login ^
 Refresh token:
 
 ```bash
-curl -X POST http://localhost:3000/auth/refresh-token ^
+curl -X POST https://opti-zenqor-social-backend.vercel.app/auth/refresh-token ^
   -H "Content-Type: application/json" ^
   -d "{\"refreshToken\":\"<refreshToken>\"}"
 ```
@@ -34,33 +34,33 @@ curl -X POST http://localhost:3000/auth/refresh-token ^
 Current user:
 
 ```bash
-curl http://localhost:3000/auth/me ^
+curl https://opti-zenqor-social-backend.vercel.app/auth/me ^
   -H "Authorization: Bearer <accessToken>"
 ```
 
 Logout:
 
 ```bash
-curl -X POST http://localhost:3000/auth/logout ^
+curl -X POST https://opti-zenqor-social-backend.vercel.app/auth/logout ^
   -H "Authorization: Bearer <accessToken>"
 ```
 
 ## App bootstrap
 
 ```bash
-curl http://localhost:3000/app/bootstrap
+curl https://opti-zenqor-social-backend.vercel.app/app/bootstrap
 
-curl http://localhost:3000/app/bootstrap ^
+curl https://opti-zenqor-social-backend.vercel.app/app/bootstrap ^
   -H "Authorization: Bearer <accessToken>"
 ```
 
 ## Feed and posts
 
 ```bash
-curl http://localhost:3000/feed
-curl http://localhost:3000/posts
+curl https://opti-zenqor-social-backend.vercel.app/feed
+curl https://opti-zenqor-social-backend.vercel.app/posts
 
-curl -X POST http://localhost:3000/posts ^
+curl -X POST https://opti-zenqor-social-backend.vercel.app/posts ^
   -H "Authorization: Bearer <accessToken>" ^
   -H "Content-Type: application/json" ^
   -d "{\"authorId\":\"user_xxx\",\"caption\":\"New post from curl\",\"media\":[\"https://placehold.co/800x600\"],\"tags\":[\"curl\",\"api\"]}"
@@ -69,14 +69,14 @@ curl -X POST http://localhost:3000/posts ^
 ## Stories
 
 ```bash
-curl http://localhost:3000/stories
+curl https://opti-zenqor-social-backend.vercel.app/stories
 
-curl -X POST http://localhost:3000/stories ^
+curl -X POST https://opti-zenqor-social-backend.vercel.app/stories ^
   -H "Authorization: Bearer <accessToken>" ^
   -H "Content-Type: application/json" ^
   -d "{\"userId\":\"user_xxx\",\"text\":\"Story from curl\",\"media\":\"https://placehold.co/600x900\"}"
 
-curl -X POST http://localhost:3000/stories/story_xxx/view ^
+curl -X POST https://opti-zenqor-social-backend.vercel.app/stories/story_xxx/view ^
   -H "Authorization: Bearer <accessToken>" ^
   -H "Content-Type: application/json" ^
   -d "{\"userId\":\"user_xxx\"}"
@@ -85,9 +85,9 @@ curl -X POST http://localhost:3000/stories/story_xxx/view ^
 ## Reels
 
 ```bash
-curl http://localhost:3000/reels
+curl https://opti-zenqor-social-backend.vercel.app/reels
 
-curl -X POST http://localhost:3000/reels ^
+curl -X POST https://opti-zenqor-social-backend.vercel.app/reels ^
   -H "Authorization: Bearer <accessToken>" ^
   -H "Content-Type: application/json" ^
   -d "{\"authorId\":\"user_xxx\",\"caption\":\"Reel from curl\",\"audioName\":\"Creator Motion Pack\",\"thumbnail\":\"https://placehold.co/600x900\",\"videoUrl\":\"https://example.com/reel.mp4\"}"
@@ -96,13 +96,13 @@ curl -X POST http://localhost:3000/reels ^
 ## Chat
 
 ```bash
-curl http://localhost:3000/chat/threads ^
+curl https://opti-zenqor-social-backend.vercel.app/chat/threads ^
   -H "Authorization: Bearer <accessToken>"
 
-curl http://localhost:3000/chat/threads/conversation_xxx/messages ^
+curl https://opti-zenqor-social-backend.vercel.app/chat/threads/conversation_xxx/messages ^
   -H "Authorization: Bearer <accessToken>"
 
-curl -X POST http://localhost:3000/chat/threads/conversation_xxx/messages ^
+curl -X POST https://opti-zenqor-social-backend.vercel.app/chat/threads/conversation_xxx/messages ^
   -H "Authorization: Bearer <accessToken>" ^
   -H "Content-Type: application/json" ^
   -d "{\"text\":\"Hello from curl\"}"
@@ -111,13 +111,13 @@ curl -X POST http://localhost:3000/chat/threads/conversation_xxx/messages ^
 ## Notifications
 
 ```bash
-curl http://localhost:3000/notifications ^
+curl https://opti-zenqor-social-backend.vercel.app/notifications ^
   -H "Authorization: Bearer <accessToken>"
 
-curl http://localhost:3000/notifications/preferences ^
+curl https://opti-zenqor-social-backend.vercel.app/notifications/preferences ^
   -H "Authorization: Bearer <accessToken>"
 
-curl -X PATCH http://localhost:3000/notifications/notification_xxx/read ^
+curl -X PATCH https://opti-zenqor-social-backend.vercel.app/notifications/notification_xxx/read ^
   -H "Content-Type: application/json" ^
   -d "{\"userId\":\"user_xxx\"}"
 ```
@@ -125,21 +125,21 @@ curl -X PATCH http://localhost:3000/notifications/notification_xxx/read ^
 ## Bookmarks and drafts
 
 ```bash
-curl http://localhost:3000/bookmarks ^
+curl https://opti-zenqor-social-backend.vercel.app/bookmarks ^
   -H "Authorization: Bearer <accessToken>"
 
-curl -X POST http://localhost:3000/bookmarks ^
+curl -X POST https://opti-zenqor-social-backend.vercel.app/bookmarks ^
   -H "Authorization: Bearer <accessToken>" ^
   -H "Content-Type: application/json" ^
   -d "{\"id\":\"post_xxx\",\"title\":\"Saved post\",\"type\":\"post\"}"
 
-curl http://localhost:3000/drafts ^
+curl https://opti-zenqor-social-backend.vercel.app/drafts ^
   -H "Authorization: Bearer <accessToken>"
 
-curl http://localhost:3000/saved-collections ^
+curl https://opti-zenqor-social-backend.vercel.app/saved-collections ^
   -H "Authorization: Bearer <accessToken>"
 
-curl -X POST http://localhost:3000/saved-collections ^
+curl -X POST https://opti-zenqor-social-backend.vercel.app/saved-collections ^
   -H "Authorization: Bearer <accessToken>" ^
   -H "Content-Type: application/json" ^
   -d "{\"name\":\"Creator references\",\"itemIds\":[\"post_xxx\",\"reel_xxx\"]}"
@@ -148,15 +148,15 @@ curl -X POST http://localhost:3000/saved-collections ^
 ## Marketplace
 
 ```bash
-curl http://localhost:3000/marketplace/products
-curl "http://localhost:3000/marketplace/products?page=1&limit=12&category=Electronics&sort=price&order=asc"
+curl https://opti-zenqor-social-backend.vercel.app/marketplace/products
+curl "https://opti-zenqor-social-backend.vercel.app/marketplace/products?page=1&limit=12&category=Electronics&sort=price&order=asc"
 
-curl -X POST http://localhost:3000/marketplace/products ^
+curl -X POST https://opti-zenqor-social-backend.vercel.app/marketplace/products ^
   -H "Authorization: Bearer <accessToken>" ^
   -H "Content-Type: application/json" ^
   -d "{\"title\":\"Phone\",\"description\":\"Good condition\",\"price\":12000,\"category\":\"Electronics\",\"subcategory\":\"Phones\",\"sellerId\":\"user_xxx\",\"sellerName\":\"Seller\",\"location\":\"Dhaka\",\"images\":[\"https://placehold.co/600x600\"],\"condition\":\"Used\"}"
 
-curl -X POST http://localhost:3000/marketplace/checkout ^
+curl -X POST https://opti-zenqor-social-backend.vercel.app/marketplace/checkout ^
   -H "Authorization: Bearer <accessToken>" ^
   -H "Content-Type: application/json" ^
   -d "{\"productId\":\"product_xxx\",\"address\":\"House 14, Road 7, Dhaka\",\"deliveryMethod\":\"Home delivery\",\"paymentMethod\":\"Cash on delivery\"}"
@@ -165,28 +165,28 @@ curl -X POST http://localhost:3000/marketplace/checkout ^
 ## Jobs
 
 ```bash
-curl http://localhost:3000/jobs
-curl "http://localhost:3000/jobs?page=1&limit=10&status=open&type=fullTime&search=flutter"
-curl http://localhost:3000/jobs-networking ^
+curl https://opti-zenqor-social-backend.vercel.app/jobs
+curl "https://opti-zenqor-social-backend.vercel.app/jobs?page=1&limit=10&status=open&type=fullTime&search=flutter"
+curl https://opti-zenqor-social-backend.vercel.app/jobs-networking ^
   -H "Authorization: Bearer <accessToken>"
-curl http://localhost:3000/jobs/alerts ^
+curl https://opti-zenqor-social-backend.vercel.app/jobs/alerts ^
   -H "Authorization: Bearer <accessToken>"
-curl http://localhost:3000/jobs/profile ^
+curl https://opti-zenqor-social-backend.vercel.app/jobs/profile ^
   -H "Authorization: Bearer <accessToken>"
-curl http://localhost:3000/jobs/employer-stats ^
+curl https://opti-zenqor-social-backend.vercel.app/jobs/employer-stats ^
   -H "Authorization: Bearer <accessToken>"
-curl http://localhost:3000/jobs/employer-profile ^
+curl https://opti-zenqor-social-backend.vercel.app/jobs/employer-profile ^
   -H "Authorization: Bearer <accessToken>"
-curl http://localhost:3000/jobs/applicants ^
+curl https://opti-zenqor-social-backend.vercel.app/jobs/applicants ^
   -H "Authorization: Bearer <accessToken>"
-curl http://localhost:3000/jobs/companies
+curl https://opti-zenqor-social-backend.vercel.app/jobs/companies
 
-curl -X POST http://localhost:3000/jobs/create ^
+curl -X POST https://opti-zenqor-social-backend.vercel.app/jobs/create ^
   -H "Authorization: Bearer <accessToken>" ^
   -H "Content-Type: application/json" ^
   -d "{\"title\":\"Flutter Developer\",\"company\":\"OptiZenqor\",\"location\":\"Dhaka\",\"salary\":\"50000-80000\",\"type\":\"fullTime\",\"experienceLevel\":\"mid\"}"
 
-curl -X POST http://localhost:3000/jobs/job_xxx/apply ^
+curl -X POST https://opti-zenqor-social-backend.vercel.app/jobs/job_xxx/apply ^
   -H "Authorization: Bearer <accessToken>" ^
   -H "Content-Type: application/json" ^
   -d "{\"applicantName\":\"Maya Quinn\"}"
@@ -195,15 +195,15 @@ curl -X POST http://localhost:3000/jobs/job_xxx/apply ^
 ## Events
 
 ```bash
-curl http://localhost:3000/events
-curl "http://localhost:3000/events?page=1&limit=10&status=Approved&category=community&sort=date&order=asc"
+curl https://opti-zenqor-social-backend.vercel.app/events
+curl "https://opti-zenqor-social-backend.vercel.app/events?page=1&limit=10&status=Approved&category=community&sort=date&order=asc"
 
-curl -X POST http://localhost:3000/events ^
+curl -X POST https://opti-zenqor-social-backend.vercel.app/events ^
   -H "Authorization: Bearer <accessToken>" ^
   -H "Content-Type: application/json" ^
   -d "{\"title\":\"Creator Meetup\",\"organizer\":\"OptiZenqor\",\"date\":\"2026-05-10\",\"time\":\"18:00\",\"location\":\"Dhaka\",\"participants\":0,\"price\":0,\"status\":\"Approved\"}"
 
-curl -X PATCH http://localhost:3000/events/event_xxx/rsvp ^
+curl -X PATCH https://opti-zenqor-social-backend.vercel.app/events/event_xxx/rsvp ^
   -H "Authorization: Bearer <accessToken>" ^
   -H "Content-Type: application/json" ^
   -d "{\"userId\":\"user_xxx\"}"
@@ -212,17 +212,17 @@ curl -X PATCH http://localhost:3000/events/event_xxx/rsvp ^
 ## Communities and pages
 
 ```bash
-curl http://localhost:3000/communities
-curl "http://localhost:3000/communities?page=1&limit=10&privacy=public&search=creator"
-curl http://localhost:3000/pages
-curl "http://localhost:3000/pages?page=1&limit=10&category=Business&sort=followerCount&order=desc"
+curl https://opti-zenqor-social-backend.vercel.app/communities
+curl "https://opti-zenqor-social-backend.vercel.app/communities?page=1&limit=10&privacy=public&search=creator"
+curl https://opti-zenqor-social-backend.vercel.app/pages
+curl "https://opti-zenqor-social-backend.vercel.app/pages?page=1&limit=10&category=Business&sort=followerCount&order=desc"
 
-curl -X POST http://localhost:3000/communities ^
+curl -X POST https://opti-zenqor-social-backend.vercel.app/communities ^
   -H "Authorization: Bearer <accessToken>" ^
   -H "Content-Type: application/json" ^
   -d "{\"name\":\"Creator Circle\",\"description\":\"Community created from curl\",\"privacy\":\"public\"}"
 
-curl -X POST http://localhost:3000/communities/community_xxx/join ^
+curl -X POST https://opti-zenqor-social-backend.vercel.app/communities/community_xxx/join ^
   -H "Authorization: Bearer <accessToken>" ^
   -H "Content-Type: application/json" ^
   -d "{\"userId\":\"user_xxx\"}"
@@ -231,19 +231,19 @@ curl -X POST http://localhost:3000/communities/community_xxx/join ^
 ## Wallet and monetization
 
 ```bash
-curl http://localhost:3000/wallet ^
+curl https://opti-zenqor-social-backend.vercel.app/wallet ^
   -H "Authorization: Bearer <accessToken>"
 
-curl http://localhost:3000/monetization/overview ^
+curl https://opti-zenqor-social-backend.vercel.app/monetization/overview ^
   -H "Authorization: Bearer <accessToken>"
 
-curl http://localhost:3000/premium-plans
+curl https://opti-zenqor-social-backend.vercel.app/premium-plans
 ```
 
 ## Uploads
 
 ```bash
-curl -X POST http://localhost:3000/uploads ^
+curl -X POST https://opti-zenqor-social-backend.vercel.app/uploads ^
   -H "Authorization: Bearer <accessToken>" ^
   -F "file=@C:/path/to/image.png" ^
   -F "folder=optizenqor/posts" ^

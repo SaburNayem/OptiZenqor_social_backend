@@ -13,9 +13,6 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
 
 const defaultCorsOriginPatterns = [
-  /^https?:\/\/localhost(?::\d+)?$/i,
-  /^https?:\/\/127\.0\.0\.1(?::\d+)?$/i,
-  /^https?:\/\/0\.0\.0\.0(?::\d+)?$/i,
   /^https:\/\/([a-z0-9-]+\.)*vercel\.app$/i,
   /^https:\/\/([a-z0-9-]+\.)*optizenqor\.app$/i,
 ];
@@ -129,8 +126,6 @@ async function createConfiguredApp() {
     )
     .setVersion('1.0.0')
     .addServer('/', 'Current server')
-    .addServer('http://localhost:3000', 'Local development')
-    .addServer('http://localhost:3001', 'Local development alternate port')
     .addBearerAuth(
       {
         type: 'http',
@@ -251,14 +246,22 @@ async function createConfiguredApp() {
 async function bootstrap() {
   const app = await createConfiguredApp();
   const port = Number(process.env.PORT ?? 3000);
-  const host = process.env.HOST ?? '0.0.0.0';
-  await app.listen(port, host);
+  const host = process.env.HOST?.trim();
+  if (host) {
+    await app.listen(port, host);
+  } else {
+    await app.listen(port);
+  }
 
-  console.log(`API running at http://localhost:${port}`);
-  console.log(`Swagger UI at http://localhost:${port}/docs`);
-  console.log(`Swagger alias at http://localhost:${port}/swagger`);
-  console.log(`Public-friendly Swagger UI at http://localhost:${port}/docs-online`);
-  console.log(`OpenAPI JSON at http://localhost:${port}/docs-json`);
+  const publicUrl = process.env.PAYMENT_PUBLIC_BASE_URL ?? process.env.VERCEL_URL;
+  console.log(`API running on port ${port}`);
+  if (publicUrl) {
+    console.log(`Public API URL: ${publicUrl.replace(/\/+$/, '')}`);
+  }
+  console.log('Swagger UI path: /docs');
+  console.log('Swagger alias path: /swagger');
+  console.log('Public-friendly Swagger UI path: /docs-online');
+  console.log('OpenAPI JSON path: /docs-json');
 }
 
 type VercelServer = (req: IncomingMessage, res: ServerResponse) => unknown;

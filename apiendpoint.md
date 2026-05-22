@@ -4,7 +4,7 @@ This file is an endpoint inventory generated from the NestJS controllers under `
 
 - Total documented HTTP endpoints: 358.
 - No global `/api` prefix is configured, so the paths below are the full route paths.
-- Default local server from `src/main.ts`: `http://localhost:3000`.
+- Default local server from `src/main.ts`: `https://opti-zenqor-social-backend.vercel.app`.
 - Swagger endpoints: `GET /docs`, `GET /docs-json`, `GET /docs-yaml`.
 
 ## System API Module

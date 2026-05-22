@@ -2,6 +2,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   OnModuleInit,
   UnauthorizedException,
@@ -15,6 +16,7 @@ import {
   DEFAULT_USER_PRIVACY,
 } from '../common/settings-defaults';
 import { DatabaseService } from './database.service';
+import { FirebasePushService } from './firebase-push.service';
 import { JwtLikePayload, JwtTokenService } from './jwt-token.service';
 
 type UserRow = QueryResultRow & {
@@ -160,6 +162,10 @@ type NotificationRow = QueryResultRow & {
   metadata: Record<string, unknown>;
 };
 
+type PushDeviceTokenRow = QueryResultRow & {
+  token: string;
+};
+
 type CommentRow = QueryResultRow & {
   id: string;
   post_id: string;
@@ -195,9 +201,12 @@ type SerializedComment = {
 
 @Injectable()
 export class CoreDatabaseService implements OnModuleInit {
+  private readonly logger = new Logger(CoreDatabaseService.name);
+
   constructor(
     private readonly database: DatabaseService,
     private readonly jwtTokens: JwtTokenService,
+    private readonly firebasePush: FirebasePushService,
   ) {}
 
   private getTokenTtlSeconds(value: string | undefined, fallbackSeconds: number) {
@@ -2183,6 +2192,18 @@ export class CoreDatabaseService implements OnModuleInit {
     return rows.map((row) => this.mapNotification(row));
   }
 
+  async getNotificationForRecipientEntity(recipientId: string, entityId: string) {
+    const { rows } = await this.database.query<NotificationRow>(
+      `select *
+       from app_notifications
+       where recipient_id = $1 and entity_id = $2
+       order by created_at desc
+       limit 1`,
+      [recipientId, entityId],
+    );
+    return rows[0] ? this.mapNotification(rows[0]) : null;
+  }
+
   async pushNotification(input: {
     recipientId: string;
     title: string;
@@ -2223,7 +2244,62 @@ export class CoreDatabaseService implements OnModuleInit {
       `select * from app_notifications where id = $1`,
       [id],
     );
+    if (rows[0]) {
+      void this.deliverNotificationPush(rows[0], metadata);
+    }
     return this.mapNotification(rows[0]);
+  }
+
+  private async deliverNotificationPush(
+    notification: NotificationRow,
+    metadata: Record<string, unknown>,
+  ) {
+    try {
+      const { rows } = await this.database.query<PushDeviceTokenRow>(
+        `select token
+         from app_push_device_tokens
+         where user_id = $1 and is_active = true`,
+        [notification.recipient_id],
+      );
+      const tokens = rows.map((row) => row.token).filter(Boolean);
+      if (tokens.length === 0) {
+        return;
+      }
+
+      const delivery = await this.firebasePush.sendToTokens(
+        tokens,
+        {
+          title: notification.title,
+          body: notification.body,
+        },
+        {
+          notificationId: notification.id,
+          recipientId: notification.recipient_id,
+          routeName: notification.route_name,
+          entityId: notification.entity_id ?? undefined,
+          type: notification.type,
+          entityType: this.resolveNotificationEntityType(
+            notification.route_name,
+            notification.entity_id,
+            metadata,
+          ),
+          ...metadata,
+        },
+      );
+
+      if (delivery.invalidTokens.length > 0) {
+        await this.database.query(
+          `update app_push_device_tokens
+           set is_active = false, updated_at = now()
+           where token = any($1::text[])`,
+          [delivery.invalidTokens],
+        );
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to deliver push notification.';
+      this.logger.warn(`Push notification ${notification.id} delivery skipped: ${message}`);
+    }
   }
 
   async markNotificationRead(id: string, recipientId?: string) {
@@ -2238,6 +2314,16 @@ export class CoreDatabaseService implements OnModuleInit {
       throw new NotFoundException(`Notification ${id} not found`);
     }
     return this.mapNotification(row);
+  }
+
+  async markAllNotificationsRead(recipientId: string) {
+    const { rowCount } = await this.database.query(
+      `update app_notifications set read = true where recipient_id = $1 and read = false`,
+      [recipientId],
+    );
+    return {
+      updatedCount: rowCount ?? 0,
+    };
   }
 
   async deleteNotification(id: string, recipientId?: string) {
@@ -4313,6 +4399,9 @@ export class CoreDatabaseService implements OnModuleInit {
     }
     if (typeof metadata.messageId === 'string' || routeName.includes('/chat/')) {
       return 'message';
+    }
+    if (typeof metadata.callSessionId === 'string' || routeName.includes('/calls')) {
+      return 'call';
     }
     if (typeof metadata.commentId === 'string') {
       return 'comment';

@@ -11,6 +11,7 @@
     "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
     "start:prod": "node dist/main.js",
     "build": "npm run prisma:generate && tsc -p tsconfig.json",
+    "postinstall": "prisma generate",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "npm run typecheck",
     "prisma:migrate": "prisma migrate deploy",

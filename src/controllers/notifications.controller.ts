@@ -50,8 +50,17 @@ export class NotificationsController {
 
   @Get('inbox')
   @ApiQuery({ name: 'userId', required: false })
-  async getInbox(@Query('userId') userId?: string) {
-    const notifications = await this.coreDatabase.getNotificationInbox(userId);
+  async getInbox(
+    @Query('userId') userId?: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const resolvedUser =
+      userId?.trim() ||
+      (await this.coreDatabase
+        .requireUserFromAuthorization(authorization)
+        .then((user) => user.id)
+        .catch(() => undefined));
+    const notifications = await this.coreDatabase.getNotificationInbox(resolvedUser);
     return successResponse('Notification inbox fetched successfully.', notifications);
   }
 
@@ -161,6 +170,20 @@ export class NotificationsController {
     );
     const notification = await this.coreDatabase.markNotificationRead(id, actor.id);
     return successResponse('Notification marked as read successfully.', notification);
+  }
+
+  @Patch('read-all')
+  @Post('read-all')
+  async markAllRead(
+    @Body() body: MarkNotificationReadDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const actor = await this.coreDatabase.requireUserFromAuthorization(
+      authorization,
+      body.userId,
+    );
+    const result = await this.coreDatabase.markAllNotificationsRead(actor.id);
+    return successResponse('All notifications marked as read successfully.', result);
   }
 
   @UseGuards(SessionAuthGuard)

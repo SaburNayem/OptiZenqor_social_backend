@@ -57,7 +57,7 @@ export class AdminDatabaseService implements OnModuleInit {
         accessToken: `admin_access_${randomUUID().replace(/-/g, '')}`,
         refreshToken: `admin_refresh_${randomUUID().replace(/-/g, '')}`,
         device: 'Dashboard session',
-        ipAddress: '0.0.0.0',
+        ipAddress: 'unknown',
         current: true,
         expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
       },

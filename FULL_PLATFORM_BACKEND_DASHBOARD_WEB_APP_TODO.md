@@ -165,7 +165,7 @@ Confirmed files:
 Confirmed issues:
 
 - `src/data/mockSocialData.ts` is a large mock dataset with demo tokens, fake session IDs, Unsplash media, UI avatar fallbacks, and synthetic social content.
-- `src/lib/api.ts` falls back to `http://localhost:3000` when `VITE_API_BASE_URL` is missing.
+- `src/lib/api.ts` uses `https://opti-zenqor-social-backend.vercel.app` when `VITE_API_BASE_URL` is missing.
 - `src/lib/api.ts` synthesizes user IDs with `Math.random()`, default names like `Unknown User`, and generated avatar URLs.
 - `src/lib/api.ts` derives product labels, trend copy, story accents, default thumbnails, and fallback profile content on the client.
 - `src/hooks/useSocialApp.ts` creates optimistic-only local posts, comments, and chat messages using `createId(...)` instead of persisted IDs.

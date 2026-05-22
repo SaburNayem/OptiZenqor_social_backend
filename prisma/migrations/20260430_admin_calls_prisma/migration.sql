@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS "admin_sessions" (
   "access_token" TEXT NOT NULL,
   "refresh_token" TEXT NOT NULL,
   "device" TEXT NOT NULL DEFAULT 'Unknown device',
-  "ip_address" TEXT NOT NULL DEFAULT '0.0.0.0',
+  "ip_address" TEXT NOT NULL DEFAULT 'unknown',
   "current" BOOLEAN NOT NULL DEFAULT true,
   "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "last_active" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,

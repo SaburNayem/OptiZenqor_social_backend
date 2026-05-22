@@ -69,16 +69,16 @@ npm run start:dev
 
 Server defaults:
 
-- API: `http://localhost:3000`
-- Swagger UI: `http://localhost:3000/docs`
-- OpenAPI JSON: `http://localhost:3000/docs-json`
+- API: `https://opti-zenqor-social-backend.vercel.app`
+- Swagger UI: `https://opti-zenqor-social-backend.vercel.app/docs`
+- OpenAPI JSON: `https://opti-zenqor-social-backend.vercel.app/docs-json`
 
 ## Environment
 
 Copy `.env.example` to `.env` and set at minimum:
 
 ```env
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/socity_backend?sslmode=disable
+DATABASE_URL=postgresql://USER:PASSWORD@YOUR_DATABASE_HOST:5432/socity_backend?sslmode=disable
 JWT_SECRET=replace_with_long_random_secret
 JWT_REFRESH_SECRET=replace_with_long_random_refresh_secret
 SMTP_HOST=smtp.example.com

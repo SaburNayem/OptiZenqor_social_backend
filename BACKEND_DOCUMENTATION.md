@@ -60,9 +60,9 @@ npm.cmd run start:dev
 
 Default URLs:
 
-- API root: `http://localhost:3000/`
-- Swagger UI: `http://localhost:3000/docs`
-- OpenAPI JSON: `http://localhost:3000/docs-json`
+- API root: `https://opti-zenqor-social-backend.vercel.app/`
+- Swagger UI: `https://opti-zenqor-social-backend.vercel.app/docs`
+- OpenAPI JSON: `https://opti-zenqor-social-backend.vercel.app/docs-json`
 
 ## SMTP Email Verification Setup
 

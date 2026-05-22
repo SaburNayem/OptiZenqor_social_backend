@@ -256,7 +256,7 @@ Known web contract issues still active:
 
 - static/mock dataset still exists in `src/data/mockSocialData.ts`
 - permissive parsing of backend payload aliases
-- fallback localhost base URL
+- fallback deployed backend base URL
 - client-generated IDs and client-only optimistic production entities
 
 ## Routes Normalized In This Pass

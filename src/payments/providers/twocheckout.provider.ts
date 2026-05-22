@@ -204,7 +204,7 @@ export class TwoCheckoutProvider implements PaymentProvider {
       process.env.PAYMENT_PUBLIC_BASE_URL ??
       process.env.BACKEND_PUBLIC_URL ??
       process.env.VERCEL_URL ??
-      'http://localhost:3000';
+      'https://opti-zenqor-social-backend.vercel.app';
     const normalized = configured.trim();
     const withProtocol = /^https?:\/\//i.test(normalized) ? normalized : `https://${normalized}`;
     return withProtocol.replace(/\/+$/, '');

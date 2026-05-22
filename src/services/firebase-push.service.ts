@@ -83,6 +83,7 @@ export class FirebasePushService {
           android: {
             priority: 'high',
             notification: {
+              channelId: 'default_channel',
               sound: 'default',
             },
           },

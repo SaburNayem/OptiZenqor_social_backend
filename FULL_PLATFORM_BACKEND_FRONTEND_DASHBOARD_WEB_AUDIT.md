@@ -38,7 +38,7 @@ Last updated: 2026-05-09
 
 ### Web frontend
 
-- removed silent fallback to `http://localhost:3000`
+- removed silent fallback to `https://opti-zenqor-social-backend.vercel.app`
 - made the public web API require `VITE_API_BASE_URL`
 - switched key web calls toward canonical backend routes:
   - `/settings/state`

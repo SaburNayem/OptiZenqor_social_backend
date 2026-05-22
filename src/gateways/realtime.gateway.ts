@@ -13,9 +13,6 @@ import { CoreDatabaseService } from '../services/core-database.service';
 import { RealtimeStateService } from '../services/realtime-state.service';
 
 const defaultGatewayOriginPatterns = [
-  /^https?:\/\/localhost(?::\d+)?$/i,
-  /^https?:\/\/127\.0\.0\.1(?::\d+)?$/i,
-  /^https?:\/\/0\.0\.0\.0(?::\d+)?$/i,
   /^https:\/\/([a-z0-9-]+\.)*vercel\.app$/i,
   /^https:\/\/([a-z0-9-]+\.)*optizenqor\.app$/i,
 ];
@@ -222,12 +219,19 @@ export class RealtimeGateway
     for (const participantId of (await this.coreDatabase.getThreadParticipantIds(body.threadId)).filter(
       (id) => id !== userId,
     )) {
-      this.server.to(`user:${participantId}`).emit('notification.created', {
-        type: 'chat.message.created',
-        threadId: body.threadId,
-        messageId: message.id,
-        senderId: userId,
-      });
+      const notification = await this.coreDatabase.getNotificationForRecipientEntity(
+        participantId,
+        message.id,
+      );
+      this.server.to(`user:${participantId}`).emit(
+        'notification.created',
+        notification ?? {
+          type: 'chat.message.created',
+          threadId: body.threadId,
+          messageId: message.id,
+          senderId: userId,
+        },
+      );
     }
 
     return eventPayload;
@@ -261,6 +265,19 @@ export class RealtimeGateway
     this.server.to(`user:${userId}`).emit('call.session.created', session);
     for (const recipientId of session.recipientIds) {
       this.server.to(`user:${recipientId}`).emit('call.session.created', session);
+      const notification = await this.coreDatabase.getNotificationForRecipientEntity(
+        recipientId,
+        session.id,
+      );
+      this.server.to(`user:${recipientId}`).emit(
+        'notification.created',
+        notification ?? {
+          type: 'call.session.created',
+          sessionId: session.id,
+          initiatorId: userId,
+          mode: session.mode,
+        },
+      );
     }
     return session;
   }

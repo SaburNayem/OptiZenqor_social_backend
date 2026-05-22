@@ -316,9 +316,13 @@ export class RealtimeStateService implements OnModuleInit {
         routeName: `/calls/sessions/${session.id}`,
         entityId: session.id,
         type: 'social',
+        actorName: initiator.name,
+        entityType: 'call',
         metadata: {
+          callSessionId: session.id,
           mode: input.mode,
           initiatorId: input.initiatorId,
+          actorName: initiator.name,
           threadId: input.threadId ?? null,
         },
       });
